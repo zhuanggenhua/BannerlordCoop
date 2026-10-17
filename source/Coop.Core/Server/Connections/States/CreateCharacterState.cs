@@ -62,6 +62,11 @@ public class CreateCharacterState : ConnectionStateBase
         if (netPeer != ConnectionLogic.Peer) return;
 
         var controllerId = obj.What.PlayerId;
+        if (string.IsNullOrWhiteSpace(controllerId) || playerManager.IsReservedController(controllerId))
+        {
+            ConnectionLogic.Peer.Disconnect();
+            return;
+        }
         var data = obj.What.PlayerHero;
 
         Logger.Debug("Unpacking hero for {ControllerId}", controllerId);

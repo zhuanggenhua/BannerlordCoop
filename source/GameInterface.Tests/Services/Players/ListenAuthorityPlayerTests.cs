@@ -29,6 +29,11 @@ public class ListenAuthorityPlayerTests : IDisposable
         Assert.True(players.AddPlayer(local));
         Assert.True(players.AddPlayer(remote));
         Assert.True(players.IsConnected(local));
+        Assert.True(players.IsReservedController("LocalA"));
+        Assert.False(players.IsReservedController("RemoteB"));
+        var peer = Common.Util.ObjectHelper.SkipConstructor<LiteNetLib.NetPeer>();
+        players.SetPeer("LocalA", peer);
+        Assert.False(players.TryGetPlayer(peer, out _));
         Assert.False(players.TryGetPeer("LocalA", out _));
         Assert.False(players.IsConnected(remote));
         Assert.False(players.AddPlayer(local));

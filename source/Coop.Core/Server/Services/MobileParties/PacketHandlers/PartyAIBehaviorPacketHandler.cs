@@ -8,6 +8,7 @@ using Coop.Core.Server.Services.MobileParties.Packets;
 using GameInterface.Services.MobileParties.Data;
 using GameInterface.Services.MobileParties.Messages.Behavior;
 using LiteNetLib;
+using GameInterface.Services.Players;
 
 namespace Coop.Core.Server.Services.MobileParties.PacketHandlers;
 
@@ -26,19 +27,22 @@ internal class RequestMobilePartyBehaviorPacketHandler : IPacketHandler
     private readonly IMessageBroker messageBroker;
     private readonly INetwork network;
     private readonly IPartyBehaviorWireMapper wireMapper;
+    private readonly IPlayerManager players;
 
     public RequestMobilePartyBehaviorPacketHandler(
         IPacketManager packetManager,
         ISendCoalescer coalescer,
         IMessageBroker messageBroker,
         INetwork network,
-        IPartyBehaviorWireMapper wireMapper)
+        IPartyBehaviorWireMapper wireMapper,
+        IPlayerManager players)
     {
         this.packetManager = packetManager;
         this.coalescer = coalescer;
         this.messageBroker = messageBroker;
         this.network = network;
         this.wireMapper = wireMapper;
+        this.players = players;
         packetManager.RegisterPacketHandler(this);
 
         messageBroker.Subscribe<PartyBehaviorUpdated>(Handle_PartyBehaviorUpdated);
@@ -58,9 +62,21 @@ internal class RequestMobilePartyBehaviorPacketHandler : IPacketHandler
         GameThread.RunSafe(() =>
         {
             if (!wireMapper.TryFromNetwork(convertedPacket.BehaviorUpdateData, out var data)) return;
+            if (!TryAuthorize(peer, ref data)) return;
 
             messageBroker.Publish(this, new UpdatePartyBehavior(ref data, alreadyOnGameThread: true));
         }, context: nameof(RequestMobilePartyBehaviorPacketHandler));
+    }
+
+    internal bool TryAuthorize(NetPeer peer, ref PartyBehaviorUpdateData data)
+    {
+        if (peer == null || !players.TryGetPlayer(peer, out var player) || player == null ||
+            !players.TryGetPeer(player.ControllerId, out var currentPeer) ||
+            !ReferenceEquals(currentPeer, peer) || player.MobilePartyId != data.MobilePartyId ||
+            data.ForcePosition)
+            return false;
+        data.OriginControllerId = player.ControllerId;
+        return true;
     }
 
     private void Handle_PartyBehaviorUpdated(MessagePayload<PartyBehaviorUpdated> payload)

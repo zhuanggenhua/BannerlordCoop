@@ -204,6 +204,12 @@ public class ResolveCharacterState : ConnectionStateBase
 
     private void ResolveCharacter(NetPeer peer, string controllerId)
     {
+        if (string.IsNullOrWhiteSpace(controllerId) || playerManager.IsReservedController(controllerId))
+        {
+            Logger.Warning("Rejected reserved or empty remote controller {ControllerId}", controllerId);
+            peer.Disconnect();
+            return;
+        }
         if (playerManager.TryGetPlayer(controllerId, out var player))
         {
             var heroExists = false;

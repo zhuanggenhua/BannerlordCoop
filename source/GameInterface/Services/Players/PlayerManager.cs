@@ -30,6 +30,7 @@ public interface IPlayerManager
     bool AddPlayer(Player player);
     bool ReplacePlayer(Player registeredPlayer, Player replacementPlayer);
     bool TryGetPlayer(string controllerId, out Player player);
+    bool IsReservedController(string controllerId);
 
     /// <summary>
     /// Checks whether the given game object (hero, party, clan) belongs to a registered player.
@@ -90,6 +91,8 @@ public interface IPlayerManager
 /// <inheritdoc cref="IPlayerManager"/>
 public class PlayerManager : IPlayerManager
 {
+    public bool IsReservedController(string controllerId) => controllerId == "Server" ||
+        (ModInformation.IsListenAuthority && controllerId == controllerIdProvider.ControllerId);
     // Key is controlled entity, value is control info
     private static readonly ConditionalWeakTable<object, ControlledObjectInfo> PlayerObjects = new();
     private readonly ILogger logger;
@@ -287,6 +290,11 @@ public class PlayerManager : IPlayerManager
     }
     public void SetPeer(string controllerId, NetPeer peer)
     {
+        if (IsReservedController(controllerId))
+        {
+            logger.Error("Cannot bind remote peer to reserved controller {ControllerId}", controllerId);
+            return;
+        }
         if (!TryGetPlayer(controllerId, out var player))
         {
             logger.Error("Cannot associate peer with unregistered controller {ControllerId}", controllerId);

@@ -113,13 +113,6 @@ public class CoopServer : CoopNetworkBase, ICoopServer
 
     public override void OnConnectionRequest(ConnectionRequest request)
     {
-        // P1-A has no validated remote-player load/replay path yet.
-        if (ModInformation.IsListenAuthority)
-        {
-            Logger.Information("ListenAuthority P1-A does not admit remote players yet");
-            request.Reject();
-            return;
-        }
         string suppliedPassword;
         try
         {
