@@ -97,6 +97,10 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             var controllerId = new ControllerIdProvider();
             controllerId.SetControllerId("host");
             var network = new Mock<INetwork>();
+            NetworkCampaignAuthorityHandoffBarrier appliedBarrier = default;
+            network.Setup(value => value.Send(guestPeer, It.IsAny<NetworkCampaignAuthorityHandoffBarrier>()))
+                .Callback<LiteNetLib.NetPeer, Common.Messaging.IMessage>((_, message) =>
+                    appliedBarrier = (NetworkCampaignAuthorityHandoffBarrier)message);
 
             using var handler = new CampaignSimulationAvailabilityServerHandler(
                 messageBroker,
@@ -121,6 +125,23 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             Assert.Equal("guest", coordinator.Select().ControllerId);
             network.Verify(value => value.SendAll(It.Is<NetworkAuthorityLeaseSnapshot>(
                 snapshot => snapshot.IsPaused && snapshot.Epoch == 2)), Times.Once);
+            network.Verify(value => value.Send(guestPeer, It.Is<NetworkCampaignAuthorityHandoffBarrier>(
+                barrier => barrier.RoomId == identity.RoomId &&
+                    barrier.PausedAuthorityId == identity.AuthorityId &&
+                    barrier.PausedEpoch == 2 &&
+                    barrier.CandidateControllerId == "guest" &&
+                    barrier.BarrierSequence > 0)), Times.Once);
+            Assert.True(appliedBarrier.BarrierSequence > 0);
+
+            var applied = new NetworkCampaignAuthorityHandoffBarrierApplied(
+                appliedBarrier.RoomId, appliedBarrier.PausedAuthorityId, appliedBarrier.PausedEpoch,
+                appliedBarrier.CandidateControllerId, appliedBarrier.BarrierSequence);
+            messageBroker.Publish(guestPeer, applied);
+
+            // The ordered barrier is a prerequisite, not authority activation: clients still lack
+            // the server-side world mutation relay needed to publish their simulation results.
+            Assert.True(identity.CurrentLease.IsPaused);
+            Assert.Equal(2, identity.Epoch);
 
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
 

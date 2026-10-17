@@ -23,6 +23,7 @@ namespace Coop.Core.Server.Services.Session;
 public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
 {
     private static readonly ILogger Logger = LogManager.GetLogger<CampaignSimulationAvailabilityServerHandler>();
+    private static long nextBarrierSequence;
 
     private readonly IMessageBroker messageBroker;
     private readonly ICampaignAuthorityAvailabilityCoordinator coordinator;
@@ -42,6 +43,12 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private bool hasLoggedSelection;
     private CampaignAuthoritySelection lastLoggedSelection;
     private AuthorityLease? pendingLeaseBroadcast;
+    private long pendingBarrierSequence;
+    private long pendingBarrierEpoch;
+    private string pendingBarrierAuthorityId = string.Empty;
+    private string pendingBarrierCandidateControllerId = string.Empty;
+    private bool hasPendingBarrier;
+    private bool pendingBarrierAcknowledged;
     private int disposed;
 
     public CampaignSimulationAvailabilityServerHandler(
@@ -63,6 +70,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         messageBroker.Subscribe<CampaignReady>(Handle_CampaignReady);
         messageBroker.Subscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Subscribe<NetworkCampaignSimulationAvailabilityReport>(Handle_AvailabilityReport);
+        messageBroker.Subscribe<NetworkCampaignAuthorityHandoffBarrierApplied>(Handle_HandoffBarrierApplied);
         messageBroker.Subscribe<PlayerDisconnected>(Handle_PlayerDisconnected);
         reconciliationTimer = new Timer(_ => ReconcileCurrentAvailability(), null, 1000, 1000);
     }
@@ -74,9 +82,12 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         messageBroker.Unsubscribe<CampaignReady>(Handle_CampaignReady);
         messageBroker.Unsubscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Unsubscribe<NetworkCampaignSimulationAvailabilityReport>(Handle_AvailabilityReport);
+        messageBroker.Unsubscribe<NetworkCampaignAuthorityHandoffBarrierApplied>(Handle_HandoffBarrierApplied);
         messageBroker.Unsubscribe<PlayerDisconnected>(Handle_PlayerDisconnected);
-        lock (peerGate) peerControllerIds.Clear();
-        lock (selectionGate) { }
+        lock (selectionGate)
+        {
+            lock (peerGate) peerControllerIds.Clear();
+        }
     }
 
     private void Handle_CampaignReady(MessagePayload<CampaignReady> _)
@@ -195,15 +206,26 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
 
             if (currentLease.IsPaused)
             {
-                // A paused lease has no previous writer to drain. Resume locally only when the
-                // preferred room host is map-ready; promoting a remote client still requires the
-                // explicit prepare/freeze/barrier handoff protocol.
-                if (selection.IsPaused ||
-                    !string.Equals(selection.ControllerId, roomHostControllerId, StringComparison.Ordinal) ||
-                    !coordinator.IsFreshMapReady(roomHostControllerId))
+                // The host may resume directly because it is the preferred writer and the world
+                // is already fenced. A remote candidate must first apply the ordered-stream barrier.
+                if (!selection.IsPaused &&
+                    string.Equals(selection.ControllerId, roomHostControllerId, StringComparison.Ordinal) &&
+                    coordinator.IsFreshMapReady(roomHostControllerId))
+                {
+                    ResetPendingBarrier();
+                    TryCommitLease(currentLease, roomHostControllerId, isPaused: false);
                     return;
+                }
 
-                TryCommitLease(currentLease, roomHostControllerId, isPaused: false);
+                if (!selection.IsPaused &&
+                    !string.Equals(selection.ControllerId, roomHostControllerId, StringComparison.Ordinal) &&
+                    coordinator.IsFreshMapReady(selection.ControllerId))
+                {
+                    TrySendHandoffBarrier(currentLease, selection.ControllerId);
+                    return;
+                }
+
+                ResetPendingBarrier();
                 return;
             }
 
@@ -217,17 +239,23 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
                 coordinator.IsFreshMapReady(currentLease.AuthorityControllerId))
                 return;
 
-            TryCommitLease(currentLease, string.Empty, isPaused: true);
+            if (!TryCommitLease(currentLease, string.Empty, isPaused: true)) return;
+
+            if (!selection.IsPaused &&
+                !string.Equals(selection.ControllerId, roomHostControllerId, StringComparison.Ordinal) &&
+                coordinator.IsFreshMapReady(selection.ControllerId) &&
+                sessionIdentity.TryGetConfirmedLease(out var pausedLease))
+                TrySendHandoffBarrier(pausedLease, selection.ControllerId);
         }
     }
 
-    private void TryCommitLease(AuthorityLease currentLease, string authorityControllerId, bool isPaused)
+    private bool TryCommitLease(AuthorityLease currentLease, string authorityControllerId, bool isPaused)
     {
         if (currentLease.Epoch == long.MaxValue)
         {
             Logger.Error("Cannot advance campaign authority lease beyond epoch {Epoch}; campaign remains fenced",
                 currentLease.Epoch);
-            return;
+            return false;
         }
 
         var nextLease = new AuthorityLease(
@@ -241,13 +269,159 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         {
             Logger.Warning("Could not commit campaign authority lease epoch {Epoch} for controller {ControllerId}",
                 nextLease.Epoch, authorityControllerId);
-            return;
+            return false;
         }
 
         pendingLeaseBroadcast = nextLease;
         BroadcastPendingLease();
         Logger.Information("Committed {LeaseState} campaign authority lease epoch {Epoch} for controller {ControllerId}",
             isPaused ? "paused" : "active", nextLease.Epoch, authorityControllerId);
+        return true;
+    }
+
+    private void TrySendHandoffBarrier(AuthorityLease pausedLease, string candidateControllerId)
+    {
+        if (!pausedLease.IsPaused || string.IsNullOrWhiteSpace(candidateControllerId) ||
+            string.Equals(candidateControllerId, sessionIdentity.RoomHostControllerId, StringComparison.Ordinal) ||
+            network == null || !coordinator.IsFreshMapReady(candidateControllerId))
+            return;
+
+        if (hasPendingBarrier && pendingBarrierEpoch == pausedLease.Epoch &&
+            string.Equals(pendingBarrierAuthorityId, pausedLease.AuthorityId, StringComparison.Ordinal) &&
+            string.Equals(pendingBarrierCandidateControllerId, candidateControllerId, StringComparison.Ordinal))
+            return;
+
+        if (!sessionIdentity.TryGetConfirmedLease(out var currentLease) || currentLease != pausedLease)
+            return;
+
+        NetPeer candidatePeer = null;
+        lock (peerGate)
+        {
+            foreach (var entry in peerControllerIds)
+            {
+                if (string.Equals(entry.Value, candidateControllerId, StringComparison.Ordinal))
+                {
+                    candidatePeer = entry.Key;
+                    break;
+                }
+            }
+        }
+
+        if (candidatePeer == null || !connections.HasCompletedCampaignSynchronization(candidatePeer))
+            return;
+
+        if (!TryGetNextBarrierSequence(out var sequence))
+        {
+            Logger.Error("Cannot issue another campaign handoff barrier; sequence space is exhausted");
+            return;
+        }
+
+        var barrier = new NetworkCampaignAuthorityHandoffBarrier(
+            pausedLease.RoomId,
+            pausedLease.AuthorityId,
+            pausedLease.Epoch,
+            candidateControllerId,
+            sequence);
+
+        try
+        {
+            // The paused lease and all earlier reliable-ordered world messages must be queued before
+            // the barrier. Its acknowledgement is emitted only after the candidate's game-thread
+            // apply queue has drained those messages.
+            BroadcastPendingLease();
+            if (pendingLeaseBroadcast.HasValue) return;
+            network.FlushPendingMessages();
+            network.Send(candidatePeer, barrier);
+            network.FlushPendingMessages();
+            pendingBarrierSequence = sequence;
+            pendingBarrierEpoch = pausedLease.Epoch;
+            pendingBarrierAuthorityId = pausedLease.AuthorityId;
+            pendingBarrierCandidateControllerId = candidateControllerId;
+            pendingBarrierAcknowledged = false;
+            hasPendingBarrier = true;
+            Logger.Information("Sent campaign authority handoff barrier {BarrierSequence} for paused epoch {Epoch} to controller {ControllerId}",
+                sequence, pausedLease.Epoch, candidateControllerId);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Failed to send campaign authority handoff barrier {BarrierSequence} to controller {ControllerId}",
+                sequence, candidateControllerId);
+        }
+    }
+
+    private void Handle_HandoffBarrierApplied(MessagePayload<NetworkCampaignAuthorityHandoffBarrierApplied> payload)
+    {
+        if (payload.Who is not NetPeer peer ||
+            !connections.HasCompletedCampaignSynchronization(peer) ||
+            !playerManager.TryGetPlayer(peer, out var player))
+            return;
+
+        lock (selectionGate)
+        {
+            lock (leaseGate)
+            {
+                if (!hasPendingBarrier || pendingBarrierAcknowledged ||
+                    !sessionIdentity.TryGetConfirmedLease(out var currentLease) || !currentLease.IsPaused ||
+                    currentLease.Epoch != pendingBarrierEpoch ||
+                    !coordinator.IsFreshMapReady(player.ControllerId))
+                    return;
+
+                var ack = payload.What;
+                if (ack.BarrierSequence != pendingBarrierSequence ||
+                    ack.PausedEpoch != pendingBarrierEpoch ||
+                    !string.Equals(ack.RoomId, currentLease.RoomId, StringComparison.Ordinal) ||
+                    !string.Equals(ack.PausedAuthorityId, pendingBarrierAuthorityId, StringComparison.Ordinal) ||
+                    !string.Equals(ack.CandidateControllerId, pendingBarrierCandidateControllerId, StringComparison.Ordinal) ||
+                    !string.Equals(player.ControllerId, pendingBarrierCandidateControllerId, StringComparison.Ordinal))
+                    return;
+
+                lock (peerGate)
+                {
+                    if (!peerControllerIds.TryGetValue(peer, out var knownControllerId) ||
+                        !string.Equals(knownControllerId, player.ControllerId, StringComparison.Ordinal))
+                        return;
+                }
+
+                var selection = coordinator.Select();
+                if (selection.IsPaused ||
+                    !string.Equals(selection.ControllerId, player.ControllerId, StringComparison.Ordinal))
+                    return;
+
+                pendingBarrierAcknowledged = true;
+                Logger.Information("Controller {ControllerId} applied campaign handoff barrier {BarrierSequence} for paused epoch {Epoch}; campaign remains paused until authority-side world replication is available",
+                    player.ControllerId, pendingBarrierSequence, pendingBarrierEpoch);
+            }
+        }
+    }
+
+    private void ResetPendingBarrier()
+    {
+        hasPendingBarrier = false;
+        pendingBarrierAcknowledged = false;
+        pendingBarrierSequence = 0;
+        pendingBarrierEpoch = 0;
+        pendingBarrierAuthorityId = string.Empty;
+        pendingBarrierCandidateControllerId = string.Empty;
+    }
+
+    private static bool TryGetNextBarrierSequence(out long sequence)
+    {
+        while (true)
+        {
+            long current = Interlocked.Read(ref nextBarrierSequence);
+            if (current == long.MaxValue)
+            {
+                sequence = 0;
+                return false;
+            }
+
+            long next = current + 1;
+            if (Interlocked.CompareExchange(ref nextBarrierSequence, next, current) == current)
+            {
+                sequence = next;
+                return true;
+            }
+        }
     }
 
     private void BroadcastPendingLease()
