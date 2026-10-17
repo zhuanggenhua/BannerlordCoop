@@ -1,5 +1,6 @@
 ﻿using Common;
 using Common.Messaging;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.MobileParties.Handlers;
 using GameInterface.Services.MobileParties.Messages;
 using HarmonyLib;
@@ -22,7 +23,7 @@ internal class RecruitmentCampaignBehaviorPatch
     [HarmonyPatch("CheckRecruiting")]
     private static bool CheckRecruitingPrefix(RecruitmentCampaignBehavior __instance, ref MobileParty mobileParty, ref Settlement settlement, out MercenaryStockState __state)
     {
-        if (ModInformation.IsClient)
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation())
         {
             __state = default;
             return false;
@@ -36,7 +37,7 @@ internal class RecruitmentCampaignBehaviorPatch
     [HarmonyPatch("CheckRecruiting")]
     private static void CheckRecruitingPostfix(RecruitmentCampaignBehavior __instance, ref Settlement settlement, MercenaryStockState __state, bool __runOriginal)
     {
-        if (ModInformation.IsClient || !__runOriginal) return;
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation() || !__runOriginal) return;
 
         PublishMercenaryStockIfChanged(__instance, settlement?.Town, __state);
     }
@@ -56,10 +57,15 @@ internal class RecruitmentCampaignBehaviorPatch
     /// </summary>
     [HarmonyPrefix]
     [HarmonyPatch("BuyMercenaries")]
-    private static bool BuyMercenariesPrefix(RecruitmentCampaignBehavior __instance)
+    private static bool BuyMercenariesPrefix(RecruitmentCampaignBehavior __instance, out MercenaryStockState __state)
     {
-        // Clients forward hires to the server; if this ever runs on the server, leave vanilla behavior alone.
-        if (ModInformation.IsServer)
+        __state = CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()
+            ? GetCurrentMercenaryStockState(__instance)
+            : default;
+
+        // A local campaign authority applies its own hire once. Other players forward a request
+        // for authority validation and execution.
+        if (CampaignSimulationAuthorityPolicy.CanRunWorldSimulation())
             return true;
 
         TryPublishMercenariesHired(__instance, __instance._selectedMercenaryCount, useConversationCharacter: true);
@@ -67,11 +73,30 @@ internal class RecruitmentCampaignBehaviorPatch
         return false;
     }
 
+    [HarmonyPostfix]
+    [HarmonyPatch("BuyMercenaries")]
+    private static void BuyMercenariesPostfix(
+        RecruitmentCampaignBehavior __instance,
+        MercenaryStockState __state,
+        bool __runOriginal)
+    {
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation() || !__runOriginal || !__state.IsMercenaryTown)
+            return;
+
+        PublishMercenaryStockIfChanged(__instance, __state.Town, __state);
+    }
+
     [HarmonyPrefix]
     [HarmonyPatch("buy_mercenaries_on_consequence")]
-    private static bool BuyMercenariesOnConsequencePrefix(RecruitmentCampaignBehavior __instance)
+    private static bool BuyMercenariesOnConsequencePrefix(
+        RecruitmentCampaignBehavior __instance,
+        out MercenaryStockState __state)
     {
-        if (ModInformation.IsServer)
+        __state = CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()
+            ? GetCurrentMercenaryStockState(__instance)
+            : default;
+
+        if (CampaignSimulationAuthorityPolicy.CanRunWorldSimulation())
             return true;
 
         if (TryPublishMercenariesHired(__instance, 0, useConversationCharacter: false))
@@ -82,11 +107,24 @@ internal class RecruitmentCampaignBehaviorPatch
         return false;
     }
 
+    [HarmonyPostfix]
+    [HarmonyPatch("buy_mercenaries_on_consequence")]
+    private static void BuyMercenariesOnConsequencePostfix(
+        RecruitmentCampaignBehavior __instance,
+        MercenaryStockState __state,
+        bool __runOriginal)
+    {
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation() || !__runOriginal || !__state.IsMercenaryTown)
+            return;
+
+        PublishMercenaryStockIfChanged(__instance, __state.Town, __state);
+    }
+
     [HarmonyPrefix]
     [HarmonyPatch("DailyTickTown")]
     private static void DailyTickTownPrefix(RecruitmentCampaignBehavior __instance, Town town, out MercenaryStockState __state)
     {
-        __state = ModInformation.IsServer
+        __state = CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()
             ? GetMercenaryStockState(__instance, town)
             : default;
     }
@@ -95,7 +133,7 @@ internal class RecruitmentCampaignBehaviorPatch
     [HarmonyPatch("DailyTickTown")]
     private static void DailyTickTownPostfix(RecruitmentCampaignBehavior __instance, Town town, MercenaryStockState __state)
     {
-        if (ModInformation.IsClient) return;
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return;
 
         PublishMercenaryStockIfChanged(__instance, town, __state);
     }
@@ -123,8 +161,11 @@ internal class RecruitmentCampaignBehaviorPatch
         if (!MercenaryStockHandler.IsMercenaryTown(town)) return default;
 
         var mercenaryData = behavior.GetMercenaryData(town);
-        return new MercenaryStockState(true, mercenaryData.TroopType, mercenaryData.Number);
+        return new MercenaryStockState(town, mercenaryData.TroopType, mercenaryData.Number);
     }
+
+    private static MercenaryStockState GetCurrentMercenaryStockState(RecruitmentCampaignBehavior behavior) =>
+        TryGetCurrentMercenaryTown(out var town) ? GetMercenaryStockState(behavior, town) : default;
 
     private static bool TryPublishMercenariesHired(RecruitmentCampaignBehavior behavior, int selectedMercenaryCount, bool useConversationCharacter)
     {
@@ -196,12 +237,14 @@ internal class RecruitmentCampaignBehaviorPatch
     private readonly struct MercenaryStockState
     {
         public readonly bool IsMercenaryTown;
+        public readonly Town Town;
         public readonly CharacterObject TroopType;
         public readonly int Number;
 
-        public MercenaryStockState(bool isMercenaryTown, CharacterObject troopType, int number)
+        public MercenaryStockState(Town town, CharacterObject troopType, int number)
         {
-            IsMercenaryTown = isMercenaryTown;
+            IsMercenaryTown = town != null;
+            Town = town;
             TroopType = troopType;
             Number = number;
         }
@@ -211,9 +254,9 @@ internal class RecruitmentCampaignBehaviorPatch
     [HarmonyPostfix]
     public static void UpdateVolunteersOfNotablesInSettlementPostfix(Settlement settlement)
     {
-        // Volunteer generation is server-authoritative; only the server may publish the snapshot.
-        // Without this, a client's locally-generated volunteers would be sent back to the server.
-        if (ModInformation.IsClient) return;
+        // Volunteer generation is campaign-authoritative; only the active authority publishes its snapshot.
+        // Without this, a replica's locally-generated volunteers could overwrite the shared pool.
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return;
 
         if ((settlement.IsTown && !settlement.Town.InRebelliousState) || (settlement.IsVillage && !settlement.Village.Bound.Town.InRebelliousState))
         {
@@ -233,8 +276,8 @@ internal class RecruitmentCampaignBehaviorPatch
     [HarmonyPostfix]
     public static void ApplyInternalPostfix(Hero individual, int number, int bitCode, RecruitmentCampaignBehavior.RecruitingDetail detail)
     {
-        // Server-authoritative; clients forward recruitment via RecruitmentVMPatches. Mirrors the update postfix.
-        if (ModInformation.IsClient) return;
+        // Campaign-authoritative; player recruitment is routed through RecruitmentVMPatches.
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return;
 
         if (detail != RecruitmentCampaignBehavior.RecruitingDetail.VolunteerFromIndividual && detail != RecruitmentCampaignBehavior.RecruitingDetail.VolunteerFromIndividualToGarrison)
         {

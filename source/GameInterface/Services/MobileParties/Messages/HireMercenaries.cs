@@ -1,15 +1,14 @@
 ﻿using Common.Messaging;
 using ProtoBuf;
 
+using Common;
+
 namespace GameInterface.Services.MobileParties.Messages;
 
 /// <summary>
-/// [Client -> Server] Requests the server apply a tavern mercenary hire: add the mercenary troops
-/// to the player's party member roster and deduct the gold cost. The server applies both with
-/// patches live, so the troop add (TroopRoster patches) and gold change (Hero.Gold sync) replicate
-/// to every client. The count is the client's requested hire amount; the server validates it against
-/// authoritative stock and current server hero gold. HeroGold is the client's snapshot for reject
-/// diagnostics only.
+/// [Client -> Room Host] Requests a tavern mercenary hire. The host validates player ownership and
+/// routes the request to the active campaign authority, which checks its current recruitment pool
+/// and hero gold before applying the hire. HeroGold is the requester's snapshot for reject diagnostics.
 /// </summary>
 [ProtoContract(SkipConstructor = true)]
 internal readonly struct HireMercenaries : ICommand
@@ -28,6 +27,16 @@ internal readonly struct HireMercenaries : ICommand
     public readonly int GoldAmount;
     [ProtoMember(7)]
     public readonly int HeroGold;
+    [ProtoMember(8)]
+    public readonly long RequestSequence;
+    [ProtoMember(9)]
+    public readonly string RoomId;
+    [ProtoMember(10)]
+    public readonly string AuthorityId;
+    [ProtoMember(11)]
+    public readonly string AuthorityControllerId;
+    [ProtoMember(12)]
+    public readonly long Epoch;
 
     public HireMercenaries(
         string mainHeroId,
@@ -36,7 +45,9 @@ internal readonly struct HireMercenaries : ICommand
         string mercenaryTroopId,
         int count,
         int goldAmount,
-        int heroGold)
+        int heroGold,
+        long requestSequence = 0,
+        AuthorityLease lease = default)
     {
         MainHeroId = mainHeroId;
         MainPartyId = mainPartyId;
@@ -45,5 +56,15 @@ internal readonly struct HireMercenaries : ICommand
         Count = count;
         GoldAmount = goldAmount;
         HeroGold = heroGold;
+        RequestSequence = requestSequence;
+        RoomId = lease.RoomId ?? string.Empty;
+        AuthorityId = lease.AuthorityId ?? string.Empty;
+        AuthorityControllerId = lease.AuthorityControllerId ?? string.Empty;
+        Epoch = lease.Epoch;
     }
+
+    public bool MatchesLease(AuthorityLease lease) =>
+        lease.IsValid && !lease.IsPaused && RequestSequence > 0 &&
+        RoomId == lease.RoomId && AuthorityId == lease.AuthorityId &&
+        AuthorityControllerId == lease.AuthorityControllerId && Epoch == lease.Epoch;
 }

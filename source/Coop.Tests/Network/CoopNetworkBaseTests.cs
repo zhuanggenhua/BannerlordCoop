@@ -137,6 +137,37 @@ public class CoopNetworkBaseTests
     }
 
     [Fact]
+    public void MercenaryHireRequestAndAuthorityCommand_RoundTripWithLeaseAndPlayerIdentity()
+    {
+        _ = new SurrogateCollection();
+        var lease = new AuthorityLease("room-a", "authority-b", "controller-b", 5);
+        var request = new HireMercenaries(
+            "hero-a", "party-a", "town-a", "mercenary-a", 3, 90, 500,
+            requestSequence: 11,
+            lease: lease);
+        using var requestStream = new MemoryStream();
+        Serializer.Serialize(requestStream, request);
+        requestStream.Position = 0;
+        var requestRoundTrip = Serializer.Deserialize<HireMercenaries>(requestStream);
+
+        Assert.True(requestRoundTrip.MatchesLease(lease));
+        Assert.Equal("party-a", requestRoundTrip.MainPartyId);
+        Assert.Equal(3, requestRoundTrip.Count);
+
+        var command = new NetworkCampaignAuthorityMercenaryHireCommand(lease, 4, "controller-a", request);
+        using var commandStream = new MemoryStream();
+        Serializer.Serialize(commandStream, command);
+        commandStream.Position = 0;
+        var commandRoundTrip = Serializer.Deserialize<NetworkCampaignAuthorityMercenaryHireCommand>(commandStream);
+
+        Assert.True(commandRoundTrip.Matches(lease));
+        Assert.Equal(4, commandRoundTrip.Sequence);
+        Assert.Equal("controller-a", commandRoundTrip.OriginControllerId);
+        Assert.Equal("hero-a", commandRoundTrip.Request.MainHeroId);
+        Assert.False(commandRoundTrip.Matches(new AuthorityLease("room-a", "authority-b", "controller-b", 4)));
+    }
+
+    [Fact]
     public void RecruitmentRosterAndVolunteerResultsUseAuthorityLeaseEnvelopes()
     {
         _ = new SurrogateCollection();
@@ -173,6 +204,15 @@ public class CoopNetworkBaseTests
         var volunteerDelta = Assert.IsType<UpdateVolunteers>(
             serializer.Deserialize<IMessage>(volunteerEnvelope.Payload));
         Assert.Equal(lease.Epoch, volunteerEnvelope.Epoch);
+
+        network.SendAll(new NetworkUpdateMercenaryStock("town-a", "mercenary-a", 6));
+        var mercenaryEnvelope = DeserializeEnvelope(network.LastBroadcast, serializer);
+        var mercenaryDelta = Assert.IsType<NetworkUpdateMercenaryStock>(
+            serializer.Deserialize<IMessage>(mercenaryEnvelope.Payload));
+        Assert.Equal(lease.Epoch, mercenaryEnvelope.Epoch);
+        Assert.Equal("town-a", mercenaryDelta.TownId);
+        Assert.Equal("mercenary-a", mercenaryDelta.TroopTypeId);
+        Assert.Equal(6, mercenaryDelta.Number);
         Assert.Equal(new uint[] { 0, 42 }, volunteerDelta.UpdatedVolunteerTypeIds[17]);
     }
 

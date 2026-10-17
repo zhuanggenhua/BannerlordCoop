@@ -3,9 +3,11 @@ using Common.Logging;
 using Common.Messaging;
 using Common.Network;
 using GameInterface.Services.GameState.Messages;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.MobileParties.Messages;
 using GameInterface.Services.MobileParties.Patches;
 using GameInterface.Services.ObjectManager;
+using GameInterface.Services.Players;
 using LiteNetLib;
 using Serilog;
 using System.Collections.Generic;
@@ -25,15 +27,21 @@ internal class MercenaryStockHandler : IHandler
     private readonly IMessageBroker messageBroker;
     private readonly IObjectManager objectManager;
     private readonly INetwork network;
+    private readonly ICampaignAuthorityContext authorityContext;
+    private readonly IPlayerManager playerManager;
 
     public MercenaryStockHandler(
         IMessageBroker messageBroker,
         IObjectManager objectManager,
-        INetwork network)
+        INetwork network,
+        ICampaignAuthorityContext authorityContext,
+        IPlayerManager playerManager)
     {
         this.messageBroker = messageBroker;
         this.objectManager = objectManager;
         this.network = network;
+        this.authorityContext = authorityContext;
+        this.playerManager = playerManager;
 
         messageBroker.Subscribe<CampaignReady>(Handle_CampaignReady);
         messageBroker.Subscribe<MercenaryStockChanged>(Handle_MercenaryStockChanged);
@@ -55,14 +63,14 @@ internal class MercenaryStockHandler : IHandler
 
     internal void Handle_CampaignReady(MessagePayload<CampaignReady> payload)
     {
-        if (ModInformation.IsServer) return;
+        if (CanRunWorldSimulation()) return;
 
         network.SendAll(new NetworkRequestMercenaryStockSync());
     }
 
     internal void Handle_MercenaryStockChanged(MessagePayload<MercenaryStockChanged> payload)
     {
-        if (ModInformation.IsClient) return;
+        if (!CanRunWorldSimulation()) return;
 
         if (!objectManager.TryGetIdWithLogging(payload.What.Town, out var townId)) return;
 
@@ -77,7 +85,7 @@ internal class MercenaryStockHandler : IHandler
 
     private void Handle_NetworkUpdateMercenaryStock(MessagePayload<NetworkUpdateMercenaryStock> payload)
     {
-        if (ModInformation.IsServer) return;
+        if (CanRunWorldSimulation()) return;
 
         var data = payload.What;
 
@@ -95,12 +103,26 @@ internal class MercenaryStockHandler : IHandler
 
     internal void Handle_NetworkRequestMercenaryStockSync(MessagePayload<NetworkRequestMercenaryStockSync> payload)
     {
-        if (ModInformation.IsClient) return;
-
         var peer = payload.Who as NetPeer;
         if (peer == null) return;
 
-        GameThread.RunSafe(() => SendMercenaryStockSnapshot(peer), context: nameof(MercenaryStockHandler));
+        GameThread.RunSafe(() =>
+        {
+            if (CanRunWorldSimulation())
+            {
+                SendMercenaryStockSnapshot(peer);
+                return;
+            }
+
+            // The room host remains the relay. If campaign authority has moved to a client,
+            // ask that peer for the snapshot; its authority-scoped stock messages return through
+            // the host and are fenced before reaching the other clients.
+            if (!authorityContext.TryGetCurrentLease(out var lease) || !lease.IsValid || lease.IsPaused ||
+                !playerManager.TryGetPeer(lease.AuthorityControllerId, out var authorityPeer) || authorityPeer == null)
+                return;
+
+            network.Send(authorityPeer, new NetworkRequestMercenaryStockSync());
+        }, context: nameof(MercenaryStockHandler));
     }
 
     private void Handle_NetworkRequestMercenaryStockAudit(MessagePayload<NetworkRequestMercenaryStockAudit> payload)
@@ -225,5 +247,13 @@ internal class MercenaryStockHandler : IHandler
     internal static bool IsMercenaryTown(Town town)
     {
         return town?.Settlement != null && town.Settlement.IsTown;
+    }
+
+    private bool CanRunWorldSimulation()
+    {
+        if (authorityContext.TryGetCurrentLease(out var lease) && lease.IsValid)
+            return authorityContext.TryGetLocalAuthorityLease(out _);
+
+        return ModInformation.IsServer;
     }
 }

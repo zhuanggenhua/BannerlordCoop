@@ -20,7 +20,9 @@ internal readonly struct MercenaryStockChanged : IEvent
 }
 
 [ProtoContract(SkipConstructor = true)]
-internal readonly struct NetworkUpdateMercenaryStock : ICommand
+// Mercenary availability is a shared recruitment pool; fence its updates with the campaign
+// authority lease. General shop inventories remain per-player and do not use this message.
+internal readonly struct NetworkUpdateMercenaryStock : ICommand, ICampaignAuthorityScopedMessage
 {
     [ProtoMember(1)]
     public readonly string TownId;

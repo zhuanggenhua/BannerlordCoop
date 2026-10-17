@@ -1,14 +1,18 @@
 ﻿using Common;
 using Common.Messaging;
 using Common.Network;
+using Coop.Tests.Mocks;
 using GameInterface.Services.GameState.Messages;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.MobileParties.Handlers;
 using GameInterface.Services.MobileParties.Messages;
 using GameInterface.Services.ObjectManager;
+using GameInterface.Services.Players;
 using GameInterface.Tests;
 using Moq;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Settlements;
+using LiteNetLib;
 using Xunit;
 
 namespace GameInterface.Tests.Services.MobileParties;
@@ -19,13 +23,20 @@ public class MercenaryStockHandlerTests
     private readonly Mock<IMessageBroker> messageBroker = new();
     private readonly Mock<IObjectManager> objectManager = new();
     private readonly Mock<INetwork> network = new();
+    private readonly Mock<ICampaignAuthorityContext> authorityContext = new();
+    private readonly Mock<IPlayerManager> playerManager = new();
     private readonly MercenaryStockHandler handler;
 
     private object? sentMessage;
 
     public MercenaryStockHandlerTests()
     {
-        handler = new MercenaryStockHandler(messageBroker.Object, objectManager.Object, network.Object);
+        handler = new MercenaryStockHandler(
+            messageBroker.Object,
+            objectManager.Object,
+            network.Object,
+            authorityContext.Object,
+            playerManager.Object);
 
         network.Setup(n => n.SendAll(It.IsAny<IMessage>()))
             .Callback<IMessage>(message => sentMessage = message);
@@ -131,6 +142,83 @@ public class MercenaryStockHandlerTests
 
             Assert.Null(sentMessage);
             network.Verify(n => n.SendAll(It.IsAny<IMessage>()), Times.Never);
+        }
+        finally
+        {
+            ModInformation.IsServer = wasServer;
+        }
+    }
+
+    [Fact]
+    public void Handle_MercenaryStockChanged_RemoteAuthorityClient_SendsStockUpdate()
+    {
+        var wasServer = ModInformation.IsServer;
+        ModInformation.IsServer = false;
+        var lease = new AuthorityLease("room-a", "authority-a", "controller-a", 2);
+        authorityContext.Setup(context => context.TryGetCurrentLease(out It.Ref<AuthorityLease>.IsAny))
+            .Returns((out AuthorityLease current) =>
+            {
+                current = lease;
+                return true;
+            });
+        authorityContext.Setup(context => context.TryGetLocalAuthorityLease(out It.Ref<AuthorityLease>.IsAny))
+            .Returns((out AuthorityLease current) =>
+            {
+                current = lease;
+                return true;
+            });
+        try
+        {
+            var town = new Town();
+            var troop = new CharacterObject();
+            SetupId(town, "town-1");
+            SetupId(troop, "troop-1");
+
+            handler.Handle_MercenaryStockChanged(Payload(town, troop, 12));
+
+            Assert.IsType<NetworkUpdateMercenaryStock>(sentMessage!);
+            network.Verify(n => n.SendAll(It.IsAny<IMessage>()), Times.Once);
+        }
+        finally
+        {
+            ModInformation.IsServer = wasServer;
+        }
+    }
+
+    [Fact]
+    public void Handle_RequestStockSync_RoutesSnapshotRequestToRemoteAuthority()
+    {
+        var wasServer = ModInformation.IsServer;
+        ModInformation.IsServer = true;
+        var lease = new AuthorityLease("room-a", "authority-a", "controller-a", 2);
+        authorityContext.Setup(context => context.TryGetCurrentLease(out It.Ref<AuthorityLease>.IsAny))
+            .Returns((out AuthorityLease current) =>
+            {
+                current = lease;
+                return true;
+            });
+        authorityContext.Setup(context => context.TryGetLocalAuthorityLease(out It.Ref<AuthorityLease>.IsAny))
+            .Returns((out AuthorityLease current) =>
+            {
+                current = lease;
+                return false;
+            });
+
+        try
+        {
+            using var peers = new TestNetwork();
+            NetPeer requestingPeer = peers.CreatePeer();
+            NetPeer authorityPeer = peers.CreatePeer();
+            playerManager.Setup(manager => manager.TryGetPeer("controller-a", out authorityPeer)).Returns(true);
+
+            handler.Handle_NetworkRequestMercenaryStockSync(new MessagePayload<NetworkRequestMercenaryStockSync>(
+                requestingPeer,
+                new NetworkRequestMercenaryStockSync()));
+            GameThread.Run(() => { }, blocking: true);
+
+            network.Verify(
+                value => value.Send(authorityPeer, It.IsAny<NetworkRequestMercenaryStockSync>()),
+                Times.Once);
         }
         finally
         {
