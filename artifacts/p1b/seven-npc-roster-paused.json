@@ -1,0 +1,64 @@
+{
+  "out": {
+    "server": {
+      "lord_2_4_1_party_1": "##阿波拉涅娅  (hero id: lord_2_4_1)\r\nMember roster:\r\nlord_2_4_1: number=1 wounded=0 xp=0 hero=True\r\nsturgian_recruit: number=16 wounded=0 xp=265 hero=False\r\nsturgian_warrior: number=14 wounded=0 xp=243 hero=False\r\nsturgian_brigand: number=6 wounded=0 xp=293 hero=False\r\nsturgian_horse_raider: number=3 wounded=0 xp=0 hero=False\r\nsturgian_spearman: number=7 wounded=0 xp=615 hero=False\r\nsturgian_veteran_warrior: number=10 wounded=0 xp=0 hero=False\r\nsturgian_shock_troop: number=15 wounded=0 xp=0 hero=False\r\nsturgian_hunter: number=6 wounded=0 xp=76 hero=False\r\nsturgian_archer: number=7 wounded=0 xp=433 hero=False\r\nsturgian_veteran_bowman: number=4 wounded=0 xp=0 hero=False\r\nsturgian_hardened_brigand: number=4 wounded=0 xp=700 hero=False\r\nsturgian_woodsman: number=12 wounded=0 xp=283 hero=False\r\nsturgian_soldier: number=6 wounded=0 xp=595 hero=False\r\nPrisoner roster:\r\n",
+      "lord_3_8_party_1": "##阿达斯  (hero id: lord_3_8)\r\nMember roster:\r\nlord_3_8: number=1 wounded=0 xp=0 hero=True\r\naserai_tribesman: number=8 wounded=2 xp=30 hero=False\r\naserai_footman: number=16 wounded=0 xp=216 hero=False\r\naserai_skirmisher: number=15 wounded=1 xp=319 hero=False\r\naserai_tribal_horseman: number=2 wounded=0 xp=236 hero=False\r\naserai_mameluke_cavalry: number=3 wounded=0 xp=917 hero=False\r\naserai_infantry: number=15 wounded=1 xp=1125 hero=False\r\naserai_veteran_infantry: number=9 wounded=0 xp=0 hero=False\r\naserai_archer: number=9 wounded=0 xp=581 hero=False\r\naserai_master_archer: number=9 wounded=0 xp=0 hero=False\r\naserai_faris: number=5 wounded=2 xp=994 hero=False\r\naserai_mameluke_heavy_cavalry: number=3 wounded=0 xp=0 hero=False\r\naserai_militia_spearman: number=3 wounded=2 xp=0 hero=False\r\naserai_militia_archer: number=3 wounded=1 xp=0 hero=False\r\naserai_veteran_faris: number=2 wounded=0 xp=1502 hero=False\r\nlooter: number=5 wounded=0 xp=377 hero=False\r\naserai_recruit: number=2 wounded=2 xp=310 hero=False\r\naserai_mameluke_soldier: number=1 wounded=0 xp=8 hero=False\r\naserai_mameluke_regular: number=2 wounded=0 xp=596 hero=False\r\nimperial_heavy_horseman: number=2 wounded=0 xp=0 hero=False\r\nimperial_infantryman: number=1 wounded=0 xp=0 hero=False\r\nPrisoner roster:\r\n",
+      "lord_6_1_party_1": "##蒙楚格  (hero id: lord_6_1)\r\nMember roster:\r\nlord_6_1: number=1 wounded=0 xp=0 hero=True\r\nkhuzait_nomad: number=18 wounded=5 xp=202 hero=False\r\nkhuzait_tribal_warrior: number=39 wounded=14 xp=172 hero=False\r\nkhuzait_raider: number=39 wounded=10 xp=673 hero=False\r\nkhuzait_lancer: number=4 wounded=1 xp=1127 hero=False\r\nkhuzait_hunter: number=12 wounded=0 xp=460 hero=False\r\nkhuzait_archer: number=20 wounded=0 xp=282 hero=False\r\nkhuzait_spearman: number=6 wounded=1 xp=98 hero=False\r\nkhuzait_heavy_horse_archer: number=11 wounded=1 xp=0 hero=False\r\nkhuzait_horse_archer: number=20 wounded=3 xp=412 hero=False\r\nkhuzait_darkhan: number=7 wounded=2 xp=0 hero=False\r\nkhuzait_spear_infantry: number=10 wounded=1 xp=1261 hero=False\r\nkhuzait_marksman: number=18 wounded=0 xp=0 hero=False\r\nkhuzait_heavy_lancer: number=4 wounded=0 xp=0 hero=False\r\nlooter: number=1 wounded=1 xp=199 hero=False\r\nimperial_trained_infantryman: number=2 wounded=1 xp=696 hero=False\r\nimperial_veteran_infantryman: number=1 wounded=0 xp=355 hero=False\r\nimperial_trained_archer: number=1 wounded=0 xp=200 hero=False\r\nPrisoner roster:\r\nimperial_militia_archer: number=10 wounded=10 xp=210 hero=False\r\nimperial_militia_spearman: number=11 wounded=11 xp=0 hero=False\r\nlooter: number=4 wounded=4 xp=536 hero=False\r\nimperial_heavy_horseman: number=6 wounded=5 xp=504 hero=False\r\nimperial_archer: number=14 wounded=14 xp=0 hero=False\r\nimperial_trained_archer: number=14 wounded=14 xp=294 hero=False\r\nimperial_infantryman: number=14 wounded=13 xp=0 hero=False\r\nimperial_recruit: number=13 wounded=12 xp=670 hero=False\r\nimperial_cataphract: number=4 wounded=3 xp=0 hero=False\r\nimperial_veteran_infantryman: number=3 wounded=3 xp=0 hero=False\r\nimperial_trained_infantryman: number=9 wounded=9 xp=0 hero=False\r\nimperial_equite: number=8 wounded=8 xp=768 hero=False\r\nimperial_menavliaton: number=1 wounded=1 xp=0 hero=False\r\nimperial_sergeant_crossbowman: number=4 wounded=4 xp=0 hero=False\r\nimperial_crossbowman: number=2 wounded=2 xp=0 hero=False\r\nkhuzait_tribal_warrior: number=1 wounded=1 xp=0 hero=False\r\nlord_1_20: number=1 wounded=0 xp=0 hero=True\r\nlord_1_1_14: number=1 wounded=0 xp=0 hero=True\r\n"
+    },
+    "client1": {
+      "lord_2_4_1_party_1": "##阿波拉涅娅  (hero id: lord_2_4_1)\r\nMember roster:\r\nlord_2_4_1: number=1 wounded=0 xp=0 hero=True\r\nsturgian_recruit: number=16 wounded=0 xp=242 hero=False\r\nsturgian_warrior: number=14 wounded=0 xp=478 hero=False\r\nsturgian_brigand: number=6 wounded=0 xp=155 hero=False\r\nsturgian_horse_raider: number=3 wounded=0 xp=0 hero=False\r\nsturgian_spearman: number=7 wounded=0 xp=440 hero=False\r\nsturgian_veteran_warrior: number=10 wounded=0 xp=0 hero=False\r\nsturgian_shock_troop: number=15 wounded=0 xp=0 hero=False\r\nsturgian_hunter: number=6 wounded=0 xp=794 hero=False\r\nsturgian_archer: number=7 wounded=0 xp=265 hero=False\r\nsturgian_veteran_bowman: number=4 wounded=0 xp=0 hero=False\r\nsturgian_hardened_brigand: number=4 wounded=0 xp=620 hero=False\r\nsturgian_woodsman: number=12 wounded=0 xp=52 hero=False\r\nsturgian_soldier: number=6 wounded=0 xp=480 hero=False\r\nPrisoner roster:\r\n",
+      "lord_3_8_party_1": "##阿达斯  (hero id: lord_3_8)\r\nMember roster:\r\nlord_3_8: number=1 wounded=0 xp=0 hero=True\r\naserai_tribesman: number=8 wounded=2 xp=133 hero=False\r\naserai_footman: number=16 wounded=0 xp=548 hero=False\r\naserai_skirmisher: number=15 wounded=1 xp=547 hero=False\r\naserai_tribal_horseman: number=2 wounded=0 xp=703 hero=False\r\naserai_mameluke_cavalry: number=3 wounded=0 xp=1242 hero=False\r\naserai_infantry: number=15 wounded=1 xp=53 hero=False\r\naserai_veteran_infantry: number=9 wounded=0 xp=0 hero=False\r\naserai_archer: number=9 wounded=0 xp=996 hero=False\r\naserai_master_archer: number=9 wounded=0 xp=0 hero=False\r\naserai_faris: number=5 wounded=2 xp=1296 hero=False\r\naserai_mameluke_heavy_cavalry: number=3 wounded=0 xp=0 hero=False\r\naserai_militia_spearman: number=3 wounded=2 xp=0 hero=False\r\naserai_militia_archer: number=3 wounded=1 xp=0 hero=False\r\naserai_veteran_faris: number=2 wounded=0 xp=574 hero=False\r\nlooter: number=5 wounded=0 xp=217 hero=False\r\naserai_recruit: number=2 wounded=2 xp=298 hero=False\r\naserai_mameluke_soldier: number=1 wounded=0 xp=220 hero=False\r\naserai_mameluke_regular: number=2 wounded=0 xp=0 hero=False\r\nimperial_heavy_horseman: number=2 wounded=0 xp=0 hero=False\r\nimperial_infantryman: number=1 wounded=0 xp=0 hero=False\r\nPrisoner roster:\r\n",
+      "lord_6_1_party_1": "##蒙楚格  (hero id: lord_6_1)\r\nMember roster:\r\nlord_6_1: number=1 wounded=0 xp=0 hero=True\r\nkhuzait_nomad: number=18 wounded=5 xp=1558 hero=False\r\nkhuzait_tribal_warrior: number=39 wounded=14 xp=2772 hero=False\r\nkhuzait_raider: number=39 wounded=10 xp=1825 hero=False\r\nkhuzait_lancer: number=4 wounded=1 xp=1468 hero=False\r\nkhuzait_hunter: number=12 wounded=0 xp=2538 hero=False\r\nkhuzait_archer: number=20 wounded=0 xp=3500 hero=False\r\nkhuzait_spearman: number=6 wounded=1 xp=2404 hero=False\r\nkhuzait_heavy_horse_archer: number=11 wounded=1 xp=0 hero=False\r\nkhuzait_horse_archer: number=20 wounded=3 xp=2603 hero=False\r\nkhuzait_darkhan: number=7 wounded=2 xp=0 hero=False\r\nkhuzait_spear_infantry: number=10 wounded=1 xp=2273 hero=False\r\nkhuzait_marksman: number=18 wounded=0 xp=0 hero=False\r\nkhuzait_heavy_lancer: number=4 wounded=0 xp=0 hero=False\r\nlooter: number=1 wounded=1 xp=155 hero=False\r\nimperial_trained_infantryman: number=2 wounded=1 xp=588 hero=False\r\nimperial_veteran_infantryman: number=1 wounded=0 xp=328 hero=False\r\nimperial_trained_archer: number=1 wounded=0 xp=0 hero=False\r\nPrisoner roster:\r\nimperial_militia_archer: number=10 wounded=10 xp=210 hero=False\r\nimperial_militia_spearman: number=11 wounded=11 xp=0 hero=False\r\nlooter: number=4 wounded=4 xp=536 hero=False\r\nimperial_heavy_horseman: number=6 wounded=5 xp=504 hero=False\r\nimperial_archer: number=14 wounded=14 xp=0 hero=False\r\nimperial_trained_archer: number=14 wounded=14 xp=768 hero=False\r\nimperial_infantryman: number=14 wounded=13 xp=0 hero=False\r\nimperial_recruit: number=13 wounded=12 xp=670 hero=False\r\nimperial_cataphract: number=4 wounded=3 xp=0 hero=False\r\nimperial_veteran_infantryman: number=3 wounded=3 xp=0 hero=False\r\nimperial_trained_infantryman: number=9 wounded=9 xp=0 hero=False\r\nimperial_equite: number=8 wounded=8 xp=0 hero=False\r\nimperial_menavliaton: number=1 wounded=1 xp=0 hero=False\r\nimperial_sergeant_crossbowman: number=4 wounded=4 xp=0 hero=False\r\nimperial_crossbowman: number=2 wounded=2 xp=0 hero=False\r\nkhuzait_tribal_warrior: number=1 wounded=1 xp=0 hero=False\r\nlord_1_20: number=1 wounded=0 xp=0 hero=True\r\nlord_1_1_14: number=1 wounded=0 xp=0 hero=True\r\n"
+    }
+  },
+  "cmp": [
+    {
+      "id": "lord_2_4_1_party_1",
+      "rosterEqual": false,
+      "server": [
+        "lord_2_4_1: number=1 wounded=0 xp=0 hero=True\r",
+        "sturgian_recruit: number=16 wounded=0 xp=265 hero=False\r",
+        "sturgian_warrior: number=14 wounded=0 xp=243 hero=False\r",
+        "sturgian_brigand: number=6 wounded=0 xp=293 hero=False\r"
+      ],
+      "client": [
+        "lord_2_4_1: number=1 wounded=0 xp=0 hero=True\r",
+        "sturgian_recruit: number=16 wounded=0 xp=242 hero=False\r",
+        "sturgian_warrior: number=14 wounded=0 xp=478 hero=False\r",
+        "sturgian_brigand: number=6 wounded=0 xp=155 hero=False\r"
+      ]
+    },
+    {
+      "id": "lord_3_8_party_1",
+      "rosterEqual": false,
+      "server": [
+        "lord_3_8: number=1 wounded=0 xp=0 hero=True\r",
+        "aserai_tribesman: number=8 wounded=2 xp=30 hero=False\r",
+        "aserai_footman: number=16 wounded=0 xp=216 hero=False\r",
+        "aserai_skirmisher: number=15 wounded=1 xp=319 hero=False\r"
+      ],
+      "client": [
+        "lord_3_8: number=1 wounded=0 xp=0 hero=True\r",
+        "aserai_tribesman: number=8 wounded=2 xp=133 hero=False\r",
+        "aserai_footman: number=16 wounded=0 xp=548 hero=False\r",
+        "aserai_skirmisher: number=15 wounded=1 xp=547 hero=False\r"
+      ]
+    },
+    {
+      "id": "lord_6_1_party_1",
+      "rosterEqual": false,
+      "server": [
+        "lord_6_1: number=1 wounded=0 xp=0 hero=True\r",
+        "khuzait_nomad: number=18 wounded=5 xp=202 hero=False\r",
+        "khuzait_tribal_warrior: number=39 wounded=14 xp=172 hero=False\r",
+        "khuzait_raider: number=39 wounded=10 xp=673 hero=False\r"
+      ],
+      "client": [
+        "lord_6_1: number=1 wounded=0 xp=0 hero=True\r",
+        "khuzait_nomad: number=18 wounded=5 xp=1558 hero=False\r",
+        "khuzait_tribal_warrior: number=39 wounded=14 xp=2772 hero=False\r",
+        "khuzait_raider: number=39 wounded=10 xp=1825 hero=False\r"
+      ]
+    }
+  ]
+}

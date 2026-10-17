@@ -1,0 +1,30 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"version\":1,\"id\":\"3b811816ec064cb2b197c35ba226df58\",\"ok\":true,\"process\":{\"pid\":25324,\"role\":\"server\",\"platformId\":\"LocalA\",\"runToken\":\"700d0c32ded44ca9a782f627fb1967e9\",\"processStartedUtc\":\"2026-10-17T19:07:42.7220666Z\"},\"result\":{\"name\":\"coop.debug.listen.state\",\"arguments\":[],\"found\":true,\"output\":\"mode=ListenAuthority|room=c94f21a9bc4148abb1d31869615d98f8|authority=0a6ce8e5b4f64071969564a6630d9d29|local=LocalA|campaign=59191479|hero=main_hero|party=player_party|clan=player_faction|players=2|localConnected=True|localPeer=False|localHeroRegistrations=1|localPartyRegistrations=1|localClanRegistrations=1|position=(CampaignVec2) X: 658.7773 Y: 278.1635 IsOnLand: True|hours=2185934.52315469|ticks=16790|frames=17454|realTicks=16790|duplicateRealTicks=0|failedRealTicks=0|aiTicks=197700|visibleParties=7|parties=1344|sceneEnabled=True\",\"succeeded\":true,\"errorCode\":null,\"hasStructuredResult\":false,\"structuredResult\":null}}"
+    }
+  ],
+  "structuredContent": {
+    "version": 1,
+    "id": "3b811816ec064cb2b197c35ba226df58",
+    "ok": true,
+    "process": {
+      "pid": 25324,
+      "role": "server",
+      "platformId": "LocalA",
+      "runToken": "700d0c32ded44ca9a782f627fb1967e9",
+      "processStartedUtc": "2026-10-17T19:07:42.7220666Z"
+    },
+    "result": {
+      "name": "coop.debug.listen.state",
+      "arguments": [],
+      "found": true,
+      "output": "mode=ListenAuthority|room=c94f21a9bc4148abb1d31869615d98f8|authority=0a6ce8e5b4f64071969564a6630d9d29|local=LocalA|campaign=59191479|hero=main_hero|party=player_party|clan=player_faction|players=2|localConnected=True|localPeer=False|localHeroRegistrations=1|localPartyRegistrations=1|localClanRegistrations=1|position=(CampaignVec2) X: 658.7773 Y: 278.1635 IsOnLand: True|hours=2185934.52315469|ticks=16790|frames=17454|realTicks=16790|duplicateRealTicks=0|failedRealTicks=0|aiTicks=197700|visibleParties=7|parties=1344|sceneEnabled=True",
+      "succeeded": true,
+      "errorCode": null,
+      "hasStructuredResult": false,
+      "structuredResult": null
+    }
+  }
+}
