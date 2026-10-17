@@ -91,4 +91,42 @@ public class ListenAuthorityModeTests
         Assert.Equal(1, identity.Epoch);
         Assert.Equal("controller-a", identity.AuthorityControllerId);
     }
+
+    [Fact]
+    public void RoomHostControllerIsStableAndLeaseSnapshotAppliesItAtomically()
+    {
+        var identity = new SessionIdentity();
+        var lease = new AuthorityLease("room-a", "authority-a", "controller-a", 1);
+
+        Assert.True(identity.TryApply(lease, "room-host-a"));
+        Assert.False(identity.TryApply(
+            new AuthorityLease("room-a", "authority-b", "controller-b", 2),
+            "room-host-b"));
+
+        Assert.Equal(lease, identity.CurrentLease);
+        Assert.Equal("room-host-a", identity.RoomHostControllerId);
+    }
+
+    [Fact]
+    public void SnapshotWithoutRoomHostDoesNotClearKnownRoomHost()
+    {
+        var identity = new SessionIdentity();
+        var lease = new AuthorityLease("room-a", "authority-a", "controller-a", 1);
+
+        Assert.True(identity.TryApply(lease, "room-host-a"));
+        Assert.True(identity.TryApply(lease, string.Empty));
+
+        Assert.Equal("room-host-a", identity.RoomHostControllerId);
+    }
+
+    [Fact]
+    public void EmptyRoomHostDoesNotReplaceAnExistingIdentity()
+    {
+        var identity = new SessionIdentity();
+
+        Assert.True(identity.TrySetRoomHostControllerId("room-host-a"));
+        Assert.True(identity.TrySetRoomHostControllerId(string.Empty));
+
+        Assert.Equal("room-host-a", identity.RoomHostControllerId);
+    }
 }

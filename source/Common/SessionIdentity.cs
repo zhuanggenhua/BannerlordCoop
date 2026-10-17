@@ -7,12 +7,16 @@ public interface ISessionIdentity
     string RoomId { get; }
     string AuthorityId { get; }
     string AuthorityControllerId { get; }
+    string RoomHostControllerId { get; }
     long Epoch { get; }
     bool IsConfirmed { get; }
     bool TryApply(AuthorityLease lease);
+    bool TryApply(AuthorityLease lease, string roomHostControllerId);
     bool TryRestore(AuthorityLease lease);
+    bool TryRestore(AuthorityLease lease, string roomHostControllerId);
     bool TryConfirmCurrentLease();
     bool TrySetAuthorityControllerId(string controllerId);
+    bool TrySetRoomHostControllerId(string controllerId);
 }
 
 public readonly struct AuthorityLease : IEquatable<AuthorityLease>
@@ -58,6 +62,7 @@ public sealed class SessionIdentity : ISessionIdentity
 {
     private readonly object gate = new object();
     private AuthorityLease currentLease;
+    private string roomHostControllerId = string.Empty;
     private bool isConfirmed;
 
     public SessionIdentity()
@@ -77,33 +82,34 @@ public sealed class SessionIdentity : ISessionIdentity
     public string RoomId => CurrentLease.RoomId;
     public string AuthorityId => CurrentLease.AuthorityId;
     public string AuthorityControllerId => CurrentLease.AuthorityControllerId;
+    public string RoomHostControllerId { get { lock (gate) return roomHostControllerId; } }
     public long Epoch => CurrentLease.Epoch;
     public bool IsConfirmed { get { lock (gate) return isConfirmed; } }
 
     public bool TryApply(AuthorityLease lease)
     {
+        return TryApply(lease, null, applyRoomHost: false);
+    }
+
+    public bool TryApply(AuthorityLease lease, string roomHostControllerId)
+    {
+        return TryApply(lease, roomHostControllerId, applyRoomHost: true);
+    }
+
+    private bool TryApply(AuthorityLease lease, string roomHostControllerId, bool applyRoomHost)
+    {
         if (!lease.IsValid) return false;
 
         lock (gate)
         {
-            if (!isConfirmed)
-            {
-                currentLease = lease;
-                isConfirmed = true;
-                return true;
-            }
+            if (applyRoomHost && !CanApplyRoomHostController(roomHostControllerId)) return false;
+            if (!CanApplyLease(lease)) return false;
 
-            if (!string.Equals(currentLease.RoomId, lease.RoomId, StringComparison.Ordinal) ||
-                lease.Epoch < currentLease.Epoch)
-                return false;
-
-            if (lease.Epoch == currentLease.Epoch)
-                return currentLease == lease;
-
-            if (string.Equals(currentLease.AuthorityId, lease.AuthorityId, StringComparison.Ordinal))
-                return false;
-
-            currentLease = lease;
+            bool applyNewLease = !isConfirmed || lease.Epoch > currentLease.Epoch;
+            if (applyNewLease) currentLease = lease;
+            isConfirmed = true;
+            if (applyRoomHost && !string.IsNullOrWhiteSpace(roomHostControllerId))
+                this.roomHostControllerId = roomHostControllerId;
             return true;
         }
     }
@@ -111,6 +117,11 @@ public sealed class SessionIdentity : ISessionIdentity
     public bool TryRestore(AuthorityLease lease)
     {
         return TryApply(lease);
+    }
+
+    public bool TryRestore(AuthorityLease lease, string roomHostControllerId)
+    {
+        return TryApply(lease, roomHostControllerId);
     }
 
     public bool TryConfirmCurrentLease()
@@ -141,5 +152,42 @@ public sealed class SessionIdentity : ISessionIdentity
                 currentLease.Epoch);
             return true;
         }
+    }
+
+    public bool TrySetRoomHostControllerId(string controllerId)
+    {
+        if (string.IsNullOrWhiteSpace(controllerId)) return true;
+
+        lock (gate)
+        {
+            if (string.Equals(roomHostControllerId, controllerId, StringComparison.Ordinal))
+                return true;
+
+            if (!string.IsNullOrEmpty(roomHostControllerId)) return false;
+
+            roomHostControllerId = controllerId;
+            return true;
+        }
+    }
+
+    private bool CanApplyLease(AuthorityLease lease)
+    {
+        if (!isConfirmed) return true;
+        if (!string.Equals(currentLease.RoomId, lease.RoomId, StringComparison.Ordinal) ||
+            lease.Epoch < currentLease.Epoch)
+            return false;
+
+        if (lease.Epoch == currentLease.Epoch)
+            return currentLease == lease;
+
+        return !string.Equals(currentLease.AuthorityId, lease.AuthorityId, StringComparison.Ordinal);
+    }
+
+    private bool CanApplyRoomHostController(string controllerId)
+    {
+        if (string.IsNullOrWhiteSpace(controllerId)) return true;
+
+        return string.IsNullOrEmpty(roomHostControllerId) ||
+            string.Equals(roomHostControllerId, controllerId, StringComparison.Ordinal);
     }
 }

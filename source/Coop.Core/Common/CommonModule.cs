@@ -8,6 +8,7 @@ using Common.Serialization;
 using Common.Util;
 using Common.Voice;
 using Coop.Core.Common.Configuration;
+using Coop.Core.Common.Session;
 using GameInterface.Services.Entity;
 using GameInterface.Services.Modules;
 using GameInterface.Services.Modules.Validators;
@@ -23,6 +24,12 @@ public abstract class CommonModule : Module
     protected override void Load(ContainerBuilder builder)
     {
         builder.RegisterType<SessionIdentity>().As<ISessionIdentity>().InstancePerLifetimeScope();
+        builder.RegisterType<CampaignAuthorityCandidateSelector>()
+            .As<ICampaignAuthorityCandidateSelector>()
+            .InstancePerLifetimeScope();
+        builder.RegisterType<CampaignAuthorityAvailabilityCoordinator>()
+            .As<ICampaignAuthorityAvailabilityCoordinator>()
+            .InstancePerLifetimeScope();
         builder.RegisterType<ReceivePathDiagnostics>().As<IReceivePathDiagnostics>().InstancePerDependency();
         builder.RegisterType<VoiceTransitWindow>().As<IVoiceTransitWindow>().InstancePerDependency();
         builder.RegisterType<VoicePolicy>().As<IVoicePolicy>().InstancePerDependency();

@@ -51,7 +51,8 @@ namespace Coop.Tests.Server.Services.Save
                 roomId: "room-a",
                 authorityId: "authority-a",
                 authorityControllerId: "controller-a",
-                authorityEpoch: 3);
+                authorityEpoch: 3,
+                roomHostControllerId: "room-host-a");
 
             string saveFile = SAVE_PATH + sessionData.UniqueGameId + ".json";
 
@@ -67,6 +68,7 @@ namespace Coop.Tests.Server.Services.Save
             Assert.Equal(sessionData.AuthorityId, resolvedSessions.AuthorityId);
             Assert.Equal(sessionData.AuthorityControllerId, resolvedSessions.AuthorityControllerId);
             Assert.Equal(sessionData.AuthorityEpoch, resolvedSessions.AuthorityEpoch);
+            Assert.Equal(sessionData.RoomHostControllerId, resolvedSessions.RoomHostControllerId);
         }
 
         [Fact]
@@ -85,6 +87,7 @@ namespace Coop.Tests.Server.Services.Save
                 Assert.Equal(string.Empty, resolved.RoomId);
                 Assert.Equal(string.Empty, resolved.AuthorityId);
                 Assert.Equal(0, resolved.AuthorityEpoch);
+                Assert.Equal(string.Empty, resolved.RoomHostControllerId);
             }
             finally
             {

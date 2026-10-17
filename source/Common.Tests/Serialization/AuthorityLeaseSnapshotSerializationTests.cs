@@ -13,8 +13,9 @@ public class AuthorityLeaseSnapshotSerializationTests
         var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
 
         var received = serializer.Deserialize<NetworkAuthorityLeaseSnapshot>(
-            serializer.Serialize(new NetworkAuthorityLeaseSnapshot(lease)));
+            serializer.Serialize(new NetworkAuthorityLeaseSnapshot(lease, "room-host-a")));
 
         Assert.Equal(lease, received.ToLease());
+        Assert.Equal("room-host-a", received.RoomHostControllerId);
     }
 }

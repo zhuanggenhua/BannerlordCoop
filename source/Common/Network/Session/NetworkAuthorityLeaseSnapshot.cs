@@ -15,13 +15,16 @@ public readonly struct NetworkAuthorityLeaseSnapshot : IServerToClientCommand
     public readonly string AuthorityControllerId;
     [ProtoMember(4)]
     public readonly long Epoch;
+    [ProtoMember(5)]
+    public readonly string RoomHostControllerId;
 
-    public NetworkAuthorityLeaseSnapshot(AuthorityLease lease)
+    public NetworkAuthorityLeaseSnapshot(AuthorityLease lease, string roomHostControllerId = null)
     {
         RoomId = lease.RoomId;
         AuthorityId = lease.AuthorityId;
         AuthorityControllerId = lease.AuthorityControllerId;
         Epoch = lease.Epoch;
+        RoomHostControllerId = roomHostControllerId ?? string.Empty;
     }
 
     public AuthorityLease ToLease() => new AuthorityLease(RoomId, AuthorityId, AuthorityControllerId, Epoch);

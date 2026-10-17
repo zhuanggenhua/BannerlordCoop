@@ -129,7 +129,10 @@ internal class SaveGameHandler : IHandler
             lease?.RoomId ?? current?.RoomId,
             lease?.AuthorityId ?? current?.AuthorityId,
             lease?.AuthorityControllerId ?? current?.AuthorityControllerId,
-            lease?.Epoch ?? current?.AuthorityEpoch ?? 0);
+            lease?.Epoch ?? current?.AuthorityEpoch ?? 0,
+            string.IsNullOrWhiteSpace(sessionIdentity?.RoomHostControllerId)
+                ? current?.RoomHostControllerId
+                : sessionIdentity.RoomHostControllerId);
 
         coopSessionProvider.CoopSession = session;
 
@@ -158,18 +161,28 @@ internal class SaveGameHandler : IHandler
             loaded?.RoomId,
             loaded?.AuthorityId,
             loaded?.AuthorityControllerId,
-            loaded?.AuthorityEpoch ?? 0);
+            loaded?.AuthorityEpoch ?? 0,
+            loaded?.RoomHostControllerId);
 
-        if (sessionIdentity != null && savedSession.AuthorityEpoch > 0 &&
-            !sessionIdentity.TryRestore(new AuthorityLease(
-                savedSession.RoomId,
-                savedSession.AuthorityId,
-                savedSession.AuthorityControllerId,
-                savedSession.AuthorityEpoch)))
+        var savedLease = new AuthorityLease(
+            savedSession.RoomId,
+            savedSession.AuthorityId,
+            savedSession.AuthorityControllerId,
+            savedSession.AuthorityEpoch);
+        bool restoredLease = sessionIdentity != null && savedSession.AuthorityEpoch > 0 &&
+            sessionIdentity.TryRestore(savedLease, savedSession.RoomHostControllerId);
+        if (sessionIdentity != null && savedSession.AuthorityEpoch > 0 && !restoredLease)
         {
             Logger.Warning("Ignored saved campaign authority lease for room {RoomId} at epoch {Epoch}; " +
                 "current lease is room {CurrentRoomId} at epoch {CurrentEpoch}",
                 savedSession.RoomId, savedSession.AuthorityEpoch, sessionIdentity.RoomId, sessionIdentity.Epoch);
+        }
+        else if (sessionIdentity != null && savedSession.AuthorityEpoch <= 0 &&
+            !sessionIdentity.TrySetRoomHostControllerId(savedSession.RoomHostControllerId))
+        {
+            Logger.Warning("Ignored saved room host controller {SavedControllerId}; " +
+                "current room host controller is {CurrentControllerId}",
+                savedSession.RoomHostControllerId, sessionIdentity.RoomHostControllerId);
         }
 
         coopSessionProvider.CoopSession = savedSession;

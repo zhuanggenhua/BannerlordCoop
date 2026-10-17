@@ -38,8 +38,10 @@ public class AuthorityLeaseDistributionHandlerTests
             Assert.Equal(identity.RoomId, snapshot.RoomId);
             Assert.Equal(identity.AuthorityId, snapshot.AuthorityId);
             Assert.Equal("controller-a", snapshot.AuthorityControllerId);
+            Assert.Equal("controller-a", snapshot.RoomHostControllerId);
             Assert.Equal(1, snapshot.Epoch);
             Assert.True(identity.IsConfirmed);
+            Assert.Equal("controller-a", identity.RoomHostControllerId);
         }
         finally
         {

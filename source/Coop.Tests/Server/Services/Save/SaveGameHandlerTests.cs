@@ -87,6 +87,7 @@ public class SaveGameHandlerTests
         var identity = new SessionIdentity();
         var lease = new AuthorityLease("room-a", "authority-a", "controller-a", 1);
         Assert.True(identity.TryRestore(lease));
+        Assert.True(identity.TrySetRoomHostControllerId("room-host-a"));
         using var handler = CreateSavingHandler(messageBroker, saveManager, sessionIdentity: identity);
 
         messageBroker.Publish(new object(), new GameSaved(SaveName));
@@ -95,6 +96,34 @@ public class SaveGameHandlerTests
         Assert.Equal(lease.AuthorityId, saveManager.SavedSession.AuthorityId);
         Assert.Equal(lease.AuthorityControllerId, saveManager.SavedSession.AuthorityControllerId);
         Assert.Equal(lease.Epoch, saveManager.SavedSession.AuthorityEpoch);
+        Assert.Equal("room-host-a", saveManager.SavedSession.RoomHostControllerId);
+    }
+
+    [Fact]
+    public void GameSaved_PreservesSavedRoomHostWhenIdentityHasNoRoomHost()
+    {
+        var messageBroker = new TestMessageBroker();
+        var saveManager = new StubSaveManager(null!);
+        var currentSession = new Mock<ICoopSession>();
+        currentSession.SetupGet(session => session.RoomHostControllerId).Returns("room-host-saved");
+        var sessionProvider = new Mock<ICoopSessionProvider>();
+        sessionProvider.SetupProperty(provider => provider.CoopSession, currentSession.Object);
+        var playerRegistry = new Mock<IPlayerManager>();
+        playerRegistry.SetupGet(registry => registry.Players).Returns(Array.Empty<Player>());
+
+        using var handler = new SaveGameHandler(
+            messageBroker,
+            saveManager,
+            sessionProvider.Object,
+            playerRegistry.Object,
+            new Mock<IPlayerPartyRestorer>().Object,
+            new Mock<INetwork>().Object,
+            new Mock<IObjectManager>().Object,
+            new SessionIdentity());
+
+        messageBroker.Publish(new object(), new GameSaved(SaveName));
+
+        Assert.Equal("room-host-saved", saveManager.SavedSession.RoomHostControllerId);
     }
 
     [Fact]
@@ -105,7 +134,7 @@ public class SaveGameHandlerTests
         var identity = new SessionIdentity();
         using var handler = new SaveGameHandler(
             messageBroker,
-            new StubSaveManager(SessionWith(Array.Empty<Player>(), lease)),
+            new StubSaveManager(SessionWith(Array.Empty<Player>(), lease, "room-host-a")),
             new Mock<ICoopSessionProvider>().Object,
             new Mock<IPlayerManager>().Object,
             new Mock<IPlayerPartyRestorer>().Object,
@@ -117,6 +146,7 @@ public class SaveGameHandlerTests
 
         Assert.Equal(lease, identity.CurrentLease);
         Assert.True(identity.IsConfirmed);
+        Assert.Equal("room-host-a", identity.RoomHostControllerId);
     }
 
     [Fact]
@@ -390,7 +420,10 @@ public class SaveGameHandlerTests
         }
     }
 
-    private static CoopSession SessionWith(Player[] players, AuthorityLease? lease = null)
+    private static CoopSession SessionWith(
+        Player[] players,
+        AuthorityLease? lease = null,
+        string roomHostControllerId = null)
     {
         var empty = CoopSession.Empty;
 
@@ -409,6 +442,7 @@ public class SaveGameHandlerTests
             roomId: lease?.RoomId,
             authorityId: lease?.AuthorityId,
             authorityControllerId: lease?.AuthorityControllerId,
-            authorityEpoch: lease?.Epoch ?? 0);
+            authorityEpoch: lease?.Epoch ?? 0,
+            roomHostControllerId: roomHostControllerId);
     }
 }

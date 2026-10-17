@@ -50,7 +50,8 @@ public sealed class AuthorityLeaseDistributionHandler : IHandler
     {
         if (!InitializeLocalAuthorityController()) return;
         var lease = sessionIdentity.CurrentLease;
-        network.Send(payload.What.PlayerPeer, new NetworkAuthorityLeaseSnapshot(lease));
+        network.Send(payload.What.PlayerPeer,
+            new NetworkAuthorityLeaseSnapshot(lease, sessionIdentity.RoomHostControllerId));
         Logger.Information("Sent campaign authority lease epoch {Epoch} for room {RoomId} to a joining player",
             lease.Epoch, lease.RoomId);
     }
@@ -62,6 +63,14 @@ public sealed class AuthorityLeaseDistributionHandler : IHandler
         {
             Logger.Warning("Could not bind ListenAuthority controller {ControllerId} to authority lease epoch {Epoch}",
                 controllerIdProvider.ControllerId, sessionIdentity.Epoch);
+            return false;
+        }
+
+        if (ModInformation.IsListenAuthority &&
+            !sessionIdentity.TrySetRoomHostControllerId(controllerIdProvider.ControllerId))
+        {
+            Logger.Warning("Could not bind ListenAuthority room host controller {ControllerId} to room {RoomId}",
+                controllerIdProvider.ControllerId, sessionIdentity.RoomId);
             return false;
         }
 

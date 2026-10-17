@@ -36,6 +36,7 @@ public interface ICoopSession
     string AuthorityId { get; }
     string AuthorityControllerId { get; }
     long AuthorityEpoch { get; }
+    string RoomHostControllerId { get; }
 }
 
 [ProtoContract(SkipConstructor = true)]
@@ -89,6 +90,8 @@ public class CoopSession : ICoopSession
     public string AuthorityControllerId { get; }
     [ProtoMember(16)]
     public long AuthorityEpoch { get; }
+    [ProtoMember(17)]
+    public string RoomHostControllerId { get; }
 
     public CoopSession(
         string uniqueGameId,
@@ -106,7 +109,8 @@ public class CoopSession : ICoopSession
         string roomId = null,
         string authorityId = null,
         string authorityControllerId = null,
-        long authorityEpoch = 0)
+        long authorityEpoch = 0,
+        string roomHostControllerId = null)
     {
         UniqueGameId = uniqueGameId;
         Players = players;
@@ -124,5 +128,6 @@ public class CoopSession : ICoopSession
         AuthorityId = authorityId ?? string.Empty;
         AuthorityControllerId = authorityControllerId ?? string.Empty;
         AuthorityEpoch = authorityEpoch;
+        RoomHostControllerId = roomHostControllerId ?? string.Empty;
     }
 }
