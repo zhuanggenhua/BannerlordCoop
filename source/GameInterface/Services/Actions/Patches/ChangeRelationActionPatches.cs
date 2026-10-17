@@ -1,5 +1,6 @@
 ﻿using Common;
 using Common.Logging;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Heroes.Patches;
 using HarmonyLib;
 using Serilog;
@@ -33,7 +34,7 @@ internal class ChangeRelationActionPatches
         Hero originalGainedRelationWith,
         int relationChange)
     {
-        if (ModInformation.IsClient)
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation())
         {
             return false;
         }

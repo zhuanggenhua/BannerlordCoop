@@ -23,6 +23,10 @@ public sealed class CampaignAuthorityActionGuardTests
             Assert.True(GiveGoldActionPatches.Prefix());
             Assert.True(AddHeroToPartyActionPatches.Prefix());
             Assert.True(RemoveCompanionActionPatches.Prefix());
+            Assert.True(ChangeRelationActionPatches.ApplyInternalPrefix(
+                originalHero: null!,
+                originalGainedRelationWith: null!,
+                relationChange: 0));
         });
     }
 
@@ -34,6 +38,10 @@ public sealed class CampaignAuthorityActionGuardTests
             Assert.False(GiveGoldActionPatches.Prefix());
             Assert.False(AddHeroToPartyActionPatches.Prefix());
             Assert.False(RemoveCompanionActionPatches.Prefix());
+            Assert.False(ChangeRelationActionPatches.ApplyInternalPrefix(
+                originalHero: null!,
+                originalGainedRelationWith: null!,
+                relationChange: 1));
         });
     }
 
