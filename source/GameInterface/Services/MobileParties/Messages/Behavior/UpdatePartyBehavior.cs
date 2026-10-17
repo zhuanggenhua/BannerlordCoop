@@ -13,11 +13,16 @@ public struct UpdatePartyBehavior : ICommand
 {
     public PartyBehaviorUpdateData BehaviorUpdateData;
     public bool AlreadyOnGameThread;
+    public bool IsAuthorityReplay;
 
-    public UpdatePartyBehavior(ref PartyBehaviorUpdateData behaviorUpdateData, bool alreadyOnGameThread = false)
+    public UpdatePartyBehavior(
+        ref PartyBehaviorUpdateData behaviorUpdateData,
+        bool alreadyOnGameThread = false,
+        bool isAuthorityReplay = false)
     {
         BehaviorUpdateData = behaviorUpdateData;
         AlreadyOnGameThread = alreadyOnGameThread;
+        IsAuthorityReplay = isAuthorityReplay;
     }
 }
 

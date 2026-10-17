@@ -6,12 +6,44 @@ using Common.Session;
 using Common.Tests.Utils;
 using Coop.Core.Client.Services.Session;
 using Coop.Tests.Network;
+using GameInterface.Services.MobileParties.Data;
+using GameInterface.Services.MobileParties.Messages.Behavior;
+using GameInterface.Surrogates;
 using Xunit;
 
 namespace Coop.Tests.Client.Services.Session;
 
 public class CampaignAuthoritySyncEnvelopeClientHandlerTests
 {
+    [Fact]
+    public void AppliesRemoteAuthorityPartyBehaviorDeltaUnderConfirmedLease()
+    {
+        _ = new SurrogateCollection();
+        var messageBroker = new TestMessageBroker();
+        var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
+        var identity = new SessionIdentity();
+        Assert.True(identity.TryApply(new AuthorityLease("room-a", "authority-b", "guest", 2), "host"));
+        NetworkCampaignAuthorityPartyBehaviorDelta applied = default;
+        object appliedSource = null;
+        messageBroker.Subscribe<NetworkCampaignAuthorityPartyBehaviorDelta>(payload =>
+        {
+            applied = payload.What;
+            appliedSource = payload.Who;
+        });
+        using var handler = new CampaignAuthoritySyncEnvelopeClientHandler(messageBroker, identity, serializer);
+        var source = new object();
+        var delta = new NetworkCampaignAuthorityPartyBehaviorDelta(
+            new NetworkPartyBehaviorUpdateData { MobilePartyId = 42 });
+        var envelope = new NetworkCampaignAuthoritySyncEnvelope(
+            "room-a", "authority-b", "guest", 2, 1, serializer.Serialize(delta));
+
+        messageBroker.Publish(source, envelope);
+        GameThread.Run(() => { }, blocking: true);
+
+        Assert.Equal(42u, applied.BehaviorUpdateData.MobilePartyId);
+        Assert.Same(source, appliedSource);
+    }
+
     [Fact]
     public void AppliesOnlyCurrentLeaseEnvelopesAndRejectsReplays()
     {

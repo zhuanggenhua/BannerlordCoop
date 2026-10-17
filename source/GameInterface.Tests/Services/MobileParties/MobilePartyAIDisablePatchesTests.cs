@@ -130,6 +130,20 @@ public class MobilePartyAIDisablePatchesTests : IDisposable
             legacyIsServer));
     }
 
+    [Theory]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(false, false, false)]
+    public void ShouldAllowBehaviorUpdate_PreservesPlayerControlAndAuthorityAi(
+        bool localSimulationAuthority,
+        bool locallyControlled,
+        bool expected)
+    {
+        Assert.Equal(expected, PartyBehaviorPatch.ShouldAllowBehaviorUpdate(
+            localSimulationAuthority,
+            locallyControlled));
+    }
+
     private MobileParty RegisterPlayerParty(string ownerControllerId, string localControllerId)
     {
         var controllerIdProvider = new ControllerIdProvider();

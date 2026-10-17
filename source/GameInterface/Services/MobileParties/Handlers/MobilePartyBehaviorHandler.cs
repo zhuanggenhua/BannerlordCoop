@@ -3,6 +3,7 @@ using Common.Logging;
 using Common.Messaging;
 using Common.Util;
 using GameInterface.Services.Entity;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.MobileParties.Data;
 using GameInterface.Services.MobileParties.Extensions;
 using GameInterface.Services.MobileParties.Interfaces;
@@ -36,6 +37,7 @@ internal class MobilePartyBehaviorHandler : IHandler
     private readonly IMessageBroker messageBroker;
     private readonly IControllerIdProvider controllerIdProvider;
     private readonly IMobilePartyInterface mobilePartyInterface;
+    private readonly IPartyBehaviorWireMapper wireMapper;
     private readonly IObjectManager objectManager;
     private readonly IMobilePartyBehaviorSnapshot mobilePartyBehaviorSnapshot;
 
@@ -43,30 +45,36 @@ internal class MobilePartyBehaviorHandler : IHandler
         IMessageBroker messageBroker,
         IControllerIdProvider controllerIdProvider,
         IMobilePartyInterface mobilePartyInterface,
+        IPartyBehaviorWireMapper wireMapper,
         IObjectManager objectManager,
         IMobilePartyBehaviorSnapshot mobilePartyBehaviorSnapshot)
     {
         this.messageBroker = messageBroker;
         this.controllerIdProvider = controllerIdProvider;
         this.mobilePartyInterface = mobilePartyInterface;
+        this.wireMapper = wireMapper;
         this.objectManager = objectManager;
         this.mobilePartyBehaviorSnapshot = mobilePartyBehaviorSnapshot;
 
         messageBroker.Subscribe<PartyBehaviorChangeAttempted>(Handle_PartyBehaviorChanged);
         messageBroker.Subscribe<UpdatePartyBehavior>(Handle_UpdatePartyBehavior);
+        messageBroker.Subscribe<NetworkCampaignAuthorityPartyBehaviorDelta>(Handle_AuthorityPartyBehaviorDelta);
     }
 
     public void Dispose()
     {
         messageBroker.Unsubscribe<PartyBehaviorChangeAttempted>(Handle_PartyBehaviorChanged);
         messageBroker.Unsubscribe<UpdatePartyBehavior>(Handle_UpdatePartyBehavior);
+        messageBroker.Unsubscribe<NetworkCampaignAuthorityPartyBehaviorDelta>(Handle_AuthorityPartyBehaviorDelta);
     }
 
     public void Handle_PartyBehaviorChanged(MessagePayload<PartyBehaviorChangeAttempted> obj)
     {
         var party = obj.What.Party;
+        bool localCampaignAuthority = CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
+        bool locallyControlled = party.IsControlledByThisInstance();
 
-        if (ModInformation.IsClient && !party.IsControlledByThisInstance())
+        if (!localCampaignAuthority && !locallyControlled)
             return;
 
         if (!mobilePartyBehaviorSnapshot.TryCreate(
@@ -78,7 +86,7 @@ internal class MobilePartyBehaviorHandler : IHandler
         data.IsCurrentlyAtSea = obj.What.IsCurrentlyAtSea;
         data.ResetMovementToHold = obj.What.ResetMovementToHold;
 
-        if (ModInformation.IsClient)
+        if (!localCampaignAuthority)
         {
             data.OriginControllerId = controllerIdProvider.ControllerId;
             latestPredictions[data.MobilePartyId] = data;
@@ -87,6 +95,17 @@ internal class MobilePartyBehaviorHandler : IHandler
         }
 
         messageBroker.Publish(this, new PartyBehaviorUpdated(ref data));
+    }
+
+    internal void Handle_AuthorityPartyBehaviorDelta(
+        MessagePayload<NetworkCampaignAuthorityPartyBehaviorDelta> payload)
+    {
+        if (!wireMapper.TryFromNetwork(payload.What.BehaviorUpdateData, out var data))
+            return;
+
+        messageBroker.Publish(
+            payload.Who,
+            new UpdatePartyBehavior(ref data, isAuthorityReplay: true));
     }
 
     public void Handle_UpdatePartyBehavior(MessagePayload<UpdatePartyBehavior> obj)
@@ -98,8 +117,7 @@ internal class MobilePartyBehaviorHandler : IHandler
             if (!objectManager.TryGetObjectWithLogging(data.MobilePartyId, out MobileParty party))
                 return;
 
-            bool isSelfEcho = ModInformation.IsClient &&
-                party.IsControlledByThisInstance() &&
+            bool isSelfEcho = party.IsControlledByThisInstance() &&
                 !string.IsNullOrEmpty(data.OriginControllerId) &&
                 string.Equals(data.OriginControllerId, controllerIdProvider.ControllerId, StringComparison.Ordinal);
 
@@ -108,7 +126,7 @@ internal class MobilePartyBehaviorHandler : IHandler
                 return;
 
             List<MobileParty> attachedParties = null;
-            if (ModInformation.IsServer && data.ForcePosition)
+            if ((ModInformation.IsServer || obj.What.IsAuthorityReplay) && data.ForcePosition)
             {
                 attachedParties = ApplyServerForcedPosition(party, data.PartyPosition, data.IsCurrentlyAtSea);
                 if (data.ResetMovementToHold)
@@ -129,10 +147,10 @@ internal class MobilePartyBehaviorHandler : IHandler
                         out interactablePoint))
                     return;
 
-                if (ModInformation.IsClient && data.ForcePosition)
+                if (ModInformation.IsClient && data.ForcePosition && !obj.What.IsAuthorityReplay)
                     ApplyForcedPosition(party, data.PartyPosition, data.IsCurrentlyAtSea);
 
-                if (ModInformation.IsClient && data.ResetMovementToHold)
+                if (ModInformation.IsClient && data.ResetMovementToHold && !obj.What.IsAuthorityReplay)
                 {
                     party.SetMoveModeHold();
                     party.ResetNavigationToHold();
@@ -161,10 +179,10 @@ internal class MobilePartyBehaviorHandler : IHandler
                 }
             }
 
-            if (ModInformation.IsServer)
+            if (!obj.What.IsAuthorityReplay && CampaignSimulationAuthorityPolicy.CanRunWorldSimulation())
                 PublishAuthoritativeBehavior(party, data);
 
-            if (attachedParties != null)
+            if (attachedParties != null && !obj.What.IsAuthorityReplay)
             {
                 foreach (var attachedParty in attachedParties)
                     PublishForcedPosition(attachedParty);

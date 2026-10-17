@@ -17,7 +17,7 @@ internal class MobilePartyAIPatches
     private static void CheckPartyNeedsUpdatePrefix(MobilePartyAi __instance)
     {
         // Default path on server
-        if (ModInformation.IsServer) return;
+        if (global::GameInterface.Services.CampaignAuthority.CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return;
 
         if (__instance._mobileParty != MobileParty.MainParty)
         {
@@ -33,7 +33,7 @@ internal class MobilePartyAIPatches
 
     [HarmonyPatch(nameof(MobilePartyAi.AiBehaviorInteractable), MethodType.Setter), HarmonyPrefix]
     private static void AiBehaviorInteractablePrefix(MobilePartyAi __instance, IInteractablePoint value, out bool __state) =>
-        __state = ModInformation.IsServer &&
+        __state = global::GameInterface.Services.CampaignAuthority.CampaignSimulationAuthorityPolicy.CanRunWorldSimulation() &&
             !CallOriginalPolicy.IsOriginalAllowed() &&
             __instance?._mobileParty?.IsActive == true &&
             value != __instance.AiBehaviorInteractable;

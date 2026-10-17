@@ -6,13 +6,18 @@ using Common.Network.Session;
 using Common.Session;
 using Coop.Tests.Extensions;
 using Coop.Core.Common.Network;
+using Coop.Core.Server.Services.MobileParties.Packets;
 using GameInterface.Services.CampaignAuthority;
+using GameInterface.Services.MobileParties.Messages.Behavior;
+using GameInterface.Services.MobileParties.Data;
+using GameInterface.Surrogates;
 using LiteNetLib;
 using Moq;
 using ProtoBuf;
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
+using System.IO;
 using System.Net;
 using System.Net.Sockets;
 using System.Threading;
@@ -23,6 +28,81 @@ namespace Coop.Tests.Network;
 
 public class CoopNetworkBaseTests
 {
+    [Fact]
+    public void AuthorityPartyBehaviorDelta_IsSerializedInsideLeaseEnvelope()
+    {
+        _ = new SurrogateCollection();
+        var config = Mock.Of<INetworkConfig>();
+        var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
+        var batcher = new ReliableMessageBatcher<NetPeer>(serializer);
+        using var cancellation = new CancellationTokenSource();
+        var authorityContext = new Mock<ICampaignAuthorityContext>();
+        var lease = new AuthorityLease("room-a", "authority-b", "controller-b", 2);
+        authorityContext.Setup(context => context.TryGetLocalAuthorityLease(out It.Ref<AuthorityLease>.IsAny))
+            .Returns((out AuthorityLease current) =>
+            {
+                current = lease;
+                return true;
+            });
+        using var network = new TestNetwork(config, serializer, batcher, cancellation, authorityContext.Object);
+        var update = new NetworkPartyBehaviorUpdateData { MobilePartyId = 42, TargetPosition = default };
+
+        network.SendAll(new NetworkCampaignAuthorityPartyBehaviorDelta(update));
+
+        var envelope = DeserializeEnvelope(network.LastBroadcast, serializer);
+        var delta = Assert.IsType<NetworkCampaignAuthorityPartyBehaviorDelta>(
+            serializer.Deserialize<IMessage>(envelope.Payload));
+        Assert.Equal("room-a", envelope.RoomId);
+        Assert.Equal("authority-b", envelope.AuthorityId);
+        Assert.Equal("controller-b", envelope.AuthorityControllerId);
+        Assert.Equal(2, envelope.Epoch);
+        Assert.Equal(1, envelope.Sequence);
+        Assert.Equal(42u, delta.BehaviorUpdateData.MobilePartyId);
+    }
+
+    [Fact]
+    public void RemoteAuthorityPartyBehaviorCommand_RoundTripsWithLeaseAndRequestSequence()
+    {
+        _ = new SurrogateCollection();
+        var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
+        var lease = new AuthorityLease("room-a", "authority-b", "controller-b", 2);
+        var command = new NetworkCampaignAuthorityPartyBehaviorCommand(
+            lease,
+            sequence: 7,
+            originControllerId: "controller-a",
+            behaviorUpdateData: new NetworkPartyBehaviorUpdateData { MobilePartyId = 42 });
+
+        var roundTrip = Assert.IsType<NetworkCampaignAuthorityPartyBehaviorCommand>(
+            serializer.Deserialize<IMessage>(serializer.Serialize(command)));
+
+        Assert.True(roundTrip.Matches(lease));
+        Assert.Equal(7, roundTrip.Sequence);
+        Assert.Equal("controller-a", roundTrip.OriginControllerId);
+        Assert.Equal(42u, roundTrip.BehaviorUpdateData.MobilePartyId);
+        Assert.False(roundTrip.Matches(new AuthorityLease("room-a", "authority-old", "controller-b", 1)));
+    }
+
+    [Fact]
+    public void PlayerPartyBehaviorRequest_RoundTripsWithItsCurrentLease()
+    {
+        _ = new SurrogateCollection();
+        var lease = new AuthorityLease("room-a", "authority-b", "controller-b", 5);
+        var request = new RequestMobilePartyBehaviorPacket(
+            new NetworkPartyBehaviorUpdateData { MobilePartyId = 42 },
+            requestSequence: 11,
+            lease: lease);
+
+        using var stream = new MemoryStream();
+        Serializer.Serialize(stream, request);
+        stream.Position = 0;
+        var roundTrip = Serializer.Deserialize<RequestMobilePartyBehaviorPacket>(stream);
+
+        Assert.True(roundTrip.MatchesLease(lease));
+        Assert.Equal(11, roundTrip.RequestSequence);
+        Assert.Equal(42u, roundTrip.BehaviorUpdateData.MobilePartyId);
+        Assert.False(roundTrip.MatchesLease(new AuthorityLease("room-a", "authority-b", "controller-b", 4)));
+    }
+
     [Fact]
     public void Constructor_UsesEstablishedDisconnectTimeout()
     {

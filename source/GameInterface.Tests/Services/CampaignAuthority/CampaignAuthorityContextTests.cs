@@ -24,6 +24,8 @@ public class CampaignAuthorityContextTests
 
             Assert.True(context.IsAuthorityKnown);
             Assert.False(context.IsLocalCampaignAuthority);
+            Assert.True(context.TryGetCurrentLease(out var currentLease));
+            Assert.Equal(lease, currentLease);
 
             controller.SetControllerId("controller-b");
             Assert.True(context.IsLocalCampaignAuthority);

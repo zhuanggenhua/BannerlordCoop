@@ -54,7 +54,9 @@ public static class PartyBehaviorPatch
         RepairInvalidSettlementTarget(__instance, newAiBehavior, interactablePoint, ref bestTargetPoint);
 
         __state = !BehaviorIsSame(__instance, newAiBehavior, interactablePoint, bestTargetPoint) &&
-            __instance._mobileParty.IsControlledByThisInstance();
+            ShouldAllowBehaviorUpdate(
+                global::GameInterface.Services.CampaignAuthority.CampaignSimulationAuthorityPolicy.CanRunWorldSimulation(),
+                __instance._mobileParty.IsControlledByThisInstance());
         if (!__state)
             return false;
 
@@ -128,5 +130,8 @@ public static class PartyBehaviorPatch
         partyAi._aiBehaviorInteractable == interactable &&
         partyAi._mobileParty.ShortTermBehavior == behavior &&
         partyAi.BehaviorTarget == target;
+
+    internal static bool ShouldAllowBehaviorUpdate(bool localSimulationAuthority, bool locallyControlled) =>
+        localSimulationAuthority || locallyControlled;
 
 }

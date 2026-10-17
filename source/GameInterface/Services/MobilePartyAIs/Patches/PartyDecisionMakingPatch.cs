@@ -20,7 +20,9 @@ internal class AiEngagePartyBehaviorPatches
         AccessTools.Method(typeof(AiVisitSettlementBehavior), nameof(AiVisitSettlementBehavior.RegisterEvents))
     };
 
-    static bool Prefix() => ModInformation.IsServer;
+    // Register on every replica so a confirmed remote authority already has the campaign
+    // callbacks it needs after promotion. Periodic event execution remains lease-gated.
+    static bool Prefix() => true;
 }
 
 /// <summary>

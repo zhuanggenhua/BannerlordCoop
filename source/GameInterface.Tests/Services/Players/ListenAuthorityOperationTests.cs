@@ -39,13 +39,44 @@ public class ListenAuthorityOperationTests : IDisposable
         var data = new PartyBehaviorUpdateData();
         snapshot.Setup(s => s.TryCreate(party, out data)).Returns(true);
         using var handler = new MobilePartyBehaviorHandler(broker.Object, Mock.Of<IControllerIdProvider>(),
-            Mock.Of<IMobilePartyInterface>(), Mock.Of<IObjectManager>(), snapshot.Object);
+            Mock.Of<IMobilePartyInterface>(), Mock.Of<IPartyBehaviorWireMapper>(),
+            Mock.Of<IObjectManager>(), snapshot.Object);
         handler.Handle_PartyBehaviorChanged(new MessagePayload<PartyBehaviorChangeAttempted>(
             party, new PartyBehaviorChangeAttempted(party)));
         broker.Verify(b => b.Publish(It.IsAny<object>(), It.IsAny<PartyBehaviorUpdated>()), Times.Once);
         broker.Verify(b => b.Publish(It.IsAny<object>(), It.IsAny<ControlledPartyBehaviorUpdated>()), Times.Never);
         snapshot.Verify(s => s.TryCreate(party, out data), Times.Once);
         snapshot.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public void AuthorityPartyBehaviorDeltaIsQueuedAsReplayWithoutTurningIntoARequest()
+    {
+        var broker = new Mock<IMessageBroker>();
+        var wireMapper = new Mock<IPartyBehaviorWireMapper>();
+        var networkData = new NetworkPartyBehaviorUpdateData { MobilePartyId = 42 };
+        var behaviorData = new PartyBehaviorUpdateData();
+        wireMapper.Setup(mapper => mapper.TryFromNetwork(networkData, out behaviorData)).Returns(true);
+        using var handler = new MobilePartyBehaviorHandler(
+            broker.Object,
+            Mock.Of<IControllerIdProvider>(),
+            Mock.Of<IMobilePartyInterface>(),
+            wireMapper.Object,
+            Mock.Of<IObjectManager>(),
+            Mock.Of<IMobilePartyBehaviorSnapshot>());
+        var source = new object();
+
+        handler.Handle_AuthorityPartyBehaviorDelta(new MessagePayload<NetworkCampaignAuthorityPartyBehaviorDelta>(
+            source,
+            new NetworkCampaignAuthorityPartyBehaviorDelta(networkData)));
+
+        broker.Verify(messageBroker => messageBroker.Publish(
+            source,
+            It.Is<UpdatePartyBehavior>(update => update.IsAuthorityReplay)), Times.Once);
+        broker.Verify(messageBroker => messageBroker.Publish(
+            It.IsAny<object>(),
+            It.IsAny<ControlledPartyBehaviorUpdated>()), Times.Never);
+        wireMapper.Verify(mapper => mapper.TryFromNetwork(networkData, out behaviorData), Times.Once);
     }
 
     [Fact]

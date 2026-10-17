@@ -164,7 +164,7 @@ internal class DefaultMobilePartyAIModelPatches
         [HarmonyPatch("CalculateInitiativeScoresForEnemy")]
         static bool Prefix(MobileParty mobileParty, MobileParty enemyParty, ref float avoidScore, ref float attackScore)
         {
-            if (!ModInformation.IsServer) return true;
+            if (!global::GameInterface.Services.CampaignAuthority.CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return true;
             if (!enemyParty.IsGarrison) return true;
             if (enemyParty.CurrentSettlement == null) return true;
 
