@@ -2,6 +2,7 @@
 using Common.Logging;
 using Common.Messaging;
 using GameInterface.Services.Clans.Extensions;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Heroes.Extensions;
 using GameInterface.Services.Heroes.HeirSelection.Messages;
 using GameInterface.Services.MobileParties.Extensions;
@@ -32,7 +33,7 @@ internal class KillCharacterActionPatches
     [HarmonyPrefix]
     public static bool ApplyInternalPrefix(Hero victim, Hero killer, KillCharacterAction.KillCharacterActionDetail actionDetail, bool showNotification, bool isForced = false)
     {
-        if (ModInformation.IsClient) return false;
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
 
         if (!victim.CanDie(actionDetail) && !isForced) return false;
 

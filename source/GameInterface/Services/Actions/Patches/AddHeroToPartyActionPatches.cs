@@ -1,5 +1,6 @@
 ﻿using Common;
 using Common.Logging;
+using GameInterface.Services.CampaignAuthority;
 using HarmonyLib;
 using Serilog;
 using TaleWorlds.CampaignSystem.Actions;
@@ -12,5 +13,5 @@ internal class AddHeroToPartyActionPatches
     private static readonly ILogger Logger = LogManager.GetLogger<AddHeroToPartyActionPatches>();
 
     [HarmonyPatch(nameof(AddHeroToPartyAction.ApplyInternal))]
-    static bool Prefix() => ModInformation.IsServer;
+    internal static bool Prefix() => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
 }
