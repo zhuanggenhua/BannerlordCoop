@@ -10,11 +10,13 @@ using GameInterface.Services.Inventory.Messages;
 using GameInterface.Services.ObjectManager;
 using GameInterface.Services.Villages.Interfaces;
 using GameInterface.Services.Workshops.Messages;
+using GameInterface.Services.Players;
 using HarmonyLib;
 using Helpers;
 using LiteNetLib;
 using Serilog;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Roster;
@@ -33,19 +35,34 @@ internal class TradeHandler : IHandler
     private readonly IObjectManager objectManager;
     private readonly INetwork network;
     private readonly IVillageHostileActionInterface villageHostileActionInterface;
+    private readonly IPlayerManager players;
+    private sealed class CommitCursor { public long LastRequest; }
+    private readonly ConditionalWeakTable<object, CommitCursor> commits = new();
+
+    internal bool TryBeginCommit(object sender, long requestId)
+    {
+        if (requestId <= 0) return false;
+        var cursor = commits.GetValue(sender ?? this, _ => new CommitCursor());
+        // Invoked on the game thread after ownership checks. Reconnecting peers get a fresh window.
+        if (requestId <= cursor.LastRequest) return false;
+        cursor.LastRequest = requestId;
+        return true;
+    }
 
     public TradeHandler(
         IInventoryLogicInterface inventoryLogicInterface,
         IMessageBroker messageBroker,
         IObjectManager objectManager,
         INetwork network,
-        IVillageHostileActionInterface villageHostileActionInterface)
+        IVillageHostileActionInterface villageHostileActionInterface,
+        IPlayerManager players)
     {
         this.inventoryLogicInterface = inventoryLogicInterface;
         this.messageBroker = messageBroker;
         this.objectManager = objectManager;
         this.network = network;
         this.villageHostileActionInterface = villageHostileActionInterface;
+        this.players = players;
 
         messageBroker.Subscribe<TradeAttempted>(Handle_TradeAttempted);
         messageBroker.Subscribe<CompleteTrade>(Handle_CompleteTrade);
@@ -117,7 +134,15 @@ internal class TradeHandler : IHandler
             what.ForceTransferId
         );
 
-        network.SendAll(message);
+        DispatchCompleteTrade(message);
+    }
+
+    internal void DispatchCompleteTrade(CompleteTrade message)
+    {
+        if (ModInformation.IsListenAuthority)
+            messageBroker.Publish(this, message);
+        else
+            network.SendAll(message);
     }
 
     private void Handle_CompleteTrade(MessagePayload<CompleteTrade> payload)
@@ -127,6 +152,9 @@ internal class TradeHandler : IHandler
 
         GameThread.RunSafe(() =>
         {
+            if (ModInformation.IsServer && peer != null &&
+                (!players.ValidateCurrentPartySender(peer, message.OwnerPartyId) ||
+                 !players.ValidateHeroSender(peer, message.HeroId))) return;
             ItemRoster fromRoster = null;
             if (!message.IsFromItemRosterNull && !objectManager.TryGetObjectWithLogging<ItemRoster>(message.FromItemRosterId, out fromRoster)) return;
 
@@ -134,6 +162,7 @@ internal class TradeHandler : IHandler
             if (!objectManager.TryGetObjectWithLogging<Hero>(message.HeroId, out var hero)) return;
             if (!objectManager.TryGetObjectWithLogging<MobileParty>(message.OwnerPartyId, out var ownerParty)) return;
             if (!objectManager.TryGetObjectWithLogging<Hero>(message.InitialHeroId, out var initialHero)) return;
+            if (peer != null && !ReferenceEquals(toRoster, ownerParty.ItemRoster)) return;
 
             SettlementComponent currentSettlementComponent = null;
             if (!message.IsSettlementComponentNull &&
@@ -167,6 +196,7 @@ internal class TradeHandler : IHandler
             var fromItemRosterData = message.FromItemRosterData;
             var toItemRosterData = message.ToItemRosterData;
             var totalAmount = message.TotalAmount;
+            if (!TryBeginCommit(peer, message.RequestId)) return;
 
             // Undo any purchases that are no longer present in the roster
             // When looting, taken items are treated as bought items. Don't need to manage changed rosters in these cases

@@ -2,6 +2,7 @@
 using GameInterface.Services.Inventory.Data;
 using ProtoBuf;
 using System.Collections.Generic;
+using System.Threading;
 using TaleWorlds.Core;
 
 namespace GameInterface.Services.Inventory.Messages;
@@ -9,6 +10,9 @@ namespace GameInterface.Services.Inventory.Messages;
 [ProtoContract(SkipConstructor = true)]
 internal readonly struct CompleteTrade : ICommand
 {
+    private static long nextRequestId;
+    [ProtoMember(21)]
+    public readonly long RequestId;
     [ProtoMember(1)]
     public readonly string FromItemRosterId;
     [ProtoMember(2)]
@@ -73,6 +77,7 @@ internal readonly struct CompleteTrade : ICommand
         (ItemRosterElementData, int)[] soldItems,
         string forceTransferId = null)
     {
+        RequestId = Interlocked.Increment(ref nextRequestId);
         FromItemRosterId = fromItemRosterId;
         IsFromItemRosterNull = isFromItemRosterNull;
         ToItemRosterId = toItemRosterId;

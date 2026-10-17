@@ -228,6 +228,7 @@ public class TradeHandlerTests
             Mock.Of<IMessageBroker>(),
             objectManager,
             Mock.Of<INetwork>(),
-            Mock.Of<IVillageHostileActionInterface>());
+            Mock.Of<IVillageHostileActionInterface>(),
+            Mock.Of<global::GameInterface.Services.Players.IPlayerManager>());
     }
 }

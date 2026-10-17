@@ -6,6 +6,7 @@ using Coop.Core.Client.Services.TroopRosters.Messages;
 using GameInterface.Services.ObjectManager;
 using GameInterface.Services.TroopRosters.Interfaces;
 using GameInterface.Services.UI.Notifications.Messages;
+using GameInterface.Services.Players;
 using LiteNetLib;
 using Serilog;
 using System;
@@ -18,13 +19,15 @@ internal class ServerTroopRosterHandler : IHandler
     private readonly INetwork network;
     private readonly IObjectManager objectManager;
     private readonly ITroopRosterInterface troopRosterInterface;
+    private readonly IPlayerManager players;
 
-    public ServerTroopRosterHandler(IMessageBroker messageBroker, INetwork network, IObjectManager objectManager, ITroopRosterInterface troopRosterInterface)
+    public ServerTroopRosterHandler(IMessageBroker messageBroker, INetwork network, IObjectManager objectManager, ITroopRosterInterface troopRosterInterface, IPlayerManager players)
     {
         this.messageBroker = messageBroker;
         this.network = network;
         this.objectManager = objectManager;
         this.troopRosterInterface = troopRosterInterface;
+        this.players = players;
 
         messageBroker.Subscribe<ClientRequestRecruitment>(HandleOnRecruitmentDone);
     }
@@ -42,6 +45,7 @@ internal class ServerTroopRosterHandler : IHandler
         {
             try
             {
+                if (!players.ValidateCurrentPartySender(payload.Who, data.MobilePartyId)) return;
                 troopRosterInterface.HandleOnRecruitmentDone(data.MobilePartyId, data.TroopsInCart);
             }
             catch (Exception e)

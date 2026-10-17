@@ -321,7 +321,10 @@ internal class TroopRosterInterface : ITroopRosterInterface
     {
         if (!objectManager.TryGetObjectWithLogging(mobilePartyId, out MobileParty mobileParty)) return;
 
+        if (mobileParty.CurrentSettlement == null || troopsInCart == null) return;
+
         List<(Hero, CharacterObject, int)> herosValidated = new();
+        var slots = new HashSet<(Hero, int)>();
 
         // Validate troops before committing to recruiting
         foreach (var troop in troopsInCart)
@@ -329,9 +332,12 @@ internal class TroopRosterInterface : ITroopRosterInterface
             if (!objectManager.TryGetObjectWithLogging(troop.RecruiterHeroId, out Hero hero)) continue;
             if (!objectManager.TryGetObjectWithLogging(troop.CharacterObjectId, out CharacterObject characterObject)) continue;
 
+            if (hero.CurrentSettlement != mobileParty.CurrentSettlement || hero.VolunteerTypes == null ||
+                troop.TroopIndex < 0 || troop.TroopIndex >= hero.VolunteerTypes.Length ||
+                !slots.Add((hero, troop.TroopIndex))) continue;
             var volunteerTroopAtIndex = hero.VolunteerTypes[troop.TroopIndex];
 
-            if (volunteerTroopAtIndex is null) continue;
+            if (volunteerTroopAtIndex is null || volunteerTroopAtIndex != characterObject) continue;
 
             herosValidated.Add((hero, characterObject, troop.TroopIndex));
         }
