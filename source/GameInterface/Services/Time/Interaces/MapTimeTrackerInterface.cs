@@ -26,6 +26,9 @@ public interface IMapTimeTrackerInterface : IGameAbstraction
     /// <param name="oneWayLatencySeconds">The estimated time the sample spent travelling from server to client.</param>
     void SyncCampaignTime(long serverTicks, float oneWayLatencySeconds);
 
+    /// <summary>Applies an exact authority sample to the local campaign clock on the game thread.</summary>
+    void ApplyAuthorityTimeSample(long authorityTicks);
+
     /// <summary>
     /// Applies the pending server-time correction to the current client simulation frame.
     /// </summary>
@@ -75,11 +78,13 @@ internal class MapTimeTrackerInterface : IMapTimeTrackerInterface
     {
         public long Ticks { get; }
         public float OneWayLatencySeconds { get; }
+        public bool ApplyExactly { get; }
 
-        public ServerTimeSample(long ticks, float oneWayLatencySeconds)
+        public ServerTimeSample(long ticks, float oneWayLatencySeconds, bool applyExactly = false)
         {
             Ticks = ticks;
             OneWayLatencySeconds = oneWayLatencySeconds;
+            ApplyExactly = applyExactly;
         }
     }
 
@@ -145,6 +150,12 @@ internal class MapTimeTrackerInterface : IMapTimeTrackerInterface
         QueueLatestServerTime();
     }
 
+    public void ApplyAuthorityTimeSample(long authorityTicks)
+    {
+        Volatile.Write(ref latestServerTimeSample, new ServerTimeSample(authorityTicks, 0f, applyExactly: true));
+        QueueLatestServerTime();
+    }
+
     private void QueueLatestServerTime()
     {
         if (Interlocked.CompareExchange(ref serverTimeApplyQueued, 1, 0) != 0) return;
@@ -166,11 +177,20 @@ internal class MapTimeTrackerInterface : IMapTimeTrackerInterface
             do
             {
                 appliedSample = Volatile.Read(ref latestServerTimeSample);
-                var tracker = Campaign.Current?.MapTimeTracker;
-                if (tracker == null || appliedSample == null) return;
+                var campaign = Campaign.Current;
+                var tracker = campaign?.MapTimeTracker;
+                if (campaign == null || tracker == null || appliedSample == null) return;
 
                 long maxServerProgressTicks = CampaignTime.Hours(6f).NumTicks;
                 if (maxServerProgressTicks <= 0L) return;
+
+                if (appliedSample.ApplyExactly)
+                {
+                    tracker._numTicks = appliedSample.Ticks;
+                    tracker._deltaTimeInTicks = 0L;
+                    campaign._dt = 0f;
+                    continue;
+                }
 
                 BeginCorrection(
                     appliedSample.Ticks,
