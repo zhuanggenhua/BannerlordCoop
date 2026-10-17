@@ -20,6 +20,12 @@ namespace GameInterface.Tests.Services.Players;
 [Collection(ModInformationRoleCollection.Name)]
 public class ListenAuthorityOperationTests : IDisposable
 {
+    [Fact]
+    public void NativeListenLeaveConsequenceIsNotConvertedIntoClientRequest()
+    {
+        ModInformation.SessionMode = SessionMode.ListenAuthority;
+        Assert.True(PlayerLeaveSettlementPatch.RequestLeave());
+    }
     private readonly SessionMode previous = ModInformation.SessionMode;
     public void Dispose() => ModInformation.SessionMode = previous;
 

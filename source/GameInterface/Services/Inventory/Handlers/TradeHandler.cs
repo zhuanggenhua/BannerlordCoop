@@ -140,7 +140,8 @@ internal class TradeHandler : IHandler
     internal void DispatchCompleteTrade(CompleteTrade message)
     {
         if (ModInformation.IsListenAuthority)
-            messageBroker.Publish(this, message);
+            // DoneLogic still has to reset its preview. Apply the frozen commit after it returns.
+            GameThread.EnqueueSafe(() => messageBroker.Publish(this, message), context: "ListenAuthority.TradeCommit");
         else
             network.SendAll(message);
     }

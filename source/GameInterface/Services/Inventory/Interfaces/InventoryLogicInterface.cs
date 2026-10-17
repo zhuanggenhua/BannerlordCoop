@@ -177,6 +177,9 @@ namespace GameInterface.Services.Inventory.Interfaces
         public void UpdateRosterWithData(ItemRoster targetItemRoster, ItemRosterElement[] itemRosterElements)
         {
             if (itemRosterElements == null) return;
+            // Local authority commits do not pass through serialization. Clear must not erase its input.
+            if (ReferenceEquals(targetItemRoster._data, itemRosterElements))
+                itemRosterElements = (ItemRosterElement[])itemRosterElements.Clone();
 
             targetItemRoster.Clear();
 

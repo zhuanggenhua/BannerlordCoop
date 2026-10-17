@@ -1,4 +1,5 @@
 ﻿using Common.Messaging;
+using Common;
 #if DEBUG
 using GameInterface.Services.GameMenus.Patches;
 #endif
@@ -33,6 +34,8 @@ internal class PlayerLeaveSettlementPatch
 
     internal static bool RequestLeave()
     {
+        // Listen A owns this encounter. Native consequences execute once and publish world effects.
+        if (ModInformation.IsListenAuthority) return true;
         var party = MobileParty.MainParty;
 
         var message = new EndSettlementEncounterAttempted(party);

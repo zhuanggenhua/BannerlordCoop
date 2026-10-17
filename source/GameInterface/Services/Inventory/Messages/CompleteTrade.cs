@@ -81,8 +81,9 @@ internal readonly struct CompleteTrade : ICommand
         FromItemRosterId = fromItemRosterId;
         IsFromItemRosterNull = isFromItemRosterNull;
         ToItemRosterId = toItemRosterId;
-        FromItemRosterData = fromItemRosterData;
-        ToItemRosterData = toItemRosterData;
+        // The local authority does not serialize this request before the UI resets its preview.
+        FromItemRosterData = fromItemRosterData == null ? null : (ItemRosterElement[])fromItemRosterData.Clone();
+        ToItemRosterData = toItemRosterData == null ? null : (ItemRosterElement[])toItemRosterData.Clone();
         CharacterIdEquipmentsData = characterIdEquipmentsData;
         IsTrading = isTrading;
         CanGainXpFromDiscarding = canGainXpFromDiscarding;

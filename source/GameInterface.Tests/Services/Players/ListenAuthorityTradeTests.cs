@@ -9,12 +9,39 @@ using GameInterface.Services.Players;
 using GameInterface.Services.Villages.Interfaces;
 using Moq;
 using Xunit;
+using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.Core;
+using Common.Util;
 
 namespace GameInterface.Tests.Services.Players;
 
 [Collection(ModInformationRoleCollection.Name)]
 public class ListenAuthorityTradeTests
 {
+    [Fact]
+    public void CommitSnapshotSurvivesNativePreviewResetBeforeDeferredApply()
+    {
+        var item = new ItemObject("grain");
+        var roster = new ItemRoster();
+        roster.AddToCounts(item, 3);
+        var commit = new CompleteTrade(null, false, null, roster._data, roster._data, null,
+            true, false, false, null, null, 0, 0, null, null, true, null, null, null);
+        roster.Clear();
+        Assert.Equal(0, roster.GetItemNumber(item));
+        ObjectHelper.SkipConstructor<InventoryLogicInterface>().UpdateRosterWithData(roster, commit.ToItemRosterData);
+        Assert.Equal(3, roster.GetItemNumber(item));
+        Assert.NotSame(commit.FromItemRosterData, commit.ToItemRosterData);
+    }
+    [Fact]
+    public void LocalRosterCommitPreservesDataWhenSourceIsItsOwnBackingArray()
+    {
+        var item = new ItemObject("grain");
+        var roster = new ItemRoster();
+        roster.AddToCounts(item, 3);
+        var inventory = ObjectHelper.SkipConstructor<InventoryLogicInterface>();
+        inventory.UpdateRosterWithData(roster, roster._data);
+        Assert.Equal(3, roster.GetItemNumber(item));
+    }
     [Fact]
     public void ReplayedOrStaleCommitIsRejectedButReconnectedPeerHasFreshWindow()
     {
@@ -36,17 +63,21 @@ public class ListenAuthorityTradeTests
     public void LocalCommitHasExactlyOneDestinationWithoutNetworkEcho(SessionMode mode, bool local)
     {
         var previous = ModInformation.SessionMode;
+        var previousThread = GameThread.Instance.GameThreadId;
         try
         {
+            GameThread.Instance.MarkGameThread();
             ModInformation.SessionMode = mode;
             var broker = new Mock<IMessageBroker>();
             var network = new Mock<INetwork>();
             using var handler = new TradeHandler(Mock.Of<IInventoryLogicInterface>(), broker.Object,
                 Mock.Of<IObjectManager>(), network.Object, Mock.Of<IVillageHostileActionInterface>(), Mock.Of<IPlayerManager>());
             handler.DispatchCompleteTrade(default);
+            broker.Verify(b => b.Publish(It.IsAny<object>(), It.IsAny<CompleteTrade>()), Times.Never());
+            GameThread.Instance.Update(System.TimeSpan.Zero);
             broker.Verify(b => b.Publish(It.IsAny<object>(), It.IsAny<CompleteTrade>()), local ? Times.Once() : Times.Never());
             network.Verify(n => n.SendAll(It.IsAny<CompleteTrade>()), local ? Times.Never() : Times.Once());
         }
-        finally { ModInformation.SessionMode = previous; }
+        finally { ModInformation.SessionMode = previous; GameThread.Instance.RestoreGameThread(previousThread); }
     }
 }

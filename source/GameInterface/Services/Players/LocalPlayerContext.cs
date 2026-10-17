@@ -5,6 +5,8 @@ using GameInterface.Services.Players.Data;
 using System;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
+using GameInterface.Services.Inventory.TradeSkills.Interfaces;
+using GameInterface.Services.Inventory.Interfaces;
 
 namespace GameInterface.Services.Players;
 
@@ -19,12 +21,17 @@ public sealed class LocalPlayerContext : ILocalPlayerContext
     private readonly IPlayerManager players;
     private readonly IObjectManager objects;
     private readonly IControllerIdProvider controller;
+    private readonly ISessionTradePlayerDataInterface trade;
+    private readonly ISessionInventoryPlayerDataInterface inventory;
 
-    public LocalPlayerContext(IPlayerManager players, IObjectManager objects, IControllerIdProvider controller)
+    public LocalPlayerContext(IPlayerManager players, IObjectManager objects, IControllerIdProvider controller,
+        ISessionTradePlayerDataInterface trade, ISessionInventoryPlayerDataInterface inventory)
     {
         this.players = players;
         this.objects = objects;
         this.controller = controller;
+        this.trade = trade;
+        this.inventory = inventory;
     }
 
     public Player RegisterNativePlayer()
@@ -41,6 +48,10 @@ public sealed class LocalPlayerContext : ILocalPlayerContext
             !objects.TryGetId(hero.Clan, out string clanId) ||
             !objects.TryGetId(hero.CharacterObject, out string characterId))
             throw new InvalidOperationException("Native player graph must be registered before binding its controller");
+
+        // A does not switch heroes or send remote initialization requests. Preserve existing keys.
+        trade.AddPlayerKeys(heroId);
+        inventory.AddPlayerKeys(heroId);
 
         if (players.TryGetPlayer(controller.ControllerId, out var existing))
         {
