@@ -8,6 +8,7 @@ using Coop.Core.Client.Messages;
 using Coop.Core.Common.Network;
 using Coop.Core.Common.Services.Connection.Messages;
 using Coop.Core.Common.Session.Messages;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.GameDebug.Messages;
 using LiteNetLib;
 using Serilog;
@@ -50,8 +51,9 @@ public class CoopClient : CoopNetworkBase, ICoopClient
         IMessagePacketHandler messagePacketHandler,
         ICommonSerializer serializer,
         IReliableMessageBatcher<NetPeer> reliableMessageBatcher,
-        CancellationTokenSource sessionCancellation)
-        : base(config, serializer, reliableMessageBatcher, sessionCancellation)
+        CancellationTokenSource sessionCancellation,
+        ICampaignAuthorityContext campaignAuthorityContext = null)
+        : base(config, serializer, reliableMessageBatcher, sessionCancellation, campaignAuthorityContext)
     {
         this.messageBroker = messageBroker;
         this.packetManager = packetManager;

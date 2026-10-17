@@ -146,7 +146,7 @@ namespace GameInterface.Utils
             }
 
             // Skip method if called from client and allow origin
-            if (ModInformation.IsClient)
+            if (CallOriginalPolicy.IsClientMutationBlocked())
             {
                 Logger.Error("Client updated unmanaged {type}", typeof(TItem));
                 list.Add(item);
@@ -182,7 +182,7 @@ namespace GameInterface.Utils
             }
 
             // Skip method if called from client and allow origin
-            if (ModInformation.IsClient)
+            if (CallOriginalPolicy.IsClientMutationBlocked())
             {
                 Logger.Error("Client updated unmanaged {type}", typeof(TItem));
                 return list.Remove(item);
@@ -309,7 +309,7 @@ namespace GameInterface.Utils
             }
 
             // Skip method if called from client and allow origin
-            if (ModInformation.IsClient)
+            if (CallOriginalPolicy.IsClientMutationBlocked())
             {
                 Logger.Error("Client updated unmanaged {type}", typeof(TItem));
                 list.Add(item);
@@ -346,7 +346,7 @@ namespace GameInterface.Utils
             }
 
             // Skip method if called from client and allow origin
-            if (ModInformation.IsClient)
+            if (CallOriginalPolicy.IsClientMutationBlocked())
             {
                 Logger.Error("Client updated unmanaged {type}", typeof(TItem));
                 return items.Remove(item);
@@ -493,7 +493,7 @@ namespace GameInterface.Utils
             }
 
             // Skip method if called from client and allow origin
-            if (ModInformation.IsClient)
+            if (CallOriginalPolicy.IsClientMutationBlocked())
             {
                 Logger.Error("Client updated unmanaged {type}", typeof(TItem));
                 queue.Enqueue(item);
@@ -530,7 +530,7 @@ namespace GameInterface.Utils
             }
 
             // Skip method if called from client and allow origin
-            if (ModInformation.IsClient)
+            if (CallOriginalPolicy.IsClientMutationBlocked())
             {
                 Logger.Error("Client updated unmanaged {type}", typeof(TItem));
                 return queue.Dequeue();
@@ -822,7 +822,7 @@ namespace GameInterface.Utils
             }
 
             // Skip method if called from client and allow origin
-            if (ModInformation.IsClient)
+            if (CallOriginalPolicy.IsClientMutationBlocked())
             {
                 Logger.Error("Client updated unmanaged {type}", typeof(Dictionary<TKey, TValue>));
                 dict.Add(key, value);
@@ -851,7 +851,7 @@ namespace GameInterface.Utils
             }
 
             // Skip method if called from client and allow origin
-            if (ModInformation.IsClient)
+            if (CallOriginalPolicy.IsClientMutationBlocked())
             {
                 Logger.Error("Client updated unmanaged {type}", typeof(Dictionary<TKey, TValue>));
                 dict[key] = value;
@@ -885,7 +885,7 @@ namespace GameInterface.Utils
             }
 
             // Skip method if called from client and allow origin
-            if (ModInformation.IsClient)
+            if (CallOriginalPolicy.IsClientMutationBlocked())
             {
                 Logger.Error("Client updated unmanaged {type}", typeof(Dictionary<TKey, TValue>));
                 return dict.Remove(key);
@@ -914,7 +914,7 @@ namespace GameInterface.Utils
             }
 
             // Skip method if called from client and allow origin
-            if (ModInformation.IsClient)
+            if (CallOriginalPolicy.IsClientMutationBlocked())
             {
                 Logger.Error("Client updated unmanaged {type}", typeof(Dictionary<TKey, TValue>));
                 dict.Clear();
@@ -1059,7 +1059,7 @@ namespace GameInterface.Utils
                 return;
             }
 
-            if (ModInformation.IsClient)
+            if (CallOriginalPolicy.IsClientMutationBlocked())
             {
                 Logger.Error("Client updated unmanaged {type}", typeof(TItem));
                 return;
@@ -1132,7 +1132,7 @@ namespace GameInterface.Utils
                 return;
             }
 
-            if (ModInformation.IsClient)
+            if (CallOriginalPolicy.IsClientMutationBlocked())
             {
                 Logger.Error("Client updated unmanaged {type}", typeof(TItem));
                 owner.SetPropertyValue(attribute, value);
@@ -1167,7 +1167,7 @@ namespace GameInterface.Utils
                 return;
             }
 
-            if (ModInformation.IsClient)
+            if (CallOriginalPolicy.IsClientMutationBlocked())
             {
                 Logger.Error("Client updated unmanaged {type}", typeof(TItem));
                 owner.ClearAllProperty();
@@ -1227,7 +1227,7 @@ namespace GameInterface.Utils
                 fieldInfo.SetValue(instance, item);
                 return;
             }
-            if (ModInformation.IsClient)
+            if (CallOriginalPolicy.IsClientMutationBlocked())
             {
                 Logger.Error("Client updated unmanaged {type}", typeof(TItem));
                 fieldInfo.SetValue(instance, item);
@@ -1286,7 +1286,7 @@ namespace GameInterface.Utils
                 propertyInfo.SetValue(instance, item);
                 return;
             }
-            if (ModInformation.IsClient)
+            if (CallOriginalPolicy.IsClientMutationBlocked())
             {
                 Logger.Error("Client updated unmanaged {type}", typeof(TItem));
                 propertyInfo.SetValue(instance, item);
@@ -1348,7 +1348,7 @@ namespace GameInterface.Utils
             {
                 return;
             }
-            if (ModInformation.IsClient)
+            if (CallOriginalPolicy.IsClientMutationBlocked())
             {
                 Logger.Error("Client updated unmanaged {type}", typeof(TItem));
                 return;

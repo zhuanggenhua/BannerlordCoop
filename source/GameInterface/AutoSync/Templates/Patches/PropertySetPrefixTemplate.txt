@@ -8,7 +8,7 @@ public class {{ MemberDeclaringTypeName }}_{{ MemberName }}_PropertySetPrefix : 
         if (CallOriginalPolicy.IsOriginalAllowed())
             return;
         
-        if (ModInformation.IsClient)
+        if (CallOriginalPolicy.IsClientMutationBlocked())
         {
             Logger.Error("Client updated managed {member}; stack={StackTrace}",
                 "{{MemberDeclaringType}}.{{MemberName}}", System.Environment.StackTrace);

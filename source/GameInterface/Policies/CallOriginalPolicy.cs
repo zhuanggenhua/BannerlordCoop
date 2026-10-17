@@ -1,5 +1,6 @@
 ﻿using Common.Logging;
 using Common.Util;
+using GameInterface.Services.CampaignAuthority;
 using Serilog;
 using System;
 using System.Threading;
@@ -38,6 +39,23 @@ public class CallOriginalPolicy
 
         return false;
     }
+
+    /// <summary>
+    /// Blocks client-side AutoSync mutations unless this client currently owns the confirmed
+    /// campaign-authority lease. The authority client must publish the normal local AutoSync event
+    /// so its delta can be epoch-fenced and relayed by the room host.
+    /// </summary>
+    public static bool IsClientMutationBlocked()
+    {
+        if (!Common.ModInformation.IsClient) return false;
+
+        bool isLocalAuthority = ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authorityContext) &&
+            authorityContext.IsLocalCampaignAuthority;
+        return ShouldBlockClientMutation(Common.ModInformation.IsClient, isLocalAuthority);
+    }
+
+    internal static bool ShouldBlockClientMutation(bool isClient, bool isLocalAuthority) =>
+        isClient && !isLocalAuthority;
 
     public static bool IsOriginalAllowedForOwnershipGate()
     {

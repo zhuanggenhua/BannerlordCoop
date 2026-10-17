@@ -7,6 +7,7 @@ using Common.Network.Messages;
 using Common.PacketHandlers;
 using Common.Serialization;
 using Coop.Core.Common.Network;
+using GameInterface.Services.CampaignAuthority;
 using Coop.Core.Server.Connections;
 using Coop.Core.Server.Connections.Messages;
 using Coop.Core.Server.Services.Instances;
@@ -72,8 +73,9 @@ public class CoopServer : CoopNetworkBase, ICoopServer
         IUdpBindDiagnostics bindDiagnostics,
         ICommonSerializer serializer,
         IReliableMessageBatcher<NetPeer> reliableMessageBatcher,
-        CancellationTokenSource sessionCancellation)
-        : base(configuration, serializer, reliableMessageBatcher, sessionCancellation)
+        CancellationTokenSource sessionCancellation,
+        ICampaignAuthorityContext campaignAuthorityContext = null)
+        : base(configuration, serializer, reliableMessageBatcher, sessionCancellation, campaignAuthorityContext)
     {
         // Dependancy assignment
         this.messageBroker = messageBroker;

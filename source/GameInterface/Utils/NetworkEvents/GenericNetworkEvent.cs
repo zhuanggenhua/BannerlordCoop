@@ -1,7 +1,7 @@
 ﻿using Common.Messaging;
 namespace GameInterface.Utils.NetworkEvents
 {
-    public abstract record GenericNetworkEvent<TInstance, TValue> : IEvent
+    public abstract record GenericNetworkEvent<TInstance, TValue> : IEvent, ICampaignAuthorityScopedMessage
     {
         public abstract uint InstanceId { get; set; }
 

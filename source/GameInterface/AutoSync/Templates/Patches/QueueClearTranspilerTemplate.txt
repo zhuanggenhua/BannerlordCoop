@@ -61,7 +61,7 @@ public static void Intercept_QueueClear_{{ MemberName }}({{ MemberDeclaringType 
     }
 
     // Skip method if called from client and allow origin
-    if (ModInformation.IsClient)
+    if (CallOriginalPolicy.IsClientMutationBlocked())
     {
         Logger.Error("Client updated unmanaged {type}", typeof({{ MemberType }}));
         queue.Clear();

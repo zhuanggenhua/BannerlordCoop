@@ -66,6 +66,13 @@ public class MessagePacketHandler : IMessagePacketHandler
             return;
         }
 
+        if (message is ICampaignAuthorityScopedMessage)
+        {
+            Logger.Warning("Rejected unwrapped campaign authority sync message {MessageType}; an authority lease envelope is required",
+                message.GetType());
+            return;
+        }
+
         var messageType = message.GetType();
         var publishInvoker = GetPublishInvoker(messageType);
 

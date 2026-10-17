@@ -2,10 +2,12 @@
 using Common.Logging;
 using Common.Messaging;
 using Common.Network;
+using Common.Network.Session;
 using Common.PacketHandlers;
 using Common.Serialization;
 using Common.Util;
 using Coop.Core.Common.Network.Packets;
+using GameInterface.Services.CampaignAuthority;
 using LiteNetLib;
 using System;
 using System.Collections.Generic;
@@ -31,6 +33,12 @@ public abstract class CoopNetworkBase : INetwork, IBufferedNetwork, INetEventLis
     // Profiles outbound packets; dumps per-type counts and byte totals every 10 seconds (server only).
     private readonly PacketProfiler packetProfiler = new PacketProfiler(TimeSpan.FromSeconds(10));
     private readonly IReliableMessageBatcher<NetPeer> reliableMessageBatcher;
+    private readonly ICampaignAuthorityContext campaignAuthorityContext;
+    private readonly object authoritySequenceGate = new object();
+    private string sequenceRoomId = string.Empty;
+    private string sequenceAuthorityId = string.Empty;
+    private long sequenceEpoch;
+    private long nextAuthoritySequence;
 
     // Guard against repeated container and explicit disposal.
     private int disposed;
@@ -41,7 +49,8 @@ public abstract class CoopNetworkBase : INetwork, IBufferedNetwork, INetEventLis
         INetworkConfig configuration,
         ICommonSerializer serializer,
         IReliableMessageBatcher<NetPeer> reliableMessageBatcher,
-        CancellationTokenSource sessionCancellation)
+        CancellationTokenSource sessionCancellation,
+        ICampaignAuthorityContext campaignAuthorityContext = null)
     {
         if (reliableMessageBatcher == null)
             throw new ArgumentNullException(nameof(reliableMessageBatcher));
@@ -50,6 +59,7 @@ public abstract class CoopNetworkBase : INetwork, IBufferedNetwork, INetEventLis
         this.serializer = serializer;
         this.sessionCancellation = sessionCancellation;
         this.reliableMessageBatcher = reliableMessageBatcher;
+        this.campaignAuthorityContext = campaignAuthorityContext;
         this.reliableMessageBatcher.AggregateSent += RecordAggregateSent;
 
         netManager = new NetManager(this)
@@ -157,7 +167,7 @@ public abstract class CoopNetworkBase : INetwork, IBufferedNetwork, INetEventLis
     /// </summary>
     public void SendImmediate(NetPeer netPeer, IMessage message)
     {
-        SendInternal(netPeer, MessagePacket.Create(message, serializer), immediate: true);
+        SendMessage(message, packet => SendInternal(netPeer, packet, immediate: true));
     }
 
     private string DescribePeerQueues()
@@ -258,17 +268,53 @@ public abstract class CoopNetworkBase : INetwork, IBufferedNetwork, INetEventLis
 
     public void Send(NetPeer netPeer, IMessage message)
     {
-        Send(netPeer, MessagePacket.Create(message, serializer));
+        SendMessage(message, packet => Send(netPeer, packet));
     }
 
     public void SendAll(IMessage message)
     {
-        SendAll(MessagePacket.Create(message, serializer));
+        SendMessage(message, SendAll);
     }
 
     public void SendAllBut(NetPeer excludedPeer, IMessage message)
     {
-        SendAllBut(excludedPeer, MessagePacket.Create(message, serializer));
+        SendMessage(message, packet => SendAllBut(excludedPeer, packet));
+    }
+
+    private void SendMessage(IMessage message, Action<IPacket> sendPacket)
+    {
+        if (message is not ICampaignAuthorityScopedMessage || campaignAuthorityContext == null ||
+            !campaignAuthorityContext.TryGetLocalAuthorityLease(out var lease))
+        {
+            sendPacket(MessagePacket.Create(message, serializer));
+            return;
+        }
+
+        lock (authoritySequenceGate)
+        {
+            if (!string.Equals(sequenceRoomId, lease.RoomId, StringComparison.Ordinal) ||
+                sequenceEpoch != lease.Epoch ||
+                !string.Equals(sequenceAuthorityId, lease.AuthorityId, StringComparison.Ordinal))
+            {
+                sequenceRoomId = lease.RoomId;
+                sequenceAuthorityId = lease.AuthorityId;
+                sequenceEpoch = lease.Epoch;
+                nextAuthoritySequence = 0;
+            }
+
+            if (nextAuthoritySequence == long.MaxValue)
+                throw new System.InvalidOperationException("Campaign authority sync sequence space is exhausted.");
+
+            long sequence = ++nextAuthoritySequence;
+            var envelope = new NetworkCampaignAuthoritySyncEnvelope(
+                lease.RoomId,
+                lease.AuthorityId,
+                lease.AuthorityControllerId,
+                lease.Epoch,
+                sequence,
+                serializer.Serialize(message));
+            sendPacket(MessagePacket.Create(envelope, serializer));
+        }
     }
 
     public abstract void Start();

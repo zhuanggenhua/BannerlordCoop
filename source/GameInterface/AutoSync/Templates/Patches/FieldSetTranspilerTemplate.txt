@@ -60,7 +60,7 @@ public static void {{MemberName}}_Intercept({{MemberDeclaringType}} instance, {{
         return;
     }
 
-    if (ModInformation.IsClient)
+    if (CallOriginalPolicy.IsClientMutationBlocked())
     {
 {{~ if SuppressClientDiagnosticWhenUnregistered ~}}
         if (!ContainerProvider.TryResolve<GameInterface.Services.ObjectManager.IObjectManager>(out var objectManager) ||

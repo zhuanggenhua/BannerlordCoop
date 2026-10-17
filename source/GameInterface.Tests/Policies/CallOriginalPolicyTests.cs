@@ -104,4 +104,16 @@ public class CallOriginalPolicyTests
 
         Assert.False(CallOriginalPolicy.AreOriginalsAllowedForCurrentOperation);
     }
+
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, true)]
+    [InlineData(true, true, false)]
+    public void ClientMutationCaptureDependsOnLocalAuthority(
+        bool isClient,
+        bool isLocalAuthority,
+        bool expectedBlocked) =>
+        Assert.Equal(expectedBlocked,
+            CallOriginalPolicy.ShouldBlockClientMutation(isClient, isLocalAuthority));
 }
