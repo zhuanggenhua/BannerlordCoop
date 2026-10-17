@@ -1,10 +1,13 @@
 ﻿using Common;
 using Common.Logging;
+using Common.Messaging;
+using GameInterface.Services.Actions.Messages;
 using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Heroes.Patches;
 using HarmonyLib;
 using Serilog;
 using System.Collections.Generic;
+using System.Threading;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.ComponentInterfaces;
@@ -15,6 +18,7 @@ namespace GameInterface.Services.Actions.Patches;
 internal class ChangeRelationActionPatches
 {
     private const int InvalidEffectiveHeroPairLogLimit = 256;
+    private static long nextPlayerRelationRequestSequence;
 
     private static readonly ILogger Logger = LogManager.GetLogger<ChangeRelationActionPatches>();
     private static readonly HashSet<string> LoggedInvalidEffectiveHeroPairs = new HashSet<string>();
@@ -123,7 +127,27 @@ internal class ChangeRelationActionPatches
     [HarmonyPrefix]
     public static bool ApplyPlayerRelationPrefix(Hero gainedRelationWith, int relation, bool affectRelatives = true, bool showQuickNotification = true)
     {
-        ChangeRelationAction.ApplyInternal(ResolvedMainHeroContext.ResolvedMainHero, gainedRelationWith, relation, showQuickNotification, ChangeRelationAction.ChangeRelationDetail.Default);
+        Hero sourceHero = ResolvedMainHeroContext.ResolvedMainHero;
+        if (CampaignSimulationAuthorityPolicy.CanRunWorldSimulation())
+        {
+            ChangeRelationAction.ApplyInternal(sourceHero, gainedRelationWith, relation, showQuickNotification, ChangeRelationAction.ChangeRelationDetail.Default);
+            return false;
+        }
+
+        if (sourceHero == null || gainedRelationWith == null) return false;
+
+        AuthorityLease lease = default;
+        if (ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authorityContext))
+            authorityContext.TryGetCurrentLease(out lease);
+
+        long requestSequence = Interlocked.Increment(ref nextPlayerRelationRequestSequence);
+        MessageBroker.Instance.Publish(null, new PlayerRelationChangeRequested(
+            sourceHero,
+            gainedRelationWith,
+            relation,
+            showQuickNotification,
+            requestSequence,
+            lease));
         return false;
     }
 }
