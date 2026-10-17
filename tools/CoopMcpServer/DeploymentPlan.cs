@@ -21,12 +21,13 @@ public sealed class DeploymentPlan : IDeploymentPlan
     // Only runtime dependencies of the mod, never game assemblies or recursive publicizer output.
     private static readonly string[] Dependencies = ("0Harmony Autofac Concentus DiscordRPC Fmod5Sharp K4os.Compression.LZ4 LiteNetLib " +
         "Microsoft.Bcl.AsyncInterfaces Microsoft.CodeAnalysis Microsoft.CodeAnalysis.CSharp Microsoft.Extensions.DependencyInjection.Abstractions " +
+        "Microsoft.Win32.Registry " +
         "Microsoft.Extensions.Primitives Mono.Cecil Mono.Cecil.Mdb Mono.Cecil.Pdb Mono.Cecil.Rocks MonoMod.Backports MonoMod.Core MonoMod.Iced " +
-        "MonoMod.ILHelpers MonoMod.RuntimeDetour MonoMod.Utils NAudio.Core NAudio.WinMM Newtonsoft.Json protobuf-net protobuf-net.Core " +
+        "MonoMod.ILHelpers MonoMod.RuntimeDetour MonoMod.Utils NAudio.Core NAudio.WinMM Newtonsoft.Json OggVorbisEncoder protobuf-net protobuf-net.Core " +
         "Scriban Scrutor Serilog Serilog.Enrichers.Process Serilog.Sinks.Debug Serilog.Sinks.File Serilog.Sinks.Seq " +
         "System.Buffers System.Collections.Immutable System.Diagnostics.DiagnosticSource System.IO.Pipelines System.Memory " +
         "System.Numerics.Vectors System.Reflection.Metadata System.Reflection.Primitives System.Runtime.CompilerServices.Unsafe " +
-        "System.Text.Encodings.Web System.Text.Json System.Threading.Channels System.Threading.Tasks.Extensions System.ValueTuple").Split(' ');
+        "System.Text.Encoding.CodePages System.Text.Encodings.Web System.Text.Json System.Threading.Channels System.Threading.Tasks.Extensions System.ValueTuple").Split(' ');
 
     public DeploymentLayout Validate(string solution, LaunchProfile profile, string configuration = "Release")
     {
@@ -107,9 +108,11 @@ public sealed class DeploymentPlan : IDeploymentPlan
         foreach (string file in Directory.EnumerateFiles(output, "*.dll"))
         {
             string name = Path.GetFileNameWithoutExtension(file);
+            // This reference is copied from the game's own bin and is already supplied by Bannerlord.
             if (Projects.Contains(name) || name == "Missions.Naval" || Dependencies.Contains(name) ||
                 name.StartsWith("TaleWorlds.", StringComparison.Ordinal) || name.StartsWith("SandBox", StringComparison.Ordinal) ||
-                name.StartsWith("StoryMode", StringComparison.Ordinal) || name == "Steamworks.NET" || name == "netstandard") continue;
+                name.StartsWith("StoryMode", StringComparison.Ordinal) || name == "Steamworks.NET" ||
+                name == "System.Management" || name == "netstandard") continue;
             throw new InvalidDataException("Unrecognized top-level build DLL; update the runtime allowlist deliberately: " + file);
         }
         foreach (string dependency in Dependencies)

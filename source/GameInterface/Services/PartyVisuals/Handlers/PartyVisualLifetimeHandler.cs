@@ -91,9 +91,34 @@ public class PartyVisualLifetimeHandler : IHandler
 
                 var partyVisual = mobileParty.Party.GetPartyVisual();
                 if (partyVisual != null)
-                    objectManager.AddExisting(partyVisualId, partyVisual, payload.What.PartyVisualHandle);
+                    TryRegisterNetworkVisual(
+                        objectManager,
+                        partyVisualId,
+                        partyVisual,
+                        payload.What.PartyVisualHandle);
             }
         }, context: $"create party visual {partyVisualId}");
+    }
+
+    /// <summary>
+    /// A graphical client may already own this visual locally (notably its own player party) before
+    /// the authority's create message arrives. Reuse that registration instead of assigning the same
+    /// object a second, authority-provided ID. Destroy messages resolve the visual from its party, so
+    /// the local ID remains sufficient for its lifetime.
+    /// </summary>
+    internal static bool TryRegisterNetworkVisual(
+        IObjectManager objectManager,
+        string partyVisualId,
+        object partyVisual,
+        uint partyVisualHandle)
+    {
+        if (objectManager.TryGetId(partyVisual, out var existingId) &&
+            existingId != partyVisualId)
+        {
+            return false;
+        }
+
+        return objectManager.AddExisting(partyVisualId, partyVisual, partyVisualHandle);
     }
 
     private void Handle(MessagePayload<PartyVisualDestroyed> payload)

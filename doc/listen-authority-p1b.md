@@ -26,7 +26,8 @@ P1-B is not accepted until the two-process live checks below pass.
 - 冷恢复后比较到两端都有 1477 个相同的 MobileParty ID。抽查三支 NPC 部队时，兵种人数和伤员数相同；行军中的 NPC 坐标有约 0.07–0.32 地图单位的偏差，暂停后偏差保持不变。时间同步也留有偏差：暂停后 A/B `CampaignTime.Now` 相差约 0.09 游戏小时，5 秒观察内双方都保持暂停，但没有将 B 硬校准到 A。差值可能来自本地移动预测/时间采样，目前还没有证明其收敛规则或确定可接受阈值。
 - 同一 NPC 的兵种经验值会不同。例如 Run #7 中 `lord_2_4_1_party_1` 的 `sturgian_recruit` 经验 A/B 为 265/242，`lord_6_1_party_1` 的 `khuzait_nomad` 为 202/1558。现有 `PlayerTroopXpRelevance` 有意只把 XP 发给玩家所属或相关家族的端，观察端只收到人数/伤员变化。这不影响本次固定 A 权威、无战斗阶段的即时兵力数量，但可能影响后续晋升或权威交接，必须在同步战斗或权威迁移前明确纳入一致性规则。
 - Run #7 日志中有大量原生存档加载后的 ObjectManager 未登记引用错误，类别与 Run #6 一致；B 端另有一条 `MobilePartyVisual` 重复注册错误。两轮均未发现 `Campaign.RealTick` 异常或 `NullReferenceException`；Run #7 房主计数器的重复/失败 RealTick 均为 0。完整日志留在各自运行目录中，不能据此宣称错误日志为空。
-- 最新 GameInterface：2572 通过。曾出现新增测试抢占全局线程标记造成测试主机中止，已修复并全套重跑通过；保留失败日志。Coop：1274 通过 / 195 失败，与本次基线 1270 / 195 的失败名单逐项比较无差异。
+- Run #8 用修复版从同一存档冷启动 A/B 并完成 Direct IP 加入（A PID 30028、B PID 21980，GameInterface MVID `753e833c-bd86-47ca-9844-3a9290659eb7`）。双方 Campaign ID 都是 `RVLgBrkkFApz`；A 仍是 `main_hero` / `player_party`，金 1000、1 名部队；B 是 `Player` 英雄/部队，金 920、5 名部队。两端都报告 A/B 英雄、部队、家族注册数各为 1。A 的 RealTick 从 17196 增至 19562，重复和失败均为 0；两端读到相同 CampaignTime。修复后 B 端没有再出现 `MobilePartyVisual` 重复注册错误；Run #8 日志未发现 `Campaign.RealTick` 异常或 `NullReferenceException`。该轮停留城镇，未用于 NPC AI 推进验收。
+- 最新 GameInterface：2574 通过，包含两项 PartyVisual 生命周期回归测试。Coop：1274 通过 / 195 失败，与本次基线 1270 / 195 的失败名单逐项比较无差异；失败项没有新增。MCP 部署工具测试：250 通过。曾出现新增测试抢占全局线程标记造成测试主机中止，已修复并全套重跑通过；保留失败日志。
 - 最新源码提交为 `d4fa6cafe`；实机功能构建来自 `75352a86e`，后者之后仅修改测试和文档。当前 P1-B 仍未通过验收：需要先把 NPC 行军位置的同步/插值阈值说清并验证，并决定固定权威阶段是否要复制与未来晋升有关的 NPC 部队 XP。
 
 ## Work and acceptance ledger
@@ -37,6 +38,7 @@ P1-B is not accepted until the two-process live checks below pass.
 - [x] Live: join, both move, NPC simulation, recruitment and player economy.
 - [x] Live: disconnect/rejoin, save/cold restore, 15+ minute sustained run; compare IDs and registration counts.
 - [x] Run final suites and compare failed test names with the fresh baseline; no new failed test names.
+- [x] Fix the observed duplicate local party-visual registration and verify it on a fresh A/B join; the previous error did not recur in Run #8.
 - [ ] Resolve/define acceptable NPC position drift and whether NPC troop XP must match before considering the shared world state complete.
 
 Keep the single Campaign, native A actor and authority composition. No local client loopback,

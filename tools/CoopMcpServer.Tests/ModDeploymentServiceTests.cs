@@ -398,6 +398,25 @@ public sealed class ModDeploymentServiceTests : IDisposable
     }
 
     [Fact]
+    public void CollectIncludesRuntimeDependenciesAndSkipsGameOwnedSystemManagement()
+    {
+        build.Configuration = "Debug";
+        CreateOutputs(repository);
+        string output = Path.Combine(repository, "source", "Coop", "bin", "Debug");
+        foreach (string dependency in new[] { "Microsoft.Win32.Registry", "OggVorbisEncoder", "System.Text.Encoding.CodePages", "System.Management" })
+            CopyAssembly(typeof(ModDeploymentServiceTests).Assembly.Location, Path.Combine(output, dependency + ".dll"));
+
+        var plan = new DeploymentPlan(paths, files);
+        var profile = settings.Profiles["fixture"];
+        var layout = plan.Validate(solution, profile, "Debug");
+        var inputs = plan.Collect(layout, profile);
+
+        foreach (string dependency in new[] { "Microsoft.Win32.Registry", "OggVorbisEncoder", "System.Text.Encoding.CodePages" })
+            Assert.Contains(inputs, input => Path.GetFileName(input.Target) == dependency + ".dll");
+        Assert.DoesNotContain(inputs, input => Path.GetFileName(input.Target) == "System.Management.dll");
+    }
+
+    [Fact]
     public void RejectsWrongLayoutsDisabledProfilesTempRootsAndTemplateXml()
     {
         var plan = new DeploymentPlan(paths, files);
