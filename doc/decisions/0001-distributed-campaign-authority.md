@@ -12,6 +12,10 @@ Proposed
 
 P1-B is accepted for the fixed-A, map-only phase. The broader design requires each player to keep a local campaign copy, exactly one player to advance campaign simulation, the room host to be preferred while able to simulate, another map-ready player to take over otherwise, and campaign time to pause when no player can simulate. Shop inventory and presentation may differ; recruitment pools and results, player ownership, campaign time, NPC outcomes, and troop counts are shared state.
 
+### Consistency boundary
+
+The design keeps a local copy on every player and does not require every displayed detail to match. Each player's shop stock list and presentation may differ, and those differences are not repaired by campaign reconciliation. The shared invariants are player-to-hero and party ownership, party position and troop counts, recruitment pools and recruitment outcomes, campaign time, and NPC party behavior and results. An operation that changes one of those shared facts must be committed once by the current campaign authority and then applied to each replica. The room host has priority while map-ready; another map-ready player may hold the lease when the host cannot simulate; if nobody is map-ready, the shared world pauses.
+
 The current implementation does not yet represent room hosting and campaign authority as independent roles:
 
 - `Common.ModInformation.IsServer` is true for `DedicatedAuthority` and `ListenAuthority`; `IsClient` is its inverse. A source scan finds 1,127 `ModInformation.IsServer` references across 452 C# files, including tests. These call sites currently cover simulation authority, network command direction, ownership checks, and server-only behavior.

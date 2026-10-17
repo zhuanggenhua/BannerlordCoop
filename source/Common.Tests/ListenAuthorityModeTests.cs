@@ -54,6 +54,17 @@ public class ListenAuthorityModeTests
     }
 
     [Fact]
+    public void RestoringSavedLeaseCannotReplaceAnAlreadyConfirmedRoom()
+    {
+        var identity = new SessionIdentity();
+        var current = new AuthorityLease("room-a", "authority-a", "controller-a", 1);
+        Assert.True(identity.TryApply(current));
+
+        Assert.False(identity.TryRestore(new AuthorityLease("room-old", "authority-old", "controller-old", 1)));
+        Assert.Equal(current, identity.CurrentLease);
+    }
+
+    [Fact]
     public void HigherEpochRequiresNewAuthorityIdentityAndKeepsRoomIdentity()
     {
         var identity = new SessionIdentity();

@@ -1,4 +1,5 @@
-﻿using Common.Logging;
+﻿using Common;
+using Common.Logging;
 using Common.Messaging;
 using Common.Network;
 using Coop.Core.Server.Services.Save.Messages;
@@ -33,6 +34,7 @@ internal class SaveGameHandler : IHandler
     private readonly IPlayerPartyRestorer playerPartyRestorer;
     private readonly INetwork network;
     private readonly IObjectManager objectManager;
+    private readonly ISessionIdentity sessionIdentity;
     private readonly HashSet<object> activeSaveSources = new HashSet<object>();
 
     public SaveGameHandler(
@@ -42,7 +44,8 @@ internal class SaveGameHandler : IHandler
         IPlayerManager playerRegistry,
         IPlayerPartyRestorer playerPartyRestorer,
         INetwork network,
-        IObjectManager objectManager)
+        IObjectManager objectManager,
+        ISessionIdentity sessionIdentity = null)
     {
         this.messageBroker = messageBroker;
         this.saveManager = saveManager;
@@ -51,6 +54,7 @@ internal class SaveGameHandler : IHandler
         this.playerPartyRestorer = playerPartyRestorer;
         this.network = network;
         this.objectManager = objectManager;
+        this.sessionIdentity = sessionIdentity;
 
         messageBroker.Subscribe<GameSaved>(Handle_GameSaved);
         messageBroker.Subscribe<GameLoaded>(Handle_GameLoaded);
@@ -107,6 +111,7 @@ internal class SaveGameHandler : IHandler
     {
         var current = coopSessionProvider.CoopSession;
         var empty = CoopSession.Empty;
+        var lease = sessionIdentity?.CurrentLease;
 
         CoopSession session = new CoopSession(
             saveName,
@@ -120,7 +125,11 @@ internal class SaveGameHandler : IHandler
             current?.InventoryPlayerData ?? empty.InventoryPlayerData,
             current?.HeroMeetingData ?? empty.HeroMeetingData,
             current?.AgingPlayerData ?? empty.AgingPlayerData,
-            current?.ClanFinance ?? empty.ClanFinance);
+            current?.ClanFinance ?? empty.ClanFinance,
+            lease?.RoomId ?? current?.RoomId,
+            lease?.AuthorityId ?? current?.AuthorityId,
+            lease?.AuthorityControllerId ?? current?.AuthorityControllerId,
+            lease?.Epoch ?? current?.AuthorityEpoch ?? 0);
 
         coopSessionProvider.CoopSession = session;
 
@@ -145,7 +154,23 @@ internal class SaveGameHandler : IHandler
             loaded?.InventoryPlayerData ?? empty.InventoryPlayerData,
             loaded?.HeroMeetingData ?? empty.HeroMeetingData,
             loaded?.AgingPlayerData ?? empty.AgingPlayerData,
-            loaded?.ClanFinance ?? empty.ClanFinance);
+            loaded?.ClanFinance ?? empty.ClanFinance,
+            loaded?.RoomId,
+            loaded?.AuthorityId,
+            loaded?.AuthorityControllerId,
+            loaded?.AuthorityEpoch ?? 0);
+
+        if (sessionIdentity != null && savedSession.AuthorityEpoch > 0 &&
+            !sessionIdentity.TryRestore(new AuthorityLease(
+                savedSession.RoomId,
+                savedSession.AuthorityId,
+                savedSession.AuthorityControllerId,
+                savedSession.AuthorityEpoch)))
+        {
+            Logger.Warning("Ignored saved campaign authority lease for room {RoomId} at epoch {Epoch}; " +
+                "current lease is room {CurrentRoomId} at epoch {CurrentEpoch}",
+                savedSession.RoomId, savedSession.AuthorityEpoch, sessionIdentity.RoomId, sessionIdentity.Epoch);
+        }
 
         coopSessionProvider.CoopSession = savedSession;
     }

@@ -1,4 +1,5 @@
 ﻿using Common.Network;
+using Common;
 using Common.Tests.Utils;
 using Coop.Core.Server.Services.Save;
 using Coop.Core.Server.Services.Save.Handlers;
@@ -76,6 +77,46 @@ public class SaveGameHandlerTests
         var written = Assert.Single(messageBroker.Messages.GetMessages<CoopSessionWritten>());
         Assert.Equal(SaveName, written.SaveName);
         Assert.True(written.Success);
+    }
+
+    [Fact]
+    public void GameSaved_PersistsCurrentAuthorityLease()
+    {
+        var messageBroker = new TestMessageBroker();
+        var saveManager = new StubSaveManager(null!);
+        var identity = new SessionIdentity();
+        var lease = new AuthorityLease("room-a", "authority-a", "controller-a", 1);
+        Assert.True(identity.TryRestore(lease));
+        using var handler = CreateSavingHandler(messageBroker, saveManager, sessionIdentity: identity);
+
+        messageBroker.Publish(new object(), new GameSaved(SaveName));
+
+        Assert.Equal(lease.RoomId, saveManager.SavedSession.RoomId);
+        Assert.Equal(lease.AuthorityId, saveManager.SavedSession.AuthorityId);
+        Assert.Equal(lease.AuthorityControllerId, saveManager.SavedSession.AuthorityControllerId);
+        Assert.Equal(lease.Epoch, saveManager.SavedSession.AuthorityEpoch);
+    }
+
+    [Fact]
+    public void GameLoaded_RestoresSavedAuthorityLease()
+    {
+        var messageBroker = new TestMessageBroker();
+        var lease = new AuthorityLease("room-a", "authority-b", "controller-b", 2);
+        var identity = new SessionIdentity();
+        using var handler = new SaveGameHandler(
+            messageBroker,
+            new StubSaveManager(SessionWith(Array.Empty<Player>(), lease)),
+            new Mock<ICoopSessionProvider>().Object,
+            new Mock<IPlayerManager>().Object,
+            new Mock<IPlayerPartyRestorer>().Object,
+            new Mock<INetwork>().Object,
+            new Mock<IObjectManager>().Object,
+            identity);
+
+        messageBroker.Publish(new object(), new GameLoaded(SaveName));
+
+        Assert.Equal(lease, identity.CurrentLease);
+        Assert.True(identity.IsConfirmed);
     }
 
     [Fact]
@@ -297,7 +338,8 @@ public class SaveGameHandlerTests
     private static SaveGameHandler CreateSavingHandler(
         TestMessageBroker messageBroker,
         StubSaveManager saveManager,
-        IPlayerManager? playerRegistry = null)
+        IPlayerManager? playerRegistry = null,
+        ISessionIdentity? sessionIdentity = null)
     {
         if (playerRegistry == null)
         {
@@ -313,7 +355,8 @@ public class SaveGameHandlerTests
             playerRegistry,
             new Mock<IPlayerPartyRestorer>().Object,
             new Mock<INetwork>().Object,
-            new Mock<IObjectManager>().Object);
+            new Mock<IObjectManager>().Object,
+            sessionIdentity);
     }
 
     /// <summary>
@@ -334,6 +377,7 @@ public class SaveGameHandlerTests
         public string DefaultPath => string.Empty;
         public string FileType => ".json";
         public List<string> WrittenSaveNames { get; } = new List<string>();
+        public ICoopSession SavedSession { get; private set; }
 
         public ICoopSession LoadCoopSession(string saveName) => session;
 
@@ -342,10 +386,11 @@ public class SaveGameHandlerTests
             if (writeFailure != null) throw writeFailure;
 
             WrittenSaveNames.Add(saveName);
+            SavedSession = session;
         }
     }
 
-    private static CoopSession SessionWith(Player[] players)
+    private static CoopSession SessionWith(Player[] players, AuthorityLease? lease = null)
     {
         var empty = CoopSession.Empty;
 
@@ -360,6 +405,10 @@ public class SaveGameHandlerTests
             empty.TradePlayerData,
             empty.InventoryPlayerData,
             empty.HeroMeetingData,
-            empty.AgingPlayerData);
+            empty.AgingPlayerData,
+            roomId: lease?.RoomId,
+            authorityId: lease?.AuthorityId,
+            authorityControllerId: lease?.AuthorityControllerId,
+            authorityEpoch: lease?.Epoch ?? 0);
     }
 }

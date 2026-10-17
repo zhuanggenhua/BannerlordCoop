@@ -32,6 +32,10 @@ public interface ICoopSession
     HeroMeetingData HeroMeetingData { get; }
     AgingPlayerData AgingPlayerData { get; }
     Dictionary<string, ClanFinanceSettings> ClanFinance { get; }
+    string RoomId { get; }
+    string AuthorityId { get; }
+    string AuthorityControllerId { get; }
+    long AuthorityEpoch { get; }
 }
 
 [ProtoContract(SkipConstructor = true)]
@@ -77,6 +81,14 @@ public class CoopSession : ICoopSession
     public AgingPlayerData AgingPlayerData { get; }
     [ProtoMember(12)]
     public Dictionary<string, ClanFinanceSettings> ClanFinance { get; }
+    [ProtoMember(13)]
+    public string RoomId { get; }
+    [ProtoMember(14)]
+    public string AuthorityId { get; }
+    [ProtoMember(15)]
+    public string AuthorityControllerId { get; }
+    [ProtoMember(16)]
+    public long AuthorityEpoch { get; }
 
     public CoopSession(
         string uniqueGameId,
@@ -90,7 +102,11 @@ public class CoopSession : ICoopSession
         InventoryPlayerData inventoryPlayerData,
         HeroMeetingData heroMeetingData,
         AgingPlayerData agingPlayerData,
-        Dictionary<string, ClanFinanceSettings> clanFinance = null)
+        Dictionary<string, ClanFinanceSettings> clanFinance = null,
+        string roomId = null,
+        string authorityId = null,
+        string authorityControllerId = null,
+        long authorityEpoch = 0)
     {
         UniqueGameId = uniqueGameId;
         Players = players;
@@ -104,5 +120,9 @@ public class CoopSession : ICoopSession
         HeroMeetingData = heroMeetingData;
         AgingPlayerData = agingPlayerData;
         ClanFinance = clanFinance ?? new();
+        RoomId = roomId ?? string.Empty;
+        AuthorityId = authorityId ?? string.Empty;
+        AuthorityControllerId = authorityControllerId ?? string.Empty;
+        AuthorityEpoch = authorityEpoch;
     }
 }

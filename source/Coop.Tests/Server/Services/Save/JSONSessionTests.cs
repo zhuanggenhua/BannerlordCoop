@@ -47,7 +47,11 @@ namespace Coop.Tests.Server.Services.Save
                 new TradePlayerData(new(), new(), new(), new()),
                 new InventoryPlayerData(new(), new()),
                 new HeroMeetingData(new()),
-                new AgingPlayerData(new()));
+                new AgingPlayerData(new()),
+                roomId: "room-a",
+                authorityId: "authority-a",
+                authorityControllerId: "controller-a",
+                authorityEpoch: 3);
 
             string saveFile = SAVE_PATH + sessionData.UniqueGameId + ".json";
 
@@ -59,6 +63,33 @@ namespace Coop.Tests.Server.Services.Save
 
             Assert.NotNull(resolvedSessions);
             Assert.Equal(sessionData.UniqueGameId, resolvedSessions.UniqueGameId);
+            Assert.Equal(sessionData.RoomId, resolvedSessions.RoomId);
+            Assert.Equal(sessionData.AuthorityId, resolvedSessions.AuthorityId);
+            Assert.Equal(sessionData.AuthorityControllerId, resolvedSessions.AuthorityControllerId);
+            Assert.Equal(sessionData.AuthorityEpoch, resolvedSessions.AuthorityEpoch);
+        }
+
+        [Fact]
+        public void LegacySessionWithoutAuthorityFieldsStillLoads()
+        {
+            var filePath = SAVE_PATH + "LegacyAuthoritySession.json";
+            System.IO.Directory.CreateDirectory(SAVE_PATH);
+            System.IO.File.WriteAllText(filePath, "{\"UniqueGameId\":\"legacy\"}");
+
+            try
+            {
+                var resolved = new JsonFileIO().ReadFromFile<CoopSession>(filePath);
+
+                Assert.NotNull(resolved);
+                Assert.Equal("legacy", resolved.UniqueGameId);
+                Assert.Equal(string.Empty, resolved.RoomId);
+                Assert.Equal(string.Empty, resolved.AuthorityId);
+                Assert.Equal(0, resolved.AuthorityEpoch);
+            }
+            finally
+            {
+                if (System.IO.File.Exists(filePath)) System.IO.File.Delete(filePath);
+            }
         }
     }
 }
