@@ -4,7 +4,7 @@ using ProtoBuf;
 namespace GameInterface.Services.Heroes.Messages;
 
 [ProtoContract(SkipConstructor = true)]
-internal class NetworkHeroRelationChanged : ICommand
+internal class NetworkHeroRelationChanged : IServerToClientCommand
 {
     [ProtoMember(1)]
     public string Hero1Id { get; }

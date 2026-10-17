@@ -2,6 +2,7 @@
 using Common.Messaging;
 using Common.Network;
 using Common.Util;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Heroes.Messages;
 using GameInterface.Services.ObjectManager;
 using TaleWorlds.CampaignSystem;
@@ -34,31 +35,53 @@ namespace GameInterface.Services.Heroes.Handlers
 
         private void Handle(MessagePayload<HeroRelationChanged> obj)
         {
-            if (ModInformation.IsClient) return;
+            if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return;
 
             var payload = obj.What;
-            network.SendAll(new NetworkHeroRelationChanged(payload.Hero1Id, payload.Hero2Id, payload.Value));
+            var change = new NetworkHeroRelationChanged(payload.Hero1Id, payload.Hero2Id, payload.Value);
+
+            if (ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authorityContext) &&
+                authorityContext.IsAuthorityKnown)
+            {
+                if (!authorityContext.TryGetLocalAuthorityLease(out _)) return;
+                network.SendAll(new NetworkCampaignAuthorityHeroRelationChanged(
+                    payload.Hero1Id,
+                    payload.Hero2Id,
+                    payload.Value));
+                return;
+            }
+
+            // Preserve the pre-lease room-host broadcast during session initialization.
+            if (ModInformation.IsServer) network.SendAll(change);
         }
 
         private void Handle(MessagePayload<NetworkHeroRelationChanged> obj)
         {
-            var payload = obj.What;
+            ApplyRelation(obj.What.Hero1Id, obj.What.Hero2Id, obj.What.Value);
+        }
 
+        private void Handle(MessagePayload<NetworkCampaignAuthorityHeroRelationChanged> obj)
+        {
+            ApplyRelation(obj.What.Hero1Id, obj.What.Hero2Id, obj.What.Value);
+        }
+
+        private void ApplyRelation(string hero1Id, string hero2Id, int value)
+        {
             GameThread.RunSafe(() =>
             {
-                if (!objectManager.TryGetObjectWithLogging<Hero>(payload.Hero1Id, out var hero1)) return;
-                if (!objectManager.TryGetObjectWithLogging<Hero>(payload.Hero2Id, out var hero2)) return;
+                if (!objectManager.TryGetObjectWithLogging<Hero>(hero1Id, out var hero1)) return;
+                if (!objectManager.TryGetObjectWithLogging<Hero>(hero2Id, out var hero2)) return;
 
                 // The change is applied as an absolute value (SetHeroRelation) to match the server exactly
                 // and avoid the RNG/model factor ChangeRelationAction applies to positive gains; capture the
                 // delta first so we can still show the bottom-left popup vanilla would.
-                int delta = payload.Value - CharacterRelationManager.GetHeroRelation(hero1, hero2);
+                int delta = value - CharacterRelationManager.GetHeroRelation(hero1, hero2);
 
                 using (new AllowedThread())
                 {
-                    CharacterRelationManager.SetHeroRelation(hero1, hero2, payload.Value);
+                    CharacterRelationManager.SetHeroRelation(hero1, hero2, value);
                 }
-            }, context: $"apply hero relation {payload.Hero1Id}<->{payload.Hero2Id}");
+            }, context: $"apply hero relation {hero1Id}<->{hero2Id}");
         }
     }
 }

@@ -1,6 +1,7 @@
 using Common;
 using Common.Messaging;
 using GameInterface.Policies;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Heroes.Messages;
 using HarmonyLib;
 using TaleWorlds.CampaignSystem;
@@ -12,9 +13,9 @@ internal class CharacterRelationManagerPatches
 {
     [HarmonyPatch(nameof(CharacterRelationManager.SetHeroRelation))]
     [HarmonyPostfix]
-    private static void Postfix_SetHeroRelation(Hero hero1, Hero hero2, int value)
+    internal static void Postfix_SetHeroRelation(Hero hero1, Hero hero2, int value)
     {
-        if (!ModInformation.IsServer) return;
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return;
 
         if (CallOriginalPolicy.IsOriginalAllowed()) return;
 
