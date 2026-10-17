@@ -63,21 +63,27 @@ public class ListenAuthorityTradeTests
     public void LocalCommitHasExactlyOneDestinationWithoutNetworkEcho(SessionMode mode, bool local)
     {
         var previous = ModInformation.SessionMode;
-        var previousThread = GameThread.Instance.GameThreadId;
         try
         {
-            GameThread.Instance.MarkGameThread();
+            // Use the suite's existing pump; never replace its process-wide game-thread identity.
+            System.Runtime.CompilerServices.RuntimeHelpers.RunModuleConstructor(
+                typeof(Coop.Tests.Server.Connections.RemoteMovementOwnershipTests).Module.ModuleHandle);
             ModInformation.SessionMode = mode;
             var broker = new Mock<IMessageBroker>();
             var network = new Mock<INetwork>();
+            using var applied = new System.Threading.ManualResetEventSlim();
+            broker.Setup(b => b.Publish(It.IsAny<object>(), It.IsAny<CompleteTrade>())).Callback(() => applied.Set());
             using var handler = new TradeHandler(Mock.Of<IInventoryLogicInterface>(), broker.Object,
                 Mock.Of<IObjectManager>(), network.Object, Mock.Of<IVillageHostileActionInterface>(), Mock.Of<IPlayerManager>());
-            handler.DispatchCompleteTrade(default);
-            broker.Verify(b => b.Publish(It.IsAny<object>(), It.IsAny<CompleteTrade>()), Times.Never());
-            GameThread.Instance.Update(System.TimeSpan.Zero);
+            GameThread.Run(() =>
+            {
+                handler.DispatchCompleteTrade(default);
+                broker.Verify(b => b.Publish(It.IsAny<object>(), It.IsAny<CompleteTrade>()), Times.Never());
+            }, blocking: true);
+            if (local) Assert.True(applied.Wait(System.TimeSpan.FromSeconds(5)));
             broker.Verify(b => b.Publish(It.IsAny<object>(), It.IsAny<CompleteTrade>()), local ? Times.Once() : Times.Never());
             network.Verify(n => n.SendAll(It.IsAny<CompleteTrade>()), local ? Times.Never() : Times.Once());
         }
-        finally { ModInformation.SessionMode = previous; GameThread.Instance.RestoreGameThread(previousThread); }
+        finally { ModInformation.SessionMode = previous; }
     }
 }
