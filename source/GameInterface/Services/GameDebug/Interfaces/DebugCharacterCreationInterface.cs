@@ -2,6 +2,7 @@
 using SandBox;
 using SandBox.GauntletUI.CharacterCreation;
 using System.Linq;
+using System.Collections.Generic;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.CharacterCreationContent;
 using TaleWorlds.Core;
@@ -19,6 +20,8 @@ namespace GameInterface.Services.GameDebug.Interfaces
 
     internal class DebugCharacterCreationInterface : IDebugCharacterCreationInterface
     {
+        internal static CultureObject SelectDebugCulture(IEnumerable<CultureObject> cultures) =>
+            cultures.First(c => c.StringId == "empire");
         /// <summary>
         /// Name of into video from <see cref="SandboxGameManager.OnLoadFinished"/>
         /// </summary>
@@ -56,7 +59,7 @@ namespace GameInterface.Services.GameDebug.Interfaces
             if (currentStage is CharacterCreationCultureStage)
             {
                 var cultures = characterCreationState._characterCreationManager.CharacterCreationContent.GetCultures();
-                CultureObject culture = cultures.First(c => c.Name.ToString() == "Empire");
+                CultureObject culture = SelectDebugCulture(cultures);
                 characterCreationState._characterCreationManager.CharacterCreationContent.SetSelectedCulture(culture, characterCreationState._characterCreationManager);
                 characterCreationState._characterCreationManager.NextStage();
             }

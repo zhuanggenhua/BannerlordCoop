@@ -1,5 +1,6 @@
 ﻿using Common.Logging;
 using Common.Messaging;
+using Common;
 using GameInterface.Registry;
 using GameInterface.Services.GameState.Interfaces;
 using GameInterface.Services.GameState.Messages;
@@ -10,6 +11,7 @@ using GameInterface.Services.Modules;
 using GameInterface.Services.Modules.Validators;
 using GameInterface.Services.UI.Interfaces;
 using Serilog;
+using GameInterface.Services.Players;
 
 namespace Coop.Core.Server.States;
 
@@ -28,6 +30,8 @@ public class InitialServerState : ServerStateBase
     private readonly IGameStateInterface gameStateInterface;
     private readonly ILoadingInterface loadingInterface;
     private readonly IModuleInfoProvider moduleInfoProvider;
+    private readonly ILocalPlayerContext localPlayer;
+    private bool campaignRegistered;
 
     public InitialServerState(
         IServerLogic context,
@@ -38,7 +42,8 @@ public class InitialServerState : ServerStateBase
         IModuleInfoProvider moduleInfoProvider,
         IModuleValidator moduleValidator,
         IGameStateInterface gameStateInterface,
-        ILoadingInterface loadingInterface) :
+        ILoadingInterface loadingInterface,
+        ILocalPlayerContext localPlayer = null) :
         base(context)
     {
         this.messageBroker = messageBroker;
@@ -49,6 +54,7 @@ public class InitialServerState : ServerStateBase
         this.gameStateInterface = gameStateInterface;
         this.loadingInterface = loadingInterface;
         this.moduleInfoProvider = moduleInfoProvider;
+        this.localPlayer = localPlayer;
         messageBroker.Subscribe<CampaignReady>(Handle_CampaignReady);
     }
 
@@ -59,6 +65,7 @@ public class InitialServerState : ServerStateBase
 
     internal void Handle_CampaignReady(MessagePayload<CampaignReady> payload)
     {
+        if (campaignRegistered) return;
         // Coop does not support DLC. Warn the host if any is enabled before the server becomes
         // joinable; clients with DLC enabled are rejected separately during module validation.
         if (!moduleValidator.ValidateNoDlc(moduleInfoProvider.GetModuleInfos(), out var dlcError))
@@ -66,25 +73,30 @@ public class InitialServerState : ServerStateBase
             Logger.Error("Hosting with unsupported modules enabled. {error}", dlcError);
         }
 
-        // Remove server party
-        messageBroker.Publish(this, new RemoveMainParty());
+        // Dedicated worlds discard the placeholder player; listen worlds keep the native actor.
+        if (ModInformation.IsDedicatedAuthority)
+            messageBroker.Publish(this, new RemoveMainParty());
 
         loadingInterface.SetLoadingMessage("Hosting Coop Server", "Registering campaign objects...");
 
-        // Register all objects after main party is removed to keep order
+        // Register the existing world before binding its local actor.
         registryManager.RegisterAllGameObjects();
 
         loadingInterface.SetLoadingMessage("Hosting Coop Server", "Applying synced object lifetimes...");
         registryManager.PatchLifetimes();
-        mapEventLoadCleaner.FinalizePlayerMapEvents();
+        if (ModInformation.IsListenAuthority)
+            localPlayer.RegisterNativePlayer();
+        else
+            mapEventLoadCleaner.FinalizePlayerMapEvents();
         emptyLordPartyResetter.ResetEmptyLordParties();
-
+        campaignRegistered = true;
         Logic.SetState<ServerRunningState>();
     }
 
     public override void Start()
     {
 #if DEBUG
+        if (ModInformation.IsListenAuthority) return;
         loadingInterface.ShowLoadingScreen();
         gameStateInterface.LoadGame("MP");
 #endif

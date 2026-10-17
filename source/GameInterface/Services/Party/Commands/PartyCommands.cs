@@ -154,7 +154,7 @@ internal class PartyCommands
 
         public string Description => "Runs the move offset debug operation.";
 
-        public CoopCommandSide Side => CoopCommandSide.Client;
+        public CoopCommandSide Side => CoopCommandSide.Both;
 
         public IExpectedArgs[] ExpectedArgs { get; } = new IExpectedArgs[]
         {
@@ -164,7 +164,8 @@ internal class PartyCommands
 
         public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
         {
-            if (!ModInformation.IsClient) return Failed("Command can only be run on a client.");
+            if (!ModInformation.IsClient && !ModInformation.IsListenAuthority)
+                return Failed("Command requires a local player.");
             if (!float.TryParse(args[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var offsetX) ||
                 !float.TryParse(args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var offsetY))
                 return Failed("Invalid command argument value.");

@@ -7,6 +7,7 @@ using GameInterface.Services.MobileParties;
 using GameInterface.Services.Modules;
 using GameInterface.Services.Modules.Validators;
 using GameInterface.Services.UI.Interfaces;
+using GameInterface.Services.Players;
 
 namespace Coop.Core.Server.States;
 
@@ -26,7 +27,8 @@ public class ServerContext
         IModuleValidator moduleValidator,
         IModuleInfoProvider moduleInfoProvider,
         IGameStateInterface gameStateInterface,
-        ILoadingInterface loadingInterface)
+        ILoadingInterface loadingInterface,
+        ILocalPlayerContext localPlayer = null)
     {
         MessageBroker = messageBroker;
         Network = network;
@@ -37,6 +39,7 @@ public class ServerContext
         ModuleInfoProvider = moduleInfoProvider;
         GameStateInterface = gameStateInterface;
         LoadingInterface = loadingInterface;
+        LocalPlayer = localPlayer;
     }
 
     public IMessageBroker MessageBroker { get; }
@@ -48,4 +51,5 @@ public class ServerContext
     public IModuleInfoProvider ModuleInfoProvider { get; }
     public IGameStateInterface GameStateInterface { get; }
     public ILoadingInterface LoadingInterface { get; }
+    public ILocalPlayerContext LocalPlayer { get; }
 }

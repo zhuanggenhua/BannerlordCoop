@@ -1,5 +1,6 @@
 ﻿using Autofac;
 using Common.Commands;
+using Common;
 using Common.LogicStates;
 using Common.Messaging;
 using Common.Network;
@@ -30,6 +31,7 @@ using Coop.Core.Server.States;
 using Coop.Steam;
 using GameInterface.Policies;
 using GameInterface.Services.Missions;
+using GameInterface.Services.Players;
 using LiteNetLib;
 using Missions;
 using System.Runtime.CompilerServices;
@@ -44,6 +46,7 @@ public class ServerModule : CommonModule
     protected override void Load(ContainerBuilder builder)
     {
         base.Load(builder);
+        builder.RegisterType<LocalPlayerContext>().As<ILocalPlayerContext>().InstancePerLifetimeScope();
 
         builder.RegisterModule<ConnectionModule>();
 
@@ -134,7 +137,7 @@ public class ServerModule : CommonModule
         // The standalone server logs into Steam itself and advertises with the host-selected lobby
         // visibility, so eligible players can join without port forwarding while the owner never
         // plays. Same guard as ClientModule: only touch Steam types when the boot probe found Steam.
-        if (SessionDiscovery.SteamAvailable)
+        if (!ModInformation.IsListenAuthority && SessionDiscovery.SteamAvailable)
         {
             RegisterSteamSessionServices(builder);
         }

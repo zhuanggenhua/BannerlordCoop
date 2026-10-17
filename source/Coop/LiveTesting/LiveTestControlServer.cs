@@ -193,7 +193,7 @@ namespace Coop.LiveTesting
             bool mutation = request.Method == "ui-action";
             return ExecuteOnGameThread(request, () =>
             {
-                if (processInfo.Role != "client")
+                if (processInfo.Role != "client" && !ModInformation.IsListenAuthority)
                     return Failure(request.Id, "client_only", "UI automation is client-only.", false);
                 try
                 {
@@ -257,7 +257,7 @@ namespace Coop.LiveTesting
 
             return ExecuteOnGameThread(request, () =>
             {
-                if (processInfo.Role != "client")
+                if (processInfo.Role != "client" && !ModInformation.IsListenAuthority)
                     return Failure(request.Id, "client_only", "Options navigation is client-only.", false);
                 bool active = optionsMenu != null && ScreenManager.TopScreen == optionsMenu;
                 if (action == "inspect")
@@ -581,7 +581,7 @@ namespace Coop.LiveTesting
 
         private LiveTestResponse HandleRenderStatus(LiveTestRequest request)
         {
-            if (isServer)
+            if (isServer && !ModInformation.IsListenAuthority)
             {
                 return Failure(
                     request.Id,

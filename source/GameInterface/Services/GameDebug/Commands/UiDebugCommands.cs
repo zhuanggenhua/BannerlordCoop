@@ -246,7 +246,7 @@ internal class UiDebugCommands
 
         public string Description => "Runs the map click offset debug operation.";
 
-        public CoopCommandSide Side => CoopCommandSide.Client;
+        public CoopCommandSide Side => CoopCommandSide.Both;
 
         public IExpectedArgs[] ExpectedArgs { get; } = new IExpectedArgs[]
         {
@@ -256,8 +256,8 @@ internal class UiDebugCommands
 
         public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
         {
-            if (ModInformation.IsServer)
-                return Failed("Run this command on a client.");
+            if (ModInformation.IsDedicatedAuthority)
+                return Failed("A local player is required.");
             if (!float.TryParse(args[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var offsetX) ||
                 !float.TryParse(args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var offsetY))
                 return Failed("Offsets must be valid numbers.");

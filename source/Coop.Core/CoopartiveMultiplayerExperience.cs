@@ -46,6 +46,7 @@ namespace Coop.Core
         private readonly string coopLogFilePath;
         private readonly object containerGate = new object();
         private readonly bool standaloneServerProcess;
+        private readonly bool listenAuthorityProcess;
         private volatile bool coopStarting;
         private volatile bool hostedSession;
         private volatile bool clientConnectedOnce;
@@ -65,13 +66,15 @@ namespace Coop.Core
         public CoopartiveMultiplayerExperience(
             bool standaloneServerProcess = false,
             Action<string> setCrashPhase = null,
-            string coopLogFilePath = null)
+            string coopLogFilePath = null,
+            bool listenAuthorityProcess = false)
         {
             // TODO use DI maybe?
             messageBroker = MessageBroker.Instance;
             configuration = new NetworkConfig();
             serverProcessManager = new ServerProcessManager(messageBroker);
             this.standaloneServerProcess = standaloneServerProcess;
+            this.listenAuthorityProcess = listenAuthorityProcess;
             this.setCrashPhase = setCrashPhase ?? (_ => { });
             this.coopLogFilePath = coopLogFilePath;
 
@@ -177,6 +180,11 @@ namespace Coop.Core
             // Steam game-server session owns the fixed Steam ports. Host here so the existing
             // server container advertises the lobby instead of spawning a second server that
             // competes for those ports.
+            if (listenAuthorityProcess)
+            {
+                StartAsListenHost(obj.What.SaveName);
+                return;
+            }
             if (standaloneServerProcess)
             {
                 Logger.Information("Standalone server process hosting save '{SaveName}' in-process",
@@ -442,6 +450,14 @@ namespace Coop.Core
 
         public int Priority => 0;
 
+        public void StartAsListenHost(string saveName = null)
+        {
+            lock (containerGate)
+            {
+                StartAsServerCore(saveName, string.Empty, ServerVisibility.None, SessionMode.ListenAuthority);
+            }
+        }
+
         public void StartAsServer(string saveName = null) =>
             StartAsServer(saveName, null, ServerVisibility.Public);
 
@@ -456,7 +472,8 @@ namespace Coop.Core
             }
         }
 
-        private void StartAsServerCore(string saveName, string password, ServerVisibility visibility)
+        private void StartAsServerCore(string saveName, string password, ServerVisibility visibility,
+            SessionMode mode = SessionMode.DedicatedAuthority)
         {
             // A second Host or Join click while patches are still applying would tear down the in-flight start
             if (coopStarting) return;
@@ -474,7 +491,7 @@ namespace Coop.Core
             setCrashPhase("starting-server");
             presenceClient?.ClearPresence();
 
-            ModInformation.IsServer = true;
+            ModInformation.SessionMode = mode;
 
             ContainerBuilder builder = new ContainerBuilder();
             builder.RegisterModule<ServerModule>();
@@ -527,6 +544,8 @@ namespace Coop.Core
             }
             else
             {
+                if (ModInformation.IsListenAuthority)
+                    container.Resolve<IGameStateInterface>().StartNewGame();
                 setCrashPhase("server-running");
             }
         }

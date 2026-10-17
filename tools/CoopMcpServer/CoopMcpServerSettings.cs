@@ -32,6 +32,7 @@ public sealed class LaunchProfile
     public DeploymentSettings Deployment { get; set; }
     public string[] Modules { get; set; } = { "Native", "SandBoxCore", "SandBox", "StoryMode", "Coop" };
     public string ServerPlatformId { get; set; } = "testserver";
+    public bool ListenAuthority { get; set; }
     public string[] ClientPlatformIds { get; set; } = { "testclient1", "testclient2" };
 
     // Conservative estimate from ~6 GiB observed game peaks, with room for loading spikes.

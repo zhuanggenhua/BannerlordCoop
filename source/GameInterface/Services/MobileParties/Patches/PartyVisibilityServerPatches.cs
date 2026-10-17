@@ -5,15 +5,15 @@ using TaleWorlds.CampaignSystem.Party;
 namespace GameInterface.Services.MobileParties.Patches;
 
 /// <summary>
-/// Parties are always visible on the server, and in debug builds everywhere
-/// (<see cref="DebugPartyVisibility"/>). Release clients keep the native fog of war.
+/// Dedicated servers and debug replicas can reveal active parties. Listen authority always
+/// preserves native local visibility, including in DEBUG builds.
 /// </summary>
 [HarmonyPatch(typeof(MobileParty), nameof(MobileParty.IsSpotted))]
 internal class PartyIsSpottedServerPatch
 {
     internal static void Postfix(MobileParty __instance, ref bool __result)
     {
-        if (ModInformation.IsServer || DebugPartyVisibility.ForceAllVisible)
+        if (ModInformation.IsDedicatedAuthority || (!ModInformation.IsListenAuthority && DebugPartyVisibility.ForceAllVisible))
         {
             // Match the IsVisible patch below: only live parties are force-spotted. A destroyed
             // party must read as unspotted, or the map nameplate machinery keeps re-creating its
@@ -35,7 +35,7 @@ internal class PartyVisibilityOnServerPatch
         if (global::GameInterface.Services.SiegeEvents.Commands.DefenderSiegeFixtureCommands.IsRestoringCapturedVisibility(__instance))
             return;
 #endif
-        if (ModInformation.IsServer || DebugPartyVisibility.ForceAllVisible)
+        if (ModInformation.IsDedicatedAuthority || (!ModInformation.IsListenAuthority && DebugPartyVisibility.ForceAllVisible))
         {
             value = __instance.IsActive;
         }
@@ -45,7 +45,7 @@ internal class PartyVisibilityOnServerPatch
     [HarmonyPrefix]
     internal static void PrefixIsInspected(ref bool value)
     {
-        if (ModInformation.IsServer || DebugPartyVisibility.ForceAllVisible)
+        if (ModInformation.IsDedicatedAuthority || (!ModInformation.IsListenAuthority && DebugPartyVisibility.ForceAllVisible))
         {
             value = true;
         }

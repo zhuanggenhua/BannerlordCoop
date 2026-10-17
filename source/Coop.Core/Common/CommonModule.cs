@@ -22,6 +22,7 @@ public abstract class CommonModule : Module
 {
     protected override void Load(ContainerBuilder builder)
     {
+        builder.RegisterType<SessionIdentity>().As<ISessionIdentity>().InstancePerLifetimeScope();
         builder.RegisterType<ReceivePathDiagnostics>().As<IReceivePathDiagnostics>().InstancePerDependency();
         builder.RegisterType<VoiceTransitWindow>().As<IVoiceTransitWindow>().InstancePerDependency();
         builder.RegisterType<VoicePolicy>().As<IVoicePolicy>().InstancePerDependency();

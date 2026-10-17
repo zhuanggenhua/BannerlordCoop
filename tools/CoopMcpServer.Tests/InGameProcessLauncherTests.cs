@@ -3,6 +3,16 @@ namespace CoopMcpServer.Tests;
 public sealed class InGameProcessLauncherTests
 {
     [Theory]
+    [InlineData("server", true)]
+    [InlineData("client", false)]
+    public void ListenProfileSelectsInProcessAuthorityOnlyForHost(string role, bool listen)
+    {
+        var profile = new LaunchProfile { Executable = @"C:\Game Folder\Bannerlord.exe", ListenAuthority = true };
+        var info = new InGameProcessLauncher(new OwnedProcessFactory()).CreateStartInfo(profile, role, "LocalA", "token");
+        Assert.Equal(listen, info.ArgumentList.Contains("/listenhost"));
+    }
+
+    [Theory]
     [InlineData("server", false)]
     [InlineData("client", true)]
     public void LaunchArgumentsAreStructuredAndClientsDeferJoining(string role, bool deferred)

@@ -12,6 +12,7 @@ namespace GameInterface.Services.UI.Patches
         [HarmonyPrefix]
         public static bool PushStatePatch(TaleWorlds.Core.GameState gameState)
         {
+            if (ModInformation.IsListenAuthority) return true;
             return gameState switch
             {
                 KingdomState => ModInformation.IsClient,

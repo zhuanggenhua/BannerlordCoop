@@ -6,9 +6,9 @@ A Mount & Blade II: Bannerlord co-op mod.
 
 ### Co-op Server/Host Model
 
-The host is a dedicated server, not a player. It has **no party and no main hero on the map** and never moves, enters settlements, fights, joins armies, or otherwise engages anything in the world; its only job is to keep the world alive and authoritative. Everyone who actually plays — including whoever launched the server — joins as a **client** with their own party.
+`DedicatedAuthority` has **no party and no main hero on the map**. Everyone who plays in that mode joins as a remote client. Keep its player removal, cleanup and headless behavior scoped to that mode.
 
-So **do not add host-party edge cases**: no null-party fallbacks, no "if this is the server" branches, no code path that assumes the host owns a party/hero on the map. That code is dead at best and a crash at worst, because the host party does not exist. If a feature seems to need the host to act on the map, drive it from a **client request** instead.
+The opt-in P1-A `ListenAuthority` mode keeps the single native Campaign and its original local player. It composes authority services with a registered local actor, without a second process or loopback CoopClient. `IsServer` still means world authority; it does not imply absence of a local player. Do not run local already-applied actions through remote request handlers. Remote admission and background Mission simulation are outside P1-A. See `doc/listen-authority-p1a.md` for the verified scope and remaining work.
 
 ### AllowedThread Is for Applying Received Messages, Not the Server
 

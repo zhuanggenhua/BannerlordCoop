@@ -91,11 +91,35 @@ public class CoopServer : CoopNetworkBase, ICoopServer
         netManager.NatPunchEnabled = true;
         netManager.NatPunchModule.Init(this);
 
-        controllerIdProvider.SetControllerId(ServerControllerId);
+        if (ModInformation.IsListenAuthority)
+        {
+#if DEBUG
+            var launchArgs = Environment.GetCommandLineArgs();
+            int identityIndex = Array.FindIndex(launchArgs, arg =>
+                arg.Equals("/platformId", StringComparison.OrdinalIgnoreCase));
+            if (identityIndex >= 0 && identityIndex + 1 < launchArgs.Length)
+                controllerIdProvider.SetControllerId(launchArgs[identityIndex + 1]);
+            else
+                controllerIdProvider.SetControllerAsPlatformId();
+#else
+            controllerIdProvider.SetControllerAsPlatformId();
+#endif
+        }
+        else
+        {
+            controllerIdProvider.SetControllerId(ServerControllerId);
+        }
     }
 
     public override void OnConnectionRequest(ConnectionRequest request)
     {
+        // P1-A has no validated remote-player load/replay path yet.
+        if (ModInformation.IsListenAuthority)
+        {
+            Logger.Information("ListenAuthority P1-A does not admit remote players yet");
+            request.Reject();
+            return;
+        }
         string suppliedPassword;
         try
         {

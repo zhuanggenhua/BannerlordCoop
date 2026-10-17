@@ -94,6 +94,7 @@ namespace Coop
         private static string ClientServerModeMessage = "";
 
         private bool isServer = false;
+        private bool isListenHost;
         private bool isAutoConnect = false;
         private bool autoConnectArgumentsValid;
         private NetworkConfig autoConnectConfiguration;
@@ -103,8 +104,9 @@ namespace Coop
             ProtoBufSerializer.ConfigureRuntimeModel();
 
             var args = Environment.GetCommandLineArgs();
+            isListenHost = args.Any(a => a.Equals("/listenhost", StringComparison.OrdinalIgnoreCase));
             
-            if (args.Any(a => a.Equals("/server", StringComparison.OrdinalIgnoreCase)))
+            if (isListenHost || args.Any(a => a.Equals("/server", StringComparison.OrdinalIgnoreCase)))
             {
                 isServer = true;
             }
@@ -483,9 +485,10 @@ namespace Coop
         public override void NoHarmonyLoad()
         {
             Coop = new CoopartiveMultiplayerExperience(
-                isServer,
+                isServer && !isListenHost,
                 CrashDiagnostics.SetPhase,
-                activeLogFilePath);
+                activeLogFilePath,
+                isListenHost);
 
 #if DEBUG
             global::Coop.Core.Common.Commands.JoinDebugCommands.ConfigureClientSessionStarter(
@@ -526,7 +529,8 @@ namespace Coop
 
                         if (isServer)
                         {
-                            Coop.StartAsServer(null, ManagedServerConfig.Password, ManagedServerConfig.Visibility);
+                            if (isListenHost) Coop.StartAsListenHost();
+                            else Coop.StartAsServer(null, ManagedServerConfig.Password, ManagedServerConfig.Visibility);
                         }
                         else if (!Coop.StartAsClient())
                         {
@@ -660,7 +664,7 @@ namespace Coop
                 else
 #endif
                 {
-                    var steamPump = SteamIntegrationBoot.TryStartWithCallbackPump(
+                    var steamPump = isListenHost ? null : SteamIntegrationBoot.TryStartWithCallbackPump(
                         isServer, Utilities.GetFullCommandLineString());
                     // The standalone server has no game frame of its own to dispatch its game-server callbacks.
                     if (steamPump != null) Updateables.Add(steamPump);
@@ -751,7 +755,8 @@ namespace Coop
 
             try
             {
-                Coop.StartAsServer(ManagedServerConfig.SaveName, ManagedServerConfig.Password,
+                if (isListenHost) Coop.StartAsListenHost(ManagedServerConfig.SaveName);
+                else Coop.StartAsServer(ManagedServerConfig.SaveName, ManagedServerConfig.Password,
                     ManagedServerConfig.Visibility);
             }
             catch (Exception ex)
@@ -782,7 +787,8 @@ namespace Coop
                     if (isServer)
                     {
                         Logger.Information("[AutoConnect] InitialState active — auto-starting as server...");
-                        Coop.StartAsServer(null, ManagedServerConfig.Password, ManagedServerConfig.Visibility);
+                        if (isListenHost) Coop.StartAsListenHost();
+                        else Coop.StartAsServer(null, ManagedServerConfig.Password, ManagedServerConfig.Visibility);
                         Logger.Information("[AutoConnect] StartAsServer() completed");
                     }
                     else

@@ -113,6 +113,10 @@ internal sealed class PartyAiBatchRunner : IPartyAiBatchRunner, IDisposable
                     ai.Tick(dt);
                 else
                     tickOverride(ai, dt);
+#if DEBUG
+                if (Common.ModInformation.IsListenAuthority)
+                    System.Threading.Interlocked.Increment(ref Time.ListenAuthorityTickEvidence.AiTicks);
+#endif
             }
             catch (Exception ex)
             {

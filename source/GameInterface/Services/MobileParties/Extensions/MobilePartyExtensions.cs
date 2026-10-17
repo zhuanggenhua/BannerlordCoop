@@ -29,8 +29,9 @@ public static class MobilePartyExtensions
 
         if (ModInformation.IsServer)
         {
-            // Server controls all non-player objects
-            return !PlayerManager.TryGetControlledObjectInfo(party, out var _);
+            // Authority drives NPCs; a listen authority also accepts its own player's input.
+            return !PlayerManager.TryGetControlledObjectInfo(party, out var playerControl) ||
+                (ModInformation.IsListenAuthority && playerControl.IsControlled);
         }
 
         if (!PlayerManager.TryGetControlledObjectInfo(party, out var controlledObjectInfo))

@@ -2,6 +2,7 @@ using Xunit;
 
 namespace Common.Tests;
 
+[Collection("ModInformation")]
 public class ListenAuthorityModeTests
 {
     [Fact]

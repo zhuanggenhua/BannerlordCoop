@@ -1,5 +1,6 @@
 ﻿using HarmonyLib;
 using SandBox.View.Map;
+using Common;
 using TaleWorlds.CampaignSystem.GameState;
 using TaleWorlds.Core;
 using TaleWorlds.MountAndBlade;
@@ -11,12 +12,17 @@ namespace GameInterface.Services.Time.Patches
     {
         // Prevents pausing in menus without their own game state (such as the encyclopedia)
         [HarmonyPatch(nameof(GameStateManager.RegisterActiveStateDisableRequest))]
-        static bool Prefix() => false;
+        static bool Prefix() => ModInformation.IsListenAuthority;
 
         // Prevents pausing in menus with their own game states (such as the banner editor, party screen, clan screen, etc.)
         [HarmonyPatch(nameof(GameStateManager.OnTick))]
         static void Prefix(ref GameStateManager __instance, float dt)
         {
+#if DEBUG
+            ListenAuthorityTickEvidence.BeginFrame();
+#endif
+            // P1-A keeps native local menus/mission scheduling. No second world driver.
+            if (ModInformation.IsListenAuthority) return;
             if (!(__instance.ActiveState is MapState))
             {
                 MapState mapState = __instance.LastOrDefault<MapState>();

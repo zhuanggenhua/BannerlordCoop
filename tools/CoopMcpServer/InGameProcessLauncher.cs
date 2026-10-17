@@ -35,6 +35,7 @@ public sealed class InGameProcessLauncher : IGameProcessLauncher
             "/platformId", platformId, "/cooptestrun", runToken })
             info.ArgumentList.Add(argument);
         if (role == "client") info.ArgumentList.Add("/cooptestmanualjoin");
+        if (role == "server" && profile.ListenAuthority) info.ArgumentList.Add("/listenhost");
         if (role == "server" && saveName != null)
         {
             info.ArgumentList.Add("/coopsave");

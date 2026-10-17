@@ -58,6 +58,22 @@ public class MobilePartyAIDisablePatchesTests : IDisposable
     }
 
     [Fact]
+    public void IsTickAuthority_ListenHostOwnParty_ReturnsTrue()
+    {
+        var party = RegisterPlayerParty("PlayerOne", "PlayerOne");
+        ModInformation.SessionMode = SessionMode.ListenAuthority;
+        Assert.True(MobilePartyAIDisablePatches.IsTickAuthority(party));
+    }
+
+    [Fact]
+    public void IsTickAuthority_ListenHostRemoteParty_ReturnsFalse()
+    {
+        var party = RegisterPlayerParty("PlayerTwo", "PlayerOne");
+        ModInformation.SessionMode = SessionMode.ListenAuthority;
+        Assert.False(MobilePartyAIDisablePatches.IsTickAuthority(party));
+    }
+
+    [Fact]
     public void IsTickAuthority_OwningClientParty_ReturnsTrue()
     {
         var party = RegisterPlayerParty("PlayerOne", "PlayerOne");

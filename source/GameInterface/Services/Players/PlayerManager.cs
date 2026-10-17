@@ -374,6 +374,10 @@ public class PlayerManager : IPlayerManager
     }
     public bool IsConnected(Player player)
     {
+        if (ModInformation.IsListenAuthority && player != null &&
+            player.ControllerId == controllerIdProvider.ControllerId &&
+            TryGetPlayer(player.ControllerId, out var registered) && ReferenceEquals(registered, player))
+            return true;
         return peerToPlayer.Any(kvp =>
          kvp.Value == player && kvp.Key.ConnectionState == ConnectionState.Connected);
     }
