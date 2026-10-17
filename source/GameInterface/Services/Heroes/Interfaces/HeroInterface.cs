@@ -22,6 +22,7 @@ using System.Runtime.ExceptionServices;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.CharacterDevelopment;
+using TaleWorlds.CampaignSystem.GameState;
 using TaleWorlds.CampaignSystem.Naval;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.Core;
@@ -172,6 +173,8 @@ internal class HeroInterface : IHeroInterface
         if (!objectManager.TryGetObjectWithLogging(player.MobilePartyId, out MobileParty playerParty))
             return;
 
+        ClearTransferredPlayerContext(Game.Current?.GameStateManager.LastOrDefault<MapState>(), Campaign.Current);
+
         LogPlayerSwitchState("before", player, playerHero, playerParty);
 
         Campaign.Current.MainParty = playerParty;
@@ -234,6 +237,17 @@ internal class HeroInterface : IHeroInterface
         // and the hero switched to above is the local main party.
         GameThread.RunSafe(partyVisibilitySweep.RebuildAroundMainParty);
         MessageBroker.Instance.Publish(player, new SwitchedPlayer());
+    }
+
+    internal static void ClearTransferredPlayerContext(MapState map, Campaign campaign)
+    {
+        // A listen snapshot includes A's local encounter/menu. It is presentation state, not B's.
+        // Clear it only in the receiving process, before selecting B and rebuilding B's own context.
+        if (!ModInformation.IsClient || map == null || campaign == null) return;
+        if (map.AtMenu) map.ExitMenuMode();
+        map.GameMenuId = null;
+        campaign.PlayerEncounter = null;
+        campaign.LocationEncounter = null;
     }
 
     private void LogPlayerSwitchState(
