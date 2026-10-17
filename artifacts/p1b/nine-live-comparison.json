@@ -52,7 +52,11 @@
     "clientLogLines": 5989,
     "targetedMatches": 0,
     "searched": ["Campaign.RealTick exceptions", "NullReferenceException", "duplicate PartyVisual registration", "nonzero duplicate/failed RealTick counters"],
-    "clientCampaignPacingTransitions": 9
+    "clientCampaignPacingTransitions": 9,
+    "clientCampaignPacingExamples": [
+      "04:15:01 Normal -> Slowing; ServerMinusClientTicks=-6592604; ProjectedServerMinusClientTicks=-5011161.40625; SpeedMultiplier=0.91x",
+      "04:15:29 Slowing -> Normal; ServerMinusClientTicks=-5665171; ProjectedServerMinusClientTicks=-3453578.171875; SpeedMultiplier=1.00x"
+    ]
   },
   "cleanup": { "state": "stopped", "serverProcessTreeExited": true, "clientProcessTreeExited": true }
 }
