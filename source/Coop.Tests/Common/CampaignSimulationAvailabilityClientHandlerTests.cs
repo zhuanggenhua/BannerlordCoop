@@ -1,4 +1,5 @@
 ﻿using Common.Messaging;
+using Common;
 using Common.Network.Session;
 using Common.Session;
 using Common.Tests.Utils;
@@ -24,7 +25,8 @@ public class CampaignSimulationAvailabilityClientHandlerTests
         Assert.False(network.SentNetworkMessages.ContainsKey(peer.Id));
 
         messageBroker.Publish(this, new ClientCampaignReady());
-        messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
+        handler.QueueHeartbeat();
+        GameThread.Run(() => { }, blocking: true);
         messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(false));
 
         var reports = System.Linq.Enumerable.ToArray(

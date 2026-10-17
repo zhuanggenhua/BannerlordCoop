@@ -74,6 +74,54 @@ public class CampaignSimulationAvailabilityServerHandlerTests
     }
 
     [Fact]
+    public void LocalReadinessHeartbeatRenewsTheHostLeaseWhileMapReady()
+    {
+        var previousMode = ModInformation.SessionMode;
+        ModInformation.SessionMode = SessionMode.ListenAuthority;
+        try
+        {
+            var now = new System.DateTime(2026, 10, 18, 0, 0, 0, System.DateTimeKind.Utc);
+            var messageBroker = new TestMessageBroker();
+            var identity = new SessionIdentity();
+            Assert.True(identity.TryApply(new AuthorityLease("room-a", "authority-a", "host", 1), "host"));
+            var coordinator = new CampaignAuthorityAvailabilityCoordinator(
+                identity,
+                new CampaignAuthorityCandidateSelector(),
+                () => now,
+                System.TimeSpan.FromSeconds(3));
+            var hostPlayer = new Player("host", "hero-host", "party-host", "clan-host", "character-host");
+            var playerManager = new Mock<IPlayerManager>();
+            playerManager.Setup(manager => manager.TryGetPlayer("host", out hostPlayer)).Returns(true);
+            var controllerId = new ControllerIdProvider();
+            controllerId.SetControllerId("host");
+
+            using var handler = new CampaignSimulationAvailabilityServerHandler(
+                messageBroker,
+                coordinator,
+                Mock.Of<IConnectionCollection>(),
+                playerManager.Object,
+                controllerId,
+                Mock.Of<INetwork>(),
+                identity);
+
+            messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
+            messageBroker.Publish(this, new CampaignReady());
+            now = now.AddSeconds(2);
+            handler.RefreshLocalAvailabilityAndReconcile();
+            now = now.AddSeconds(2);
+            handler.RefreshLocalAvailabilityAndReconcile();
+
+            Assert.True(coordinator.IsFreshMapReady("host"));
+            Assert.False(identity.CurrentLease.IsPaused);
+            Assert.Equal(1, identity.Epoch);
+        }
+        finally
+        {
+            ModInformation.SessionMode = previousMode;
+        }
+    }
+
+    [Fact]
     public void ListenAuthorityCommitsAndReplicatesPausedLeaseThenResumesHostAtANewerEpoch()
     {
         var previousMode = ModInformation.SessionMode;
@@ -92,6 +140,12 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             var playerManager = new Mock<IPlayerManager>();
             playerManager.Setup(manager => manager.TryGetPlayer("host", out hostPlayer)).Returns(true);
             playerManager.Setup(manager => manager.TryGetPlayer(guestPeer, out guestPlayer)).Returns(true);
+            playerManager.Setup(manager => manager.TryGetPeer("guest", out It.Ref<LiteNetLib.NetPeer>.IsAny))
+                .Returns((string _, out LiteNetLib.NetPeer peer) =>
+                {
+                    peer = guestPeer;
+                    return true;
+                });
             var connections = new Mock<IConnectionCollection>();
             connections.Setup(value => value.HasCompletedCampaignSynchronization(guestPeer)).Returns(true);
             var controllerId = new ControllerIdProvider();
@@ -234,5 +288,68 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             1));
 
         Assert.True(coordinator.Select().IsPaused);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ReconnectedPeerCanRestartItsAvailabilityRevisionAfterLateDisconnect(bool reportArrivesBeforeOldDisconnect)
+    {
+        var messageBroker = new TestMessageBroker();
+        var identity = new SessionIdentity();
+        Assert.True(identity.TrySetRoomHostControllerId("host"));
+        var coordinator = new CampaignAuthorityAvailabilityCoordinator(
+            identity,
+            new CampaignAuthorityCandidateSelector());
+        var peers = new TestNetwork();
+        var oldPeer = peers.CreatePeer();
+        var newPeer = peers.CreatePeer();
+        var oldPlayer = new Player("guest", "hero-guest", "party-guest", "clan-guest", "character-guest");
+        var newPlayer = new Player("guest", "hero-guest", "party-guest", "clan-guest", "character-guest");
+        var playerManager = new Mock<IPlayerManager>();
+        playerManager.Setup(manager => manager.TryGetPlayer(oldPeer, out oldPlayer)).Returns(true);
+        playerManager.Setup(manager => manager.TryGetPlayer(newPeer, out newPlayer)).Returns(true);
+        LiteNetLib.NetPeer currentPeer = oldPeer;
+        playerManager.Setup(manager => manager.TryGetPeer("guest", out It.Ref<LiteNetLib.NetPeer>.IsAny))
+            .Returns((string _, out LiteNetLib.NetPeer peer) =>
+            {
+                peer = currentPeer;
+                return true;
+            });
+        var connections = new Mock<IConnectionCollection>();
+        connections.Setup(value => value.HasCompletedCampaignSynchronization(oldPeer)).Returns(true);
+        connections.Setup(value => value.HasCompletedCampaignSynchronization(newPeer)).Returns(true);
+        using var handler = new CampaignSimulationAvailabilityServerHandler(
+            messageBroker,
+            coordinator,
+            connections.Object,
+            playerManager.Object,
+            new ControllerIdProvider());
+
+        messageBroker.Publish(oldPeer, new NetworkCampaignSimulationAvailabilityReport(
+            CampaignSimulationAvailability.MapReady,
+            100));
+
+        currentPeer = newPeer;
+        if (reportArrivesBeforeOldDisconnect)
+        {
+            messageBroker.Publish(newPeer, new NetworkCampaignSimulationAvailabilityReport(
+                CampaignSimulationAvailability.MapReady,
+                1));
+            Assert.Equal(1, Assert.Single(coordinator.Snapshot()).Revision);
+            messageBroker.Publish(oldPeer, new PlayerDisconnected(oldPeer, default));
+        }
+        else
+        {
+            messageBroker.Publish(oldPeer, new PlayerDisconnected(oldPeer, default));
+            messageBroker.Publish(newPeer, new NetworkCampaignSimulationAvailabilityReport(
+                CampaignSimulationAvailability.MapReady,
+                1));
+        }
+
+        var entry = Assert.Single(coordinator.Snapshot());
+        Assert.Equal("guest", entry.ControllerId);
+        Assert.Equal(1, entry.Revision);
+        Assert.True(coordinator.IsFreshMapReady("guest"));
     }
 }

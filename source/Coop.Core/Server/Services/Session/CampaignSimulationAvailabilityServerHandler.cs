@@ -33,9 +33,10 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private readonly INetwork network;
     private readonly ISessionIdentity sessionIdentity;
     private readonly object peerGate = new object();
+    private readonly object localReportGate = new object();
     private readonly object selectionGate = new object();
     private readonly object leaseGate = new object();
-    private readonly Dictionary<NetPeer, string> peerControllerIds = new Dictionary<NetPeer, string>();
+    private readonly Dictionary<int, string> peerControllerIds = new Dictionary<int, string>();
     private readonly Timer reconciliationTimer;
     private bool campaignReady;
     private bool mapReady;
@@ -49,6 +50,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private string pendingBarrierCandidateControllerId = string.Empty;
     private bool hasPendingBarrier;
     private bool pendingBarrierAcknowledged;
+    private int heartbeatQueued;
     private int disposed;
 
     public CampaignSimulationAvailabilityServerHandler(
@@ -72,7 +74,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         messageBroker.Subscribe<NetworkCampaignSimulationAvailabilityReport>(Handle_AvailabilityReport);
         messageBroker.Subscribe<NetworkCampaignAuthorityHandoffBarrierApplied>(Handle_HandoffBarrierApplied);
         messageBroker.Subscribe<PlayerDisconnected>(Handle_PlayerDisconnected);
-        reconciliationTimer = new Timer(_ => ReconcileCurrentAvailability(), null, 1000, 1000);
+        reconciliationTimer = new Timer(_ => OnAvailabilityTimer(), null, 1000, 1000);
     }
 
     public void Dispose()
@@ -92,13 +94,13 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
 
     private void Handle_CampaignReady(MessagePayload<CampaignReady> _)
     {
-        campaignReady = true;
+        lock (localReportGate) campaignReady = true;
         ReportLocalAvailability();
     }
 
     private void Handle_MapReadinessChanged(MessagePayload<CampaignMapSimulationReadinessChanged> payload)
     {
-        mapReady = payload.What.IsMapReady;
+        lock (localReportGate) mapReady = payload.What.IsMapReady;
         ReportLocalAvailability();
     }
 
@@ -112,6 +114,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         }
 
         var report = payload.What;
+        ForgetSupersededPeerReports(peer, player.ControllerId);
         if (!coordinator.Report(player.ControllerId, report.Availability, report.Revision))
         {
             Logger.Warning("Rejected stale campaign availability report from controller {ControllerId} at revision {Revision}",
@@ -119,7 +122,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             return;
         }
 
-        lock (peerGate) peerControllerIds[peer] = player.ControllerId;
+        lock (peerGate) peerControllerIds[peer.Id] = player.ControllerId;
         ReconcileCurrentAvailability();
     }
 
@@ -130,28 +133,123 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         string controllerId;
         lock (peerGate)
         {
-            if (!peerControllerIds.TryGetValue(payload.What.PlayerId, out controllerId)) return;
-            peerControllerIds.Remove(payload.What.PlayerId);
+            if (!peerControllerIds.TryGetValue(payload.What.PlayerId.Id, out controllerId)) return;
+            peerControllerIds.Remove(payload.What.PlayerId.Id);
         }
 
-        if (playerManager.TryGetPeer(controllerId, out var currentPeer) &&
-            currentPeer != payload.What.PlayerId)
-            return;
+        if (playerManager.TryGetPeer(controllerId, out var currentPeer) && currentPeer != null &&
+            currentPeer.Id != payload.What.PlayerId.Id)
+        {
+            bool currentPeerHasReported;
+            lock (peerGate)
+            {
+                currentPeerHasReported = peerControllerIds.TryGetValue(currentPeer.Id, out var currentControllerId) &&
+                    string.Equals(currentControllerId, controllerId, StringComparison.Ordinal);
+            }
+
+            // A reconnect may register its NetPeer before the old disconnect event is delivered.
+            // Keep its report if it arrived already; otherwise clear the old connection's revision
+            // so the new handler can start its per-connection revision stream from one.
+            if (currentPeerHasReported) return;
+        }
 
         if (coordinator.Remove(controllerId)) ReconcileCurrentAvailability();
     }
 
+    private void ForgetSupersededPeerReports(NetPeer currentPeer, string controllerId)
+    {
+        bool removedSupersededPeer = false;
+        lock (peerGate)
+        {
+            var supersededPeers = new List<int>();
+            foreach (var entry in peerControllerIds)
+            {
+                if (entry.Key != currentPeer.Id &&
+                    string.Equals(entry.Value, controllerId, StringComparison.Ordinal))
+                    supersededPeers.Add(entry.Key);
+            }
+
+            foreach (var peer in supersededPeers)
+                removedSupersededPeer |= peerControllerIds.Remove(peer);
+        }
+
+        if (removedSupersededPeer)
+            coordinator.Remove(controllerId);
+    }
+
     private void ReportLocalAvailability()
     {
-        if (!ModInformation.IsListenAuthority || !campaignReady) return;
+        ReportLocalAvailability(reconcile: true);
+    }
 
-        var controllerId = controllerIdProvider.ControllerId;
-        bool localPlayerRegistered = playerManager.TryGetPlayer(controllerId, out _);
-        var availability = mapReady && localPlayerRegistered
-            ? CampaignSimulationAvailability.MapReady
-            : CampaignSimulationAvailability.Unavailable;
-        localRevision = localRevision == long.MaxValue ? 1 : localRevision + 1;
-        if (coordinator.Report(controllerId, availability, localRevision)) ReconcileCurrentAvailability();
+    private void OnAvailabilityTimer()
+    {
+        if (Volatile.Read(ref disposed) != 0) return;
+
+        if (ModInformation.IsListenAuthority)
+        {
+            bool queueHeartbeat;
+            lock (localReportGate)
+            {
+                queueHeartbeat = campaignReady && Interlocked.Exchange(ref heartbeatQueued, 1) == 0;
+            }
+
+            if (queueHeartbeat)
+            {
+                try
+                {
+                    // Sample local player registration and map state on the game thread. A stalled
+                    // game thread stops renewing readiness, allowing the relay to fence this lease.
+                    GameThread.EnqueueSafe(() =>
+                    {
+                        try
+                        {
+                            if (Volatile.Read(ref disposed) == 0) RefreshLocalAvailabilityAndReconcile();
+                        }
+                        finally
+                        {
+                            Interlocked.Exchange(ref heartbeatQueued, 0);
+                        }
+                    }, context: nameof(CampaignSimulationAvailabilityServerHandler));
+                }
+                catch (Exception ex)
+                {
+                    Interlocked.Exchange(ref heartbeatQueued, 0);
+                    Logger.Warning(ex, "Could not queue local campaign availability heartbeat");
+                }
+            }
+        }
+
+        // Expiry decisions continue even if the game thread stops pumping, allowing the room relay
+        // to fence stale availability while it can still process network messages.
+        ReconcileCurrentAvailability();
+    }
+
+    private void ReportLocalAvailability(bool reconcile)
+    {
+        if (!ModInformation.IsListenAuthority) return;
+
+        bool accepted;
+        lock (localReportGate)
+        {
+            if (!campaignReady) return;
+
+            var controllerId = controllerIdProvider.ControllerId;
+            bool localPlayerRegistered = playerManager.TryGetPlayer(controllerId, out _);
+            var availability = mapReady && localPlayerRegistered
+                ? CampaignSimulationAvailability.MapReady
+                : CampaignSimulationAvailability.Unavailable;
+            if (localRevision < long.MaxValue) localRevision++;
+            accepted = coordinator.Report(controllerId, availability, localRevision);
+        }
+
+        if (reconcile && accepted) ReconcileCurrentAvailability();
+    }
+
+    internal void RefreshLocalAvailabilityAndReconcile()
+    {
+        ReportLocalAvailability(reconcile: false);
+        ReconcileCurrentAvailability();
     }
 
     internal void ReconcileCurrentAvailability()
@@ -295,19 +393,17 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             return;
 
         NetPeer candidatePeer = null;
+        if (!playerManager.TryGetPeer(candidateControllerId, out candidatePeer) || candidatePeer == null)
+            return;
+
         lock (peerGate)
         {
-            foreach (var entry in peerControllerIds)
-            {
-                if (string.Equals(entry.Value, candidateControllerId, StringComparison.Ordinal))
-                {
-                    candidatePeer = entry.Key;
-                    break;
-                }
-            }
+            if (!peerControllerIds.TryGetValue(candidatePeer.Id, out var mappedControllerId) ||
+                !string.Equals(mappedControllerId, candidateControllerId, StringComparison.Ordinal))
+                return;
         }
 
-        if (candidatePeer == null || !connections.HasCompletedCampaignSynchronization(candidatePeer))
+        if (!connections.HasCompletedCampaignSynchronization(candidatePeer))
             return;
 
         if (!TryGetNextBarrierSequence(out var sequence))
@@ -377,7 +473,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
 
                 lock (peerGate)
                 {
-                    if (!peerControllerIds.TryGetValue(peer, out var knownControllerId) ||
+                    if (!peerControllerIds.TryGetValue(peer.Id, out var knownControllerId) ||
                         !string.Equals(knownControllerId, player.ControllerId, StringComparison.Ordinal))
                         return;
                 }
