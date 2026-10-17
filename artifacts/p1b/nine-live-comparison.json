@@ -1,0 +1,58 @@
+{
+  "runId": "6987622c589f4594b8196aa3176ae0f6",
+  "date": "2026-10-17",
+  "build": "0.1.7+162a2e449063560a2a978c016fcaafa0c7e7e781",
+  "gameInterfaceMvid": "753e833c-bd86-47ca-9844-3a9290659eb7",
+  "campaignId": "RVLgBrkkFApz",
+  "processes": {
+    "A": { "pid": 27904, "role": "ListenAuthority", "localHero": "main_hero", "localParty": "player_party", "localPeer": false },
+    "B": { "pid": 12240, "role": "RemoteReplica" }
+  },
+  "samplesSecondsAfterPlay": [30, 60, 90, 120],
+  "campaignHour": {
+    "A": [6.379, 18.978, 18.003, 6.243],
+    "B": [6.474, 19.071, 18.084, 6.317],
+    "absoluteDifference": [0.095, 0.093, 0.081, 0.074]
+  },
+  "sampledNpcParties": {
+    "lord_2_4_1_party_1": {
+      "positionsA": [[411.389954, 518.0435], [379.794159, 523.5423], [363.94223, 526.2762], [363.94223, 526.2762]],
+      "positionsB": [[411.154419, 518.095154], [379.474182, 523.5843], [363.94223, 526.2762], [363.94223, 526.2762]],
+      "distance": [0.2411, 0.3227, 0, 0]
+    },
+    "lord_6_1_party_1": {
+      "positionsA": [[679.5292, 481.740356], [666.5919, 480.62735], [658.868347, 473.873138], [658.868347, 473.873138]],
+      "positionsB": [[679.5292, 481.740356], [666.65155, 480.634949], [658.868347, 473.873138], [658.868347, 473.873138]],
+      "distance": [0, 0.0601, 0, 0]
+    }
+  },
+  "rosterComparisonAt120Seconds": {
+    "key": ["characterId", "number", "wounded", "isHero"],
+    "comparison": "multiset; duplicate character IDs are retained",
+    "lord_2_4_1": { "stacksA": 14, "stacksB": 14, "compositionDifferences": 0 },
+    "lord_6_1": { "stacksA": 38, "stacksB": 38, "compositionDifferences": 0 },
+    "xpExamplesAThenB": {
+      "lord_2_4_1.sturgian_recruit": [221, 242],
+      "lord_6_1.khuzait_nomad": [258, 1558],
+      "lord_6_1.khuzait_tribal_warrior": [184, 2772]
+    }
+  },
+  "authorityDiagnosticsAt120Seconds": {
+    "realTicks": 22868,
+    "duplicateRealTicks": 0,
+    "failedRealTicks": 0,
+    "aiTicks": 174900,
+    "mobileParties": 1489,
+    "localHeroRegistrations": 1,
+    "localPartyRegistrations": 1,
+    "localClanRegistrations": 1
+  },
+  "logReview": {
+    "serverLogLines": 158284,
+    "clientLogLines": 5989,
+    "targetedMatches": 0,
+    "searched": ["Campaign.RealTick exceptions", "NullReferenceException", "duplicate PartyVisual registration", "nonzero duplicate/failed RealTick counters"],
+    "clientCampaignPacingTransitions": 9
+  },
+  "cleanup": { "state": "stopped", "serverProcessTreeExited": true, "clientProcessTreeExited": true }
+}
