@@ -23,14 +23,14 @@ internal class TownMarketDataRegistry : AutoRegistryBase<TownMarketData>
 
     public override void RegisterAllObjects()
     {
-        var towns = Campaign.Current?._towns;
-        if (towns == null)
+        if (Campaign.Current?._towns == null || Campaign.Current._castles == null)
         {
             Logger.Error("Unable to register TownMarketData when Campaign towns is null");
             return;
         }
 
-        foreach (var town in towns)
+        // Castles also own TownMarketData and receive economy ticks. Match TownRegistry's domain.
+        foreach (var town in Town.AllFiefs)
         {
             if (town == null) continue;
             if (town._marketData == null) continue;

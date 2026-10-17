@@ -54,7 +54,7 @@ internal class PlayerDebugCommands
 
             var sb = new StringBuilder();
             sb.AppendLine($"Side: {(ModInformation.IsServer ? "Server" : "Client")}  LocalControllerId: {localId ?? "<unknown>"}");
-            sb.AppendLine($"Registered players: {players.Count} (expected: one per client, host excluded)");
+            sb.AppendLine($"Registered players: {players.Count} (includes the local player in ListenAuthority)");
 
             // PlayerObjects (the hero/party/clan -> controller table) is not enumerable, so report it indirectly:
             // each player contributes its resolvable, registered hero/party/clan. The total should be 3x the
@@ -86,7 +86,7 @@ internal class PlayerDebugCommands
 
         public string Description => "Reports replicated party state for a player.";
 
-        public CoopCommandSide Side => CoopCommandSide.Server;
+        public CoopCommandSide Side => CoopCommandSide.Both;
 
         public IExpectedArgs[] ExpectedArgs { get; } = new IExpectedArgs[]
         {
@@ -95,8 +95,6 @@ internal class PlayerDebugCommands
 
         public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
         {
-            if (!ModInformation.IsServer)
-                return Failed("Command can only be run on the server.");
             if (ContainerProvider.TryResolve<IPlayerManager>(out var playerManager) == false)
                 return Failed($"Unable to get {nameof(IPlayerManager)}");
             if (ContainerProvider.TryResolve<IObjectManager>(out var objectManager) == false)
@@ -108,11 +106,32 @@ internal class PlayerDebugCommands
 
             string mapEventId = party.MapEvent?.StringId ?? "none";
             bool hasVisual = party.Party.GetPartyVisual() != null;
+            objectManager.TryGetObject(player.HeroId, out Hero hero);
+            ContainerProvider.TryResolve<IControllerIdProvider>(out var controller);
             string structuredState = JsonConvert.SerializeObject(new
             {
+                mode = ModInformation.SessionMode.ToString(),
+                localControllerId = controller?.ControllerId,
+                mainHeroId = Hero.MainHero?.StringId,
+                mainPartyId = MobileParty.MainParty?.StringId,
+                campaignId = Campaign.Current.UniqueGameId,
+                hours = CampaignTime.Now.ToHours,
+                registeredPlayers = playerManager.Players.Count,
                 controllerId = player.ControllerId,
+                heroId = player.HeroId,
+                heroStringId = hero?.StringId,
+                clanId = player.ClanId,
+                characterId = player.CharacterObjectId,
+                gold = hero?.Gold,
                 partyId = player.MobilePartyId,
                 partyStringId = party.StringId,
+                x = party.Position.X,
+                y = party.Position.Y,
+                troops = party.MemberRoster.TotalManCount,
+                wounded = party.MemberRoster.TotalWounded,
+                heroRegistrations = playerManager.Players.Count(p => p.HeroId == player.HeroId),
+                partyRegistrations = playerManager.Players.Count(p => p.MobilePartyId == player.MobilePartyId),
+                clanRegistrations = playerManager.Players.Count(p => p.ClanId == player.ClanId),
                 connected = playerManager.IsConnected(player),
                 active = party.IsActive,
                 mapEvent = mapEventId,
