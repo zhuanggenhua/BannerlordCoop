@@ -1,6 +1,7 @@
 ﻿using Common;
 using Common.Util;
 using GameInterface.Services.Entity;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.MobilePartyAIs.Patches;
 using GameInterface.Services.Players;
 using GameInterface.Tests;
@@ -93,6 +94,40 @@ public class MobilePartyAIDisablePatchesTests : IDisposable
         bool result = MobilePartyAIDisablePatches.IsTickAuthority(party);
 
         Assert.False(result);
+    }
+
+    [Theory]
+    [InlineData(true, true, false, true)]
+    [InlineData(true, false, true, false)]
+    [InlineData(false, false, true, true)]
+    [InlineData(false, false, false, false)]
+    public void ShouldTickParty_ConfirmedLeaseOverridesLegacyPartyOwnership(
+        bool authorityKnown,
+        bool localAuthority,
+        bool legacyPartyControl,
+        bool expected)
+    {
+        Assert.Equal(expected, CampaignSimulationAuthorityPolicy.ShouldTickParty(
+            authorityKnown,
+            localAuthority,
+            legacyPartyControl));
+    }
+
+    [Theory]
+    [InlineData(true, true, false, true)]
+    [InlineData(true, false, true, false)]
+    [InlineData(false, false, true, true)]
+    [InlineData(false, false, false, false)]
+    public void ShouldRunWorldSimulation_ConfirmedLeaseOverridesLegacyRole(
+        bool authorityKnown,
+        bool localAuthority,
+        bool legacyIsServer,
+        bool expected)
+    {
+        Assert.Equal(expected, CampaignSimulationAuthorityPolicy.ShouldRunWorldSimulation(
+            authorityKnown,
+            localAuthority,
+            legacyIsServer));
     }
 
     private MobileParty RegisterPlayerParty(string ownerControllerId, string localControllerId)

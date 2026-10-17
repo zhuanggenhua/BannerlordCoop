@@ -18,18 +18,15 @@ internal class CampaignRobustnessPatches
         bool hasAuthorityContext = global::GameInterface.ContainerProvider.TryResolve<
             global::GameInterface.Services.CampaignAuthority.ICampaignAuthorityContext>(out var authorityContext);
         if (!hasAuthorityContext)
-            return ShouldRunCampaignTick(Common.ModInformation.IsListenAuthority, authorityKnown: false, localAuthority: false);
+            return true;
 
         bool localAuthority = authorityContext.TryGetLocalAuthorityLease(out var lease);
         bool authorityKnown = lease.IsValid;
-        return ShouldRunCampaignTick(Common.ModInformation.IsListenAuthority, authorityKnown, localAuthority);
+        return ShouldRunCampaignTick(authorityKnown, localAuthority);
     }
 
-    internal static bool ShouldRunCampaignTick(bool isListenAuthority, bool authorityKnown, bool localAuthority)
-    {
-        // A ListenHost keeps the native path until its lease is confirmed, then only runs the tick while it owns it.
-        return !isListenAuthority || !authorityKnown || localAuthority;
-    }
+    internal static bool ShouldRunCampaignTick(bool authorityKnown, bool localAuthority) =>
+        !authorityKnown || localAuthority;
 
     [HarmonyPatch(nameof(Campaign.RealTick))]
     [HarmonyFinalizer]
@@ -44,7 +41,19 @@ internal class CampaignRobustnessPatches
             Logger.Error(__exception, "Failed to run {Method}", $"Campaign.RealTick");
         }
 
-        // A native local world must surface simulation failures instead of silently continuing.
-        return Common.ModInformation.IsListenAuthority ? __exception : null;
+        // Every current campaign authority owns a native simulation world, including a remote
+        // replica promoted by lease. Preserve its failures instead of silently continuing.
+        bool isLocalAuthority = !Common.ModInformation.IsListenAuthority &&
+            global::GameInterface.ContainerProvider.TryResolve<
+                global::GameInterface.Services.CampaignAuthority.ICampaignAuthorityContext>(out var authorityContext) &&
+            authorityContext.IsLocalCampaignAuthority;
+        return ShouldPreserveRealTickException(
+            Common.ModInformation.IsListenAuthority,
+            isLocalAuthority)
+            ? __exception
+            : null;
     }
+
+    internal static bool ShouldPreserveRealTickException(bool isListenAuthority, bool isLocalAuthority) =>
+        isListenAuthority || isLocalAuthority;
 }

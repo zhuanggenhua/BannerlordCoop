@@ -64,19 +64,28 @@ public class ListenAuthorityOperationTests : IDisposable
         Assert.Null(CampaignRobustnessPatches.Finalizer_RealTick(new InvalidOperationException("legacy failure")));
     }
 
+    [Fact]
+    public void PromotedRemoteAuthorityPreservesRealTickException()
+    {
+        Assert.True(CampaignRobustnessPatches.ShouldPreserveRealTickException(
+            isListenAuthority: false,
+            isLocalAuthority: true));
+        Assert.False(CampaignRobustnessPatches.ShouldPreserveRealTickException(
+            isListenAuthority: false,
+            isLocalAuthority: false));
+    }
+
     [Theory]
-    [InlineData(true, false, false, true)]
-    [InlineData(true, true, false, false)]
-    [InlineData(true, true, true, true)]
-    [InlineData(false, true, false, true)]
-    public void ListenHostCampaignTickFollowsConfirmedLease(
-        bool isListenAuthority,
+    [InlineData(false, false, true)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, true)]
+    public void CampaignTickFollowsConfirmedAuthorityLease(
         bool leaseKnown,
         bool localAuthority,
         bool expected)
     {
         Assert.Equal(expected, CampaignRobustnessPatches.ShouldRunCampaignTick(
-            isListenAuthority, leaseKnown, localAuthority));
+            leaseKnown, localAuthority));
     }
 
     [Fact]

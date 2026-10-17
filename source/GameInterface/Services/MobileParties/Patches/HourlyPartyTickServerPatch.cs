@@ -1,5 +1,6 @@
 ﻿using Common;
 using HarmonyLib;
+using GameInterface.Services.CampaignAuthority;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
 
@@ -10,6 +11,7 @@ internal class HourlyPartyTickServerPatch
 {
     [HarmonyPrefix]
     [HarmonyPatch("HourlyTickParty")]
-    private static bool HourlyTickPartyPrefix(ref MobileParty mobileParty) => ModInformation.IsServer;
+    private static bool HourlyTickPartyPrefix(ref MobileParty mobileParty) =>
+        CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
 
 }

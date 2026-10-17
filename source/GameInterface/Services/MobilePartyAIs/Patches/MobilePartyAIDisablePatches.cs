@@ -1,5 +1,5 @@
 ﻿using GameInterface.Policies;
-using GameInterface.Services.MobileParties.Extensions;
+using GameInterface.Services.CampaignAuthority;
 using HarmonyLib;
 using TaleWorlds.CampaignSystem.Party;
 
@@ -18,5 +18,5 @@ internal class MobilePartyAIDisablePatches
         return IsTickAuthority(__instance._mobileParty);
     }
 
-    internal static bool IsTickAuthority(MobileParty party) => party.IsControlledByThisInstance();
+    internal static bool IsTickAuthority(MobileParty party) => CampaignSimulationAuthorityPolicy.CanTickParty(party);
 }
