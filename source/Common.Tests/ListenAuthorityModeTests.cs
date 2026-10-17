@@ -42,6 +42,20 @@ public class ListenAuthorityModeTests
     }
 
     [Fact]
+    public void ConfirmedLeaseSnapshotDoesNotExposeUnconfirmedIdentity()
+    {
+        var identity = new SessionIdentity();
+
+        Assert.False(identity.TryGetConfirmedLease(out var unconfirmedLease));
+        Assert.False(unconfirmedLease.IsValid);
+
+        var lease = new AuthorityLease("room-a", "authority-a", "controller-a", 1);
+        Assert.True(identity.TryApply(lease));
+        Assert.True(identity.TryGetConfirmedLease(out var confirmedLease));
+        Assert.Equal(lease, confirmedLease);
+    }
+
+    [Fact]
     public void AuthorityLeaseRejectsStaleEpochAndConflictingSameEpoch()
     {
         var identity = new SessionIdentity();

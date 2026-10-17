@@ -1,5 +1,6 @@
 ﻿using Common.Network;
 using Common.PacketHandlers;
+using GameInterface.Services.CampaignAuthority;
 using Coop.Core.Server.Connections;
 using Coop.Core.Server.Services.Time.Handlers;
 using GameInterface.Services.Time.Interfaces;
@@ -43,9 +44,19 @@ public class CampaignTimeSyncHandlerTests
             .Setup(c => c.GetEnumerator())
             .Returns(() => connections.GetEnumerator());
         var connectionMessageQueue = new Mock<IConnectionMessageQueue>();
+        var authorityContext = new Mock<ICampaignAuthorityContext>();
+        authorityContext.SetupGet(c => c.IsAuthorityKnown).Returns(true);
+        authorityContext.SetupGet(c => c.IsLocalCampaignAuthority).Returns(true);
+        authorityContext.Setup(c => c.TryGetLocalAuthorityLease(out It.Ref<AuthorityLease>.IsAny))
+            .Returns((out AuthorityLease lease) =>
+            {
+                lease = new AuthorityLease("room-a", "authority-a", "controller-a", 1);
+                return true;
+            });
 
         var handler = new CampaignTimeSyncHandler(
             network.Object,
+            authorityContext.Object,
             mapTimeTracker.Object,
             connectionCollection.Object,
             connectionMessageQueue.Object);

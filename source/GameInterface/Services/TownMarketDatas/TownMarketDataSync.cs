@@ -8,9 +8,8 @@ namespace GameInterface.Services.TownMarketDatas
     {
         public TownMarketDataSync(AutoSyncRegistry autoSyncBuilder)
         {
+            // Merchant stock is replica-local; keep only the market's town association synchronized.
             autoSyncBuilder.AddField(AccessTools.Field(typeof(TownMarketData), nameof(TownMarketData._town)));
-            // Dictionary<ItemCategory, ItemData>: keys sync by reference, values via ItemDataSurrogate
-            autoSyncBuilder.AddField(AccessTools.Field(typeof(TownMarketData), nameof(TownMarketData._itemDict)));
         }
     }
 }

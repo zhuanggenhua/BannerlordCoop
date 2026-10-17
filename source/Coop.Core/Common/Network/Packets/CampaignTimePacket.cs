@@ -1,6 +1,7 @@
 ﻿using Common.PacketHandlers;
 using LiteNetLib;
 using ProtoBuf;
+using System;
 
 namespace Coop.Core.Common.Network.Packets;
 
@@ -29,9 +30,32 @@ public readonly struct CampaignTimePacket : IPacket
     [ProtoMember(2)]
     public readonly int JoinPacketsRemaining;
 
-    public CampaignTimePacket(long serverTicks, int joinPacketsRemaining)
+    [ProtoMember(3)]
+    public readonly string RoomId;
+
+    [ProtoMember(4)]
+    public readonly string AuthorityId;
+
+    [ProtoMember(5)]
+    public readonly string AuthorityControllerId;
+
+    [ProtoMember(6)]
+    public readonly long Epoch;
+
+    public CampaignTimePacket(long serverTicks, int joinPacketsRemaining, AuthorityLease lease)
     {
         ServerTicks = serverTicks;
         JoinPacketsRemaining = joinPacketsRemaining;
+        RoomId = lease.RoomId;
+        AuthorityId = lease.AuthorityId;
+        AuthorityControllerId = lease.AuthorityControllerId;
+        Epoch = lease.Epoch;
     }
+
+    public bool Matches(AuthorityLease lease) =>
+        lease.IsValid &&
+        Epoch == lease.Epoch &&
+        string.Equals(RoomId, lease.RoomId, StringComparison.Ordinal) &&
+        string.Equals(AuthorityId, lease.AuthorityId, StringComparison.Ordinal) &&
+        string.Equals(AuthorityControllerId, lease.AuthorityControllerId, StringComparison.Ordinal);
 }

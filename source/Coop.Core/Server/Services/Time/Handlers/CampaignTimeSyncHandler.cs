@@ -3,6 +3,7 @@ using Common.Messaging;
 using Common.Network;
 using Coop.Core.Common.Network.Packets;
 using Coop.Core.Server.Connections;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Time.Interfaces;
 using Serilog;
 using System;
@@ -26,6 +27,7 @@ public class CampaignTimeSyncHandler : IHandler, IDisposable
     private const double PublishIntervalMs = 250d;
 
     private readonly INetwork network;
+    private readonly ICampaignAuthorityContext authorityContext;
     private readonly IMapTimeTrackerInterface mapTimeTrackerInterface;
     private readonly IConnectionCollection connectionCollection;
     private readonly IConnectionMessageQueue connectionMessageQueue;
@@ -36,11 +38,13 @@ public class CampaignTimeSyncHandler : IHandler, IDisposable
 
     public CampaignTimeSyncHandler(
         INetwork network,
+        ICampaignAuthorityContext authorityContext,
         IMapTimeTrackerInterface mapTimeTrackerInterface,
         IConnectionCollection connectionCollection,
         IConnectionMessageQueue connectionMessageQueue)
     {
         this.network = network;
+        this.authorityContext = authorityContext;
         this.mapTimeTrackerInterface = mapTimeTrackerInterface;
         this.connectionCollection = connectionCollection;
         this.connectionMessageQueue = connectionMessageQueue;
@@ -74,6 +78,8 @@ public class CampaignTimeSyncHandler : IHandler, IDisposable
 
             try
             {
+                if (!authorityContext.TryGetLocalAuthorityLease(out var lease)) return;
+
                 // No campaign loaded yet, nothing authoritative to broadcast.
                 if (mapTimeTrackerInterface.TryGetCurrentTicks(out long currentTicks) == false) return;
 
@@ -87,7 +93,7 @@ public class CampaignTimeSyncHandler : IHandler, IDisposable
 
                     network.Send(
                         connection.Peer,
-                        new CampaignTimePacket(currentTicks, joinPacketsRemaining));
+                        new CampaignTimePacket(currentTicks, joinPacketsRemaining, lease));
                 }
             }
             catch (Exception ex)

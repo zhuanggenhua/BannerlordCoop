@@ -2,6 +2,7 @@
 using Common.Messaging;
 using Common.Util;
 using GameInterface.Policies;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Heroes.Enum;
 using GameInterface.Services.Heroes.Interaces;
 using GameInterface.Services.Heroes.Messages;
@@ -82,11 +83,27 @@ internal class CampaignTimePacingPatches
     [HarmonyPostfix]
     private static void TickMapTimePostfix(Campaign __instance, float realDt)
     {
-        if (ModInformation.IsClient &&
+        bool hasAuthorityContext =
+            ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authorityContext);
+        if (ShouldApplyClientSimulationTime(ModInformation.IsServer, hasAuthorityContext, authorityContext) &&
             ContainerProvider.TryResolve<IMapTimeTrackerInterface>(out var mapTimeTrackerInterface))
         {
             mapTimeTrackerInterface.ApplyClientSimulationTime(__instance, realDt);
         }
+    }
+
+    internal static bool ShouldApplyClientSimulationTime(
+        bool legacyIsServer,
+        bool authorityContextAvailable,
+        ICampaignAuthorityContext authorityContext)
+    {
+        if (authorityContextAvailable)
+        {
+            bool localAuthority = authorityContext.TryGetLocalAuthorityLease(out var lease);
+            if (lease.IsValid) return !localAuthority;
+        }
+
+        return !legacyIsServer;
     }
 }
 

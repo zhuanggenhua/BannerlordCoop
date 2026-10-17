@@ -21,17 +21,20 @@ public class CampaignTimePacketHandler : IPacketHandler
     private readonly IMessageBroker messageBroker;
     private readonly IPacketManager packetManager;
     private readonly IMapTimeTrackerInterface mapTimeTrackerInterface;
+    private readonly ISessionIdentity sessionIdentity;
     private bool hasOneWayLatencyEstimate;
     private float oneWayLatencySeconds;
 
     public CampaignTimePacketHandler(
         IMessageBroker messageBroker,
         IPacketManager packetManager,
-        IMapTimeTrackerInterface mapTimeTrackerInterface)
+        IMapTimeTrackerInterface mapTimeTrackerInterface,
+        ISessionIdentity sessionIdentity)
     {
         this.messageBroker = messageBroker;
         this.packetManager = packetManager;
         this.mapTimeTrackerInterface = mapTimeTrackerInterface;
+        this.sessionIdentity = sessionIdentity;
         this.packetManager.RegisterPacketHandler(this);
         this.messageBroker.Subscribe<NetworkConnected>(Handle_NetworkConnected);
     }
@@ -45,6 +48,8 @@ public class CampaignTimePacketHandler : IPacketHandler
     public void HandlePacket(NetPeer peer, IPacket packet)
     {
         var timePacket = (CampaignTimePacket)packet;
+        if (!sessionIdentity.TryGetConfirmedLease(out var lease) || !timePacket.Matches(lease)) return;
+
         UpdateOneWayLatencyEstimate(peer);
         mapTimeTrackerInterface.SyncCampaignTime(timePacket.ServerTicks, oneWayLatencySeconds);
         messageBroker.Publish(

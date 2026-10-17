@@ -10,6 +10,7 @@ public interface ISessionIdentity
     string RoomHostControllerId { get; }
     long Epoch { get; }
     bool IsConfirmed { get; }
+    bool TryGetConfirmedLease(out AuthorityLease lease);
     bool TryApply(AuthorityLease lease);
     bool TryApply(AuthorityLease lease, string roomHostControllerId);
     bool TryRestore(AuthorityLease lease);
@@ -85,6 +86,21 @@ public sealed class SessionIdentity : ISessionIdentity
     public string RoomHostControllerId { get { lock (gate) return roomHostControllerId; } }
     public long Epoch => CurrentLease.Epoch;
     public bool IsConfirmed { get { lock (gate) return isConfirmed; } }
+
+    public bool TryGetConfirmedLease(out AuthorityLease lease)
+    {
+        lock (gate)
+        {
+            if (!isConfirmed || !currentLease.IsValid)
+            {
+                lease = default;
+                return false;
+            }
+
+            lease = currentLease;
+            return true;
+        }
+    }
 
     public bool TryApply(AuthorityLease lease)
     {

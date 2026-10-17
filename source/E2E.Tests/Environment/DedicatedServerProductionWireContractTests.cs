@@ -17,7 +17,10 @@ public sealed class DedicatedServerProductionWireContractTests
         var moduleResult = new NetworkModuleVersionsValidated(false, "denied", "server-build");
         var clientRequest = new NetworkClientValidate("ds-synthetic-client-a");
         var clientResult = new NetworkClientValidated(false, null!);
-        var heartbeat = new CampaignTimePacket(123456789, -1);
+        var heartbeat = new CampaignTimePacket(
+            123456789,
+            -1,
+            new AuthorityLease("room-a", "authority-a", "", 1));
         var saveChunk = new GameSaveDataChunkPacket(
             7,
             0,
@@ -68,6 +71,10 @@ public sealed class DedicatedServerProductionWireContractTests
         var decodedHeartbeat = Assert.IsType<CampaignTimePacket>(recipient.Deserialize(sender.Serialize(heartbeat)));
         Assert.Equal(heartbeat.ServerTicks, decodedHeartbeat.ServerTicks);
         Assert.Equal(heartbeat.JoinPacketsRemaining, decodedHeartbeat.JoinPacketsRemaining);
+        Assert.Equal(heartbeat.RoomId, decodedHeartbeat.RoomId);
+        Assert.Equal(heartbeat.AuthorityId, decodedHeartbeat.AuthorityId);
+        Assert.Equal(heartbeat.AuthorityControllerId, decodedHeartbeat.AuthorityControllerId);
+        Assert.Equal(heartbeat.Epoch, decodedHeartbeat.Epoch);
         var decodedSave = Assert.IsType<GameSaveDataChunkPacket>(recipient.Deserialize(sender.Serialize(saveChunk)));
         Assert.Equal(saveChunk.TransferId, decodedSave.TransferId);
         Assert.Equal(saveChunk.ChunkData, decodedSave.ChunkData);

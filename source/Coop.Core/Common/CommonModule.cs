@@ -9,6 +9,7 @@ using Common.Util;
 using Common.Voice;
 using Coop.Core.Common.Configuration;
 using Coop.Core.Common.Session;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Entity;
 using GameInterface.Services.Modules;
 using GameInterface.Services.Modules.Validators;
@@ -24,6 +25,7 @@ public abstract class CommonModule : Module
     protected override void Load(ContainerBuilder builder)
     {
         builder.RegisterType<SessionIdentity>().As<ISessionIdentity>().InstancePerLifetimeScope();
+        builder.RegisterType<CampaignAuthorityContext>().As<ICampaignAuthorityContext>().InstancePerLifetimeScope();
         builder.RegisterType<CampaignAuthorityCandidateSelector>()
             .As<ICampaignAuthorityCandidateSelector>()
             .InstancePerLifetimeScope();
