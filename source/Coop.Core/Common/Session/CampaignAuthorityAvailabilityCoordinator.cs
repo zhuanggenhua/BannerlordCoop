@@ -1,15 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using Common.Session;
 
 namespace Coop.Core.Common.Session;
-
-public enum CampaignSimulationAvailability
-{
-    Unknown,
-    Unavailable,
-    MapReady
-}
 
 public readonly struct CampaignAvailabilityEntry : IEquatable<CampaignAvailabilityEntry>
 {
@@ -62,18 +56,35 @@ public sealed class CampaignAuthorityAvailabilityCoordinator : ICampaignAuthorit
     private readonly object gate = new object();
     private readonly Dictionary<string, CampaignAvailabilityEntry> entries =
         new Dictionary<string, CampaignAvailabilityEntry>(StringComparer.Ordinal);
+    private readonly Dictionary<string, DateTime> reportTimesUtc =
+        new Dictionary<string, DateTime>(StringComparer.Ordinal);
     private readonly ISessionIdentity sessionIdentity;
     private readonly ICampaignAuthorityCandidateSelector candidateSelector;
+    private readonly Func<DateTime> utcNow;
+    private readonly TimeSpan reportTimeout;
 
     public CampaignAuthorityAvailabilityCoordinator(
         ISessionIdentity sessionIdentity,
         ICampaignAuthorityCandidateSelector candidateSelector)
+        : this(sessionIdentity, candidateSelector, () => DateTime.UtcNow, TimeSpan.FromSeconds(3))
+    {
+    }
+
+    internal CampaignAuthorityAvailabilityCoordinator(
+        ISessionIdentity sessionIdentity,
+        ICampaignAuthorityCandidateSelector candidateSelector,
+        Func<DateTime> utcNow,
+        TimeSpan reportTimeout)
     {
         if (sessionIdentity == null) throw new ArgumentNullException(nameof(sessionIdentity));
         if (candidateSelector == null) throw new ArgumentNullException(nameof(candidateSelector));
+        if (utcNow == null) throw new ArgumentNullException(nameof(utcNow));
+        if (reportTimeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(reportTimeout));
 
         this.sessionIdentity = sessionIdentity;
         this.candidateSelector = candidateSelector;
+        this.utcNow = utcNow;
+        this.reportTimeout = reportTimeout;
     }
 
     public bool Report(string controllerId, CampaignSimulationAvailability availability, long revision)
@@ -86,10 +97,16 @@ public sealed class CampaignAuthorityAvailabilityCoordinator : ICampaignAuthorit
             if (entries.TryGetValue(entry.ControllerId, out var current))
             {
                 if (entry.Revision < current.Revision) return false;
-                if (entry.Revision == current.Revision) return entry.Equals(current);
+                if (entry.Revision == current.Revision)
+                {
+                    if (!entry.Equals(current)) return false;
+                    reportTimesUtc[entry.ControllerId] = utcNow();
+                    return true;
+                }
             }
 
             entries[entry.ControllerId] = entry;
+            reportTimesUtc[entry.ControllerId] = utcNow();
             return true;
         }
     }
@@ -97,7 +114,11 @@ public sealed class CampaignAuthorityAvailabilityCoordinator : ICampaignAuthorit
     public bool Remove(string controllerId)
     {
         if (string.IsNullOrWhiteSpace(controllerId)) return false;
-        lock (gate) return entries.Remove(controllerId);
+        lock (gate)
+        {
+            reportTimesUtc.Remove(controllerId);
+            return entries.Remove(controllerId);
+        }
     }
 
     public CampaignAvailabilityEntry[] Snapshot()
@@ -110,6 +131,19 @@ public sealed class CampaignAuthorityAvailabilityCoordinator : ICampaignAuthorit
         }
     }
 
-    public CampaignAuthoritySelection Select() =>
-        candidateSelector.Select(sessionIdentity.RoomHostControllerId, Snapshot());
+    public CampaignAuthoritySelection Select()
+    {
+        var now = utcNow();
+        CampaignAvailabilityEntry[] freshEntries;
+
+        lock (gate)
+        {
+            freshEntries = entries.Values
+                .Where(entry => reportTimesUtc.TryGetValue(entry.ControllerId, out var reportedAtUtc) &&
+                    now >= reportedAtUtc && now - reportedAtUtc <= reportTimeout)
+                .ToArray();
+        }
+
+        return candidateSelector.Select(sessionIdentity.RoomHostControllerId, freshEntries);
+    }
 }

@@ -1,6 +1,11 @@
 ﻿using HarmonyLib;
 using SandBox.View.Map;
 using Common;
+using Common.Messaging;
+using GameInterface.Services.Time.Messages;
+using System.Diagnostics;
+using System.Linq;
+using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.GameState;
 using TaleWorlds.Core;
 using TaleWorlds.MountAndBlade;
@@ -10,6 +15,17 @@ namespace GameInterface.Services.Time.Patches
     [HarmonyPatch(typeof(GameStateManager))]
     class GameStateManagerPatches
     {
+        private static GameStateManager observedStateManager;
+        private static bool? lastMapReadiness;
+        private static long lastReadinessPublishTimestamp;
+
+        internal static void ResetReadinessObservation()
+        {
+            observedStateManager = null;
+            lastMapReadiness = null;
+            lastReadinessPublishTimestamp = 0;
+        }
+
         // Prevents pausing in menus without their own game state (such as the encyclopedia)
         [HarmonyPatch(nameof(GameStateManager.RegisterActiveStateDisableRequest))]
         static bool Prefix() => ModInformation.IsListenAuthority;
@@ -47,6 +63,26 @@ namespace GameInterface.Services.Time.Patches
                     mapState.Handler = handler;
                 }
             }
+        }
+
+        [HarmonyPatch(nameof(GameStateManager.OnTick))]
+        [HarmonyPostfix]
+        static void ReadinessPostfix(GameStateManager __instance)
+        {
+            var states = __instance.GameStates;
+            bool mapReady = Campaign.Current != null &&
+                states.Any(state => state is MapState) &&
+                !states.Any(state => state is MissionState);
+            long timestamp = Stopwatch.GetTimestamp();
+            bool stateManagerChanged = !ReferenceEquals(observedStateManager, __instance);
+            bool readinessChanged = !lastMapReadiness.HasValue || lastMapReadiness.Value != mapReady;
+            bool heartbeatDue = timestamp - lastReadinessPublishTimestamp >= Stopwatch.Frequency;
+            if (!stateManagerChanged && !readinessChanged && !heartbeatDue) return;
+
+            observedStateManager = __instance;
+            lastMapReadiness = mapReady;
+            lastReadinessPublishTimestamp = timestamp;
+            MessageBroker.Instance.Publish(__instance, new CampaignMapSimulationReadinessChanged(mapReady));
         }
     }
 

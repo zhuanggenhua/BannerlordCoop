@@ -1,5 +1,6 @@
 ﻿using Coop.Core.Common.Session;
 using Xunit;
+using Common.Session;
 
 namespace Coop.Tests.Session;
 
@@ -84,6 +85,29 @@ public class CampaignAuthorityAvailabilityCoordinatorTests
         Assert.False(coordinator.Report("host", CampaignSimulationAvailability.MapReady, 0));
         Assert.False(coordinator.Report("host", (CampaignSimulationAvailability)99, 1));
         Assert.Empty(coordinator.Snapshot());
+    }
+
+    [Fact]
+    public void SelectExpiresControllersThatStopReporting()
+    {
+        var now = new System.DateTime(2026, 10, 18, 0, 0, 0, System.DateTimeKind.Utc);
+        var identity = new SessionIdentity();
+        Assert.True(identity.TrySetRoomHostControllerId("host"));
+        var coordinator = new CampaignAuthorityAvailabilityCoordinator(
+            identity,
+            new CampaignAuthorityCandidateSelector(),
+            () => now,
+            System.TimeSpan.FromSeconds(3));
+        Assert.True(coordinator.Report("host", CampaignSimulationAvailability.MapReady, 1));
+        Assert.True(coordinator.Report("guest", CampaignSimulationAvailability.MapReady, 1));
+
+        now = now.AddSeconds(4);
+        Assert.True(coordinator.Report("guest", CampaignSimulationAvailability.MapReady, 2));
+
+        Assert.Equal("guest", coordinator.Select().ControllerId);
+
+        now = now.AddSeconds(4);
+        Assert.True(coordinator.Select().IsPaused);
     }
 
     private static ICampaignAuthorityAvailabilityCoordinator CreateCoordinator(string roomHostControllerId)

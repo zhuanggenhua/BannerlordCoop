@@ -1,5 +1,6 @@
 ﻿using Common.Messaging;
 using GameInterface.Services.GameState.Messages;
+using GameInterface.Services.Time.Patches;
 using HarmonyLib;
 using SandBox.View.Map;
 using TaleWorlds.Core;
@@ -17,6 +18,7 @@ internal class GameLoadedPatch
         // I think this is because opening the escape menu is supposed to call this but it never opens here
         Game.Current.GameStateManager.UnregisterActiveStateDisableRequest(MapScreen.Instance);
 
-       MessageBroker.Instance.Publish(null, new CampaignReady());
+        GameStateManagerPatches.ResetReadinessObservation();
+        MessageBroker.Instance.Publish(null, new CampaignReady());
     }
 }

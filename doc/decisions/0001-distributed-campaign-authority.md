@@ -77,7 +77,7 @@ This permits duplicate NPC AI, random outcomes, recruitment, and economy writes.
 ## Implementation sequence
 
 1. Persist and distribute `RoomId`, current authority identity, and `Epoch`; add serialization and stale-epoch tests.
-2. Add explicit player simulation-availability messages and a deterministic eligibility/paused-lease coordinator on the room host.
+2. In progress: clients report map readiness after campaign catch-up and send a one-second heartbeat; the room host validates reports against the synchronized player/peer mapping, expires reports after three seconds, and selects the room host first or a deterministic ready fallback. This tracks candidates only; it does not transfer the campaign lease.
 3. Split the world-authority sync path from room relay direction. Carry lease epochs on authority deltas and time samples; keep the old role behavior as the default until the new path is fully wired.
 4. Add checkpoint/barrier handoff for two players, first with both on the campaign map. Verify A-to-B-to-A, stale messages, target disconnect, and aborted transfer before allowing mission availability to participate.
 5. Add host-in-Mission / B-on-Map takeover, all-players-unavailable pause, and resume after a player returns to Map. Compare world time, player/party identity, NPC positions and rosters, recruitment pools, and economy across replicas.
