@@ -43,6 +43,8 @@ Represent the campaign lease independently from local-player identity with:
 
 Every authority-originated world mutation and campaign-time sample must be accepted only for the current epoch. The relay rejects commands from stale epochs before applying or forwarding them. A room-host process is not automatically the campaign writer merely because it relays traffic.
 
+A paused world is represented by a confirmed lease with `IsPaused = true`, an empty authority controller, and a new authority id at a higher epoch. Replicas reject campaign-clock samples while that lease is active. A ListenHost with a confirmed lease skips `Campaign.RealTick` whenever the lease is paused or belongs to another controller. The room host may resume its own lease after it reports map readiness; it must not directly activate a remote candidate before a freeze-and-barrier handoff.
+
 Use a freeze-and-barrier handoff:
 
 1. The relay selects an eligible target and sends a prepare request with the next epoch. The target verifies that its campaign, object registry, local player mapping, and module build are ready.
@@ -80,6 +82,6 @@ This permits duplicate NPC AI, random outcomes, recruitment, and economy writes.
 
 1. Persist and distribute `RoomId`, current authority identity, and `Epoch`; add serialization and stale-epoch tests.
 2. Complete candidate tracking: clients report map readiness after campaign catch-up and send a one-second heartbeat; the room host validates reports against the synchronized player/peer mapping, expires reports after three seconds, and selects the room host first or a deterministic ready fallback. This tracks candidates only; it does not transfer the campaign lease.
-3. In progress: introduce an explicit local campaign-authority context. The campaign-time heartbeat now carries RoomId, AuthorityId, AuthorityControllerId, and Epoch, and replicas reject samples that do not match their confirmed lease. TownMarketData keeps its town association but excludes `_itemDict` from AutoSync so shop stock remains replica-local. These changes do not yet enable remote campaign ticks; world behavior replication and command routing still assume the current process roles.
+3. In progress: introduce an explicit local campaign-authority context. The campaign-time heartbeat now carries RoomId, AuthorityId, AuthorityControllerId, and Epoch, and replicas reject samples that do not match their confirmed lease. A paused lease is persisted and distributed, blocks campaign-time extrapolation and ListenHost `Campaign.RealTick`, and can be resumed locally when the room host returns to the map. TownMarketData keeps its town association but excludes `_itemDict` from AutoSync so shop stock remains replica-local. These changes do not yet enable remote campaign ticks; world behavior replication and command routing still assume the current process roles.
 4. Add checkpoint/barrier handoff for two players, first with both on the campaign map. Verify A-to-B-to-A, stale messages, target disconnect, and aborted transfer before allowing mission availability to participate.
 5. Add host-in-Mission / B-on-Map takeover, all-players-unavailable pause, and resume after a player returns to Map. Compare world time, player/party identity, NPC positions and rosters, recruitment pools, and economy across replicas.

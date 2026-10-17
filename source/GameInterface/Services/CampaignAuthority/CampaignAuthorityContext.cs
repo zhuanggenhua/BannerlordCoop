@@ -43,6 +43,7 @@ public sealed class CampaignAuthorityContext : ICampaignAuthorityContext
     public bool TryGetLocalAuthorityLease(out AuthorityLease lease)
     {
         if (!sessionIdentity.TryGetConfirmedLease(out lease)) return false;
+        if (lease.IsPaused) return false;
         if (ModInformation.IsDedicatedAuthority) return true;
 
         string controllerId = controllerIdProvider.ControllerId;

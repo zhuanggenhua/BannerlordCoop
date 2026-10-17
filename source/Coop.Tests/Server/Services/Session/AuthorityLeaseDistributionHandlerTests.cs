@@ -67,4 +67,22 @@ public class AuthorityLeaseDistributionHandlerTests
         Assert.Equal("controller-a", identity.AuthorityControllerId);
         Assert.Equal(1, identity.Epoch);
     }
+
+    [Fact]
+    public void Client_AppliesPausedLeaseAndRejectsPreviousActiveLease()
+    {
+        var messageBroker = new TestMessageBroker();
+        var identity = new SessionIdentity();
+        using var handler = new AuthorityLeaseSnapshotHandler(messageBroker, identity);
+        var activeLease = new AuthorityLease("room-a", "authority-a", "controller-a", 1);
+        messageBroker.Publish(this, new NetworkAuthorityLeaseSnapshot(activeLease, "controller-a"));
+
+        var pausedLease = new AuthorityLease("room-a", "authority-paused", string.Empty, 2, isPaused: true);
+        messageBroker.Publish(this, new NetworkAuthorityLeaseSnapshot(pausedLease, "controller-a"));
+        messageBroker.Publish(this, new NetworkAuthorityLeaseSnapshot(activeLease, "controller-a"));
+
+        Assert.Equal(pausedLease, identity.CurrentLease);
+        Assert.True(identity.CurrentLease.IsPaused);
+        Assert.Equal(2, identity.Epoch);
+    }
 }

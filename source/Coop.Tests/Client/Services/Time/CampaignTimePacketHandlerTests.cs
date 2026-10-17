@@ -85,6 +85,24 @@ public class CampaignTimePacketHandlerTests
         Assert.Empty(broker.GetMessagesFromType<CampaignTimeSampleReceived>());
     }
 
+    [Fact]
+    public void CampaignTimePacket_RejectsEvenMatchingPausedLease()
+    {
+        var broker = new TestMessageBroker();
+        var packetManager = new Mock<IPacketManager>();
+        var mapTimeTracker = new Mock<IMapTimeTrackerInterface>();
+        var pausedLease = new AuthorityLease("room-a", "authority-paused", string.Empty, 3, isPaused: true);
+        var identity = new SessionIdentity();
+        Assert.True(identity.TryApply(pausedLease));
+        var handler = new CampaignTimePacketHandler(
+            broker, packetManager.Object, mapTimeTracker.Object, identity);
+
+        handler.HandlePacket(null, new CampaignTimePacket(123456L, -1, pausedLease));
+
+        mapTimeTracker.Verify(m => m.SyncCampaignTime(It.IsAny<long>(), It.IsAny<float>()), Times.Never);
+        Assert.Empty(broker.GetMessagesFromType<CampaignTimeSampleReceived>());
+    }
+
     private static SessionIdentity CreateConfirmedIdentity()
     {
         var identity = new SessionIdentity();

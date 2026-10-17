@@ -17,6 +17,8 @@ public readonly struct NetworkAuthorityLeaseSnapshot : IServerToClientCommand
     public readonly long Epoch;
     [ProtoMember(5)]
     public readonly string RoomHostControllerId;
+    [ProtoMember(6)]
+    public readonly bool IsPaused;
 
     public NetworkAuthorityLeaseSnapshot(AuthorityLease lease, string roomHostControllerId = null)
     {
@@ -25,7 +27,9 @@ public readonly struct NetworkAuthorityLeaseSnapshot : IServerToClientCommand
         AuthorityControllerId = lease.AuthorityControllerId;
         Epoch = lease.Epoch;
         RoomHostControllerId = roomHostControllerId ?? string.Empty;
+        IsPaused = lease.IsPaused;
     }
 
-    public AuthorityLease ToLease() => new AuthorityLease(RoomId, AuthorityId, AuthorityControllerId, Epoch);
+    public AuthorityLease ToLease() =>
+        new AuthorityLease(RoomId, AuthorityId, AuthorityControllerId, Epoch, IsPaused);
 }

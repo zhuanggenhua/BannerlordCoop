@@ -36,6 +36,20 @@ public class CampaignTimePacingPatchTests
         Assert.True(CampaignTimePacingPatches.ShouldApplyClientSimulationTime(true, true, authority.Object));
     }
 
+    [Fact]
+    public void PausedLeaseDoesNotExtrapolateCampaignTime()
+    {
+        var authority = new Mock<ICampaignAuthorityContext>();
+        authority.Setup(context => context.TryGetLocalAuthorityLease(out It.Ref<AuthorityLease>.IsAny))
+            .Returns((out AuthorityLease lease) =>
+            {
+                lease = new AuthorityLease("room-a", "authority-paused", string.Empty, 2, isPaused: true);
+                return false;
+            });
+
+        Assert.False(CampaignTimePacingPatches.ShouldApplyClientSimulationTime(true, true, authority.Object));
+    }
+
     [Theory]
     [InlineData(true, false)]
     [InlineData(false, true)]

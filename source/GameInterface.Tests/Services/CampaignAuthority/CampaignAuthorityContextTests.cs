@@ -53,4 +53,27 @@ public class CampaignAuthorityContextTests
             ModInformation.SessionMode = previousMode;
         }
     }
+
+    [Fact]
+    public void PausedLeaseGrantsNoCampaignAuthorityEvenToDedicatedProcess()
+    {
+        var previousMode = ModInformation.SessionMode;
+        try
+        {
+            ModInformation.SessionMode = SessionMode.DedicatedAuthority;
+            var identity = new SessionIdentity();
+            Assert.True(identity.TryApply(
+                new AuthorityLease("room-a", "authority-paused", string.Empty, 2, isPaused: true)));
+            var controller = new ControllerIdProvider();
+            controller.SetControllerId("controller-a");
+            var context = new CampaignAuthorityContext(identity, controller);
+
+            Assert.True(context.IsAuthorityKnown);
+            Assert.False(context.IsLocalCampaignAuthority);
+        }
+        finally
+        {
+            ModInformation.SessionMode = previousMode;
+        }
+    }
 }

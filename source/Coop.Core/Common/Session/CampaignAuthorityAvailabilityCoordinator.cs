@@ -47,6 +47,7 @@ public interface ICampaignAuthorityAvailabilityCoordinator
 {
     bool Report(string controllerId, CampaignSimulationAvailability availability, long revision);
     bool Remove(string controllerId);
+    bool IsFreshMapReady(string controllerId);
     CampaignAvailabilityEntry[] Snapshot();
     CampaignAuthoritySelection Select();
 }
@@ -128,6 +129,20 @@ public sealed class CampaignAuthorityAvailabilityCoordinator : ICampaignAuthorit
             return entries.Values
                 .OrderBy(entry => entry.ControllerId, StringComparer.Ordinal)
                 .ToArray();
+        }
+    }
+
+    public bool IsFreshMapReady(string controllerId)
+    {
+        if (string.IsNullOrWhiteSpace(controllerId)) return false;
+
+        var now = utcNow();
+        lock (gate)
+        {
+            return entries.TryGetValue(controllerId, out var entry) &&
+                entry.Availability == CampaignSimulationAvailability.MapReady &&
+                reportTimesUtc.TryGetValue(controllerId, out var reportedAtUtc) &&
+                now >= reportedAtUtc && now - reportedAtUtc <= reportTimeout;
         }
     }
 

@@ -8,6 +8,7 @@ using Coop.Core.Common.Session;
 using Coop.Core.Server.Connections;
 using Coop.Core.Server.Services.Session;
 using Coop.Tests.Mocks;
+using Common.Network;
 using GameInterface.Services.Entity;
 using GameInterface.Services.GameState.Messages;
 using GameInterface.Services.Players;
@@ -21,6 +22,120 @@ namespace Coop.Tests.Server.Services.Session;
 [Collection(ModInformationRoleCollection.Name)]
 public class CampaignSimulationAvailabilityServerHandlerTests
 {
+    [Fact]
+    public void StaleReadinessHeartbeatPausesTheLocalHostLease()
+    {
+        var previousMode = ModInformation.SessionMode;
+        ModInformation.SessionMode = SessionMode.ListenAuthority;
+        try
+        {
+            var now = new System.DateTime(2026, 10, 18, 0, 0, 0, System.DateTimeKind.Utc);
+            var messageBroker = new TestMessageBroker();
+            var identity = new SessionIdentity();
+            Assert.True(identity.TryApply(new AuthorityLease("room-a", "authority-a", "host", 1), "host"));
+            var coordinator = new CampaignAuthorityAvailabilityCoordinator(
+                identity,
+                new CampaignAuthorityCandidateSelector(),
+                () => now,
+                System.TimeSpan.FromSeconds(3));
+            var hostPlayer = new Player("host", "hero-host", "party-host", "clan-host", "character-host");
+            var playerManager = new Mock<IPlayerManager>();
+            playerManager.Setup(manager => manager.TryGetPlayer("host", out hostPlayer)).Returns(true);
+            var connections = new Mock<IConnectionCollection>();
+            var controllerId = new ControllerIdProvider();
+            controllerId.SetControllerId("host");
+            var network = new Mock<INetwork>();
+
+            using var handler = new CampaignSimulationAvailabilityServerHandler(
+                messageBroker,
+                coordinator,
+                connections.Object,
+                playerManager.Object,
+                controllerId,
+                network.Object,
+                identity);
+
+            messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
+            messageBroker.Publish(this, new CampaignReady());
+            Assert.True(coordinator.IsFreshMapReady("host"));
+
+            now = now.AddSeconds(4);
+            handler.ReconcileCurrentAvailability();
+
+            Assert.True(identity.CurrentLease.IsPaused);
+            Assert.Equal(2, identity.Epoch);
+            network.Verify(value => value.SendAll(It.Is<NetworkAuthorityLeaseSnapshot>(
+                snapshot => snapshot.IsPaused && snapshot.Epoch == 2)), Times.Once);
+        }
+        finally
+        {
+            ModInformation.SessionMode = previousMode;
+        }
+    }
+
+    [Fact]
+    public void ListenAuthorityCommitsAndReplicatesPausedLeaseThenResumesHostAtANewerEpoch()
+    {
+        var previousMode = ModInformation.SessionMode;
+        ModInformation.SessionMode = SessionMode.ListenAuthority;
+        try
+        {
+            var messageBroker = new TestMessageBroker();
+            var identity = new SessionIdentity();
+            Assert.True(identity.TryApply(new AuthorityLease("room-a", "authority-a", "host", 1), "host"));
+            var coordinator = new CampaignAuthorityAvailabilityCoordinator(
+                identity,
+                new CampaignAuthorityCandidateSelector());
+            var guestPeer = new TestNetwork().CreatePeer();
+            var hostPlayer = new Player("host", "hero-host", "party-host", "clan-host", "character-host");
+            var guestPlayer = new Player("guest", "hero-guest", "party-guest", "clan-guest", "character-guest");
+            var playerManager = new Mock<IPlayerManager>();
+            playerManager.Setup(manager => manager.TryGetPlayer("host", out hostPlayer)).Returns(true);
+            playerManager.Setup(manager => manager.TryGetPlayer(guestPeer, out guestPlayer)).Returns(true);
+            var connections = new Mock<IConnectionCollection>();
+            connections.Setup(value => value.HasCompletedCampaignSynchronization(guestPeer)).Returns(true);
+            var controllerId = new ControllerIdProvider();
+            controllerId.SetControllerId("host");
+            var network = new Mock<INetwork>();
+
+            using var handler = new CampaignSimulationAvailabilityServerHandler(
+                messageBroker,
+                coordinator,
+                connections.Object,
+                playerManager.Object,
+                controllerId,
+                network.Object,
+                identity);
+
+            messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
+            messageBroker.Publish(this, new CampaignReady());
+            messageBroker.Publish(guestPeer, new NetworkCampaignSimulationAvailabilityReport(
+                CampaignSimulationAvailability.MapReady,
+                1));
+            Assert.Equal(1, identity.Epoch);
+
+            messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(false));
+
+            Assert.True(identity.CurrentLease.IsPaused);
+            Assert.Equal(2, identity.Epoch);
+            Assert.Equal("guest", coordinator.Select().ControllerId);
+            network.Verify(value => value.SendAll(It.Is<NetworkAuthorityLeaseSnapshot>(
+                snapshot => snapshot.IsPaused && snapshot.Epoch == 2)), Times.Once);
+
+            messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
+
+            Assert.False(identity.CurrentLease.IsPaused);
+            Assert.Equal("host", identity.AuthorityControllerId);
+            Assert.Equal(3, identity.Epoch);
+            network.Verify(value => value.SendAll(It.Is<NetworkAuthorityLeaseSnapshot>(
+                snapshot => !snapshot.IsPaused && snapshot.AuthorityControllerId == "host" && snapshot.Epoch == 3)), Times.Once);
+        }
+        finally
+        {
+            ModInformation.SessionMode = previousMode;
+        }
+    }
+
     [Fact]
     public void ListenAuthorityPrefersHostThenGuestAndPausesAfterGuestDisconnects()
     {

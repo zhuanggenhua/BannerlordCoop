@@ -110,6 +110,24 @@ public class CampaignAuthorityAvailabilityCoordinatorTests
         Assert.True(coordinator.Select().IsPaused);
     }
 
+    [Fact]
+    public void FreshMapReadinessExpiresBeforeItCanBeUsedForPromotion()
+    {
+        var now = new System.DateTime(2026, 10, 18, 0, 0, 0, System.DateTimeKind.Utc);
+        var identity = new SessionIdentity();
+        var coordinator = new CampaignAuthorityAvailabilityCoordinator(
+            identity,
+            new CampaignAuthorityCandidateSelector(),
+            () => now,
+            System.TimeSpan.FromSeconds(3));
+        Assert.True(coordinator.Report("guest", CampaignSimulationAvailability.MapReady, 1));
+
+        Assert.True(coordinator.IsFreshMapReady("guest"));
+        now = now.AddSeconds(4);
+        Assert.False(coordinator.IsFreshMapReady("guest"));
+        Assert.False(coordinator.IsFreshMapReady("missing"));
+    }
+
     private static ICampaignAuthorityAvailabilityCoordinator CreateCoordinator(string roomHostControllerId)
     {
         var identity = new SessionIdentity();

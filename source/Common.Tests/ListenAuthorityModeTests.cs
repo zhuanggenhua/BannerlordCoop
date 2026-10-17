@@ -93,6 +93,35 @@ public class ListenAuthorityModeTests
     }
 
     [Fact]
+    public void PausedLeaseHasNoWriterAndCanResumeOnlyAtANewerEpoch()
+    {
+        var identity = new SessionIdentity();
+        var active = new AuthorityLease("room-a", "authority-a", "controller-a", 1);
+        var paused = new AuthorityLease("room-a", "authority-paused", string.Empty, 2, isPaused: true);
+
+        Assert.True(identity.TryApply(active));
+        Assert.True(identity.TryApply(paused));
+        Assert.True(identity.TryGetConfirmedLease(out var current));
+        Assert.Equal(paused, current);
+        Assert.False(identity.TrySetAuthorityControllerId("controller-b"));
+        Assert.False(identity.TryApply(active));
+
+        var resumed = new AuthorityLease("room-a", "authority-b", "controller-b", 3);
+        Assert.True(identity.TryApply(resumed));
+        Assert.Equal(resumed, identity.CurrentLease);
+    }
+
+    [Fact]
+    public void PausedLeaseCannotNameAWriterWhileDedicatedLeaseCanUseProcessIdentity()
+    {
+        var pausedWithWriter = new AuthorityLease("room-a", "authority-paused", "controller-a", 2, isPaused: true);
+        var dedicated = new AuthorityLease("room-a", "authority-dedicated", string.Empty, 1);
+
+        Assert.False(pausedWithWriter.IsValid);
+        Assert.True(dedicated.IsValid);
+    }
+
+    [Fact]
     public void LocalAuthorityControllerCanBeSetOnceWithoutChangingLeaseEpoch()
     {
         var identity = new SessionIdentity();

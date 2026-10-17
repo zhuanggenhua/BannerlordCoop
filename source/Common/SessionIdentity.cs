@@ -26,23 +26,32 @@ public readonly struct AuthorityLease : IEquatable<AuthorityLease>
     public string AuthorityId { get; }
     public string AuthorityControllerId { get; }
     public long Epoch { get; }
+    public bool IsPaused { get; }
 
-    public AuthorityLease(string roomId, string authorityId, string authorityControllerId, long epoch)
+    public AuthorityLease(
+        string roomId,
+        string authorityId,
+        string authorityControllerId,
+        long epoch,
+        bool isPaused = false)
     {
         RoomId = roomId ?? string.Empty;
         AuthorityId = authorityId ?? string.Empty;
         AuthorityControllerId = authorityControllerId ?? string.Empty;
         Epoch = epoch;
+        IsPaused = isPaused;
     }
 
     public bool IsValid => !string.IsNullOrWhiteSpace(RoomId) &&
-        !string.IsNullOrWhiteSpace(AuthorityId) && Epoch > 0;
+        !string.IsNullOrWhiteSpace(AuthorityId) && Epoch > 0 &&
+        (!IsPaused || string.IsNullOrWhiteSpace(AuthorityControllerId));
 
     public bool Equals(AuthorityLease other) =>
         string.Equals(RoomId, other.RoomId, StringComparison.Ordinal) &&
         string.Equals(AuthorityId, other.AuthorityId, StringComparison.Ordinal) &&
         string.Equals(AuthorityControllerId, other.AuthorityControllerId, StringComparison.Ordinal) &&
-        Epoch == other.Epoch;
+        Epoch == other.Epoch &&
+        IsPaused == other.IsPaused;
 
     public override bool Equals(object obj) => obj is AuthorityLease other && Equals(other);
     public override int GetHashCode()
@@ -52,7 +61,8 @@ public readonly struct AuthorityLease : IEquatable<AuthorityLease>
             int hash = RoomId?.GetHashCode() ?? 0;
             hash = (hash * 397) ^ (AuthorityId?.GetHashCode() ?? 0);
             hash = (hash * 397) ^ (AuthorityControllerId?.GetHashCode() ?? 0);
-            return (hash * 397) ^ Epoch.GetHashCode();
+            hash = (hash * 397) ^ Epoch.GetHashCode();
+            return (hash * 397) ^ IsPaused.GetHashCode();
         }
     }
     public static bool operator ==(AuthorityLease left, AuthorityLease right) => left.Equals(right);
@@ -156,6 +166,7 @@ public sealed class SessionIdentity : ISessionIdentity
 
         lock (gate)
         {
+            if (currentLease.IsPaused) return false;
             if (string.Equals(currentLease.AuthorityControllerId, controllerId, StringComparison.Ordinal))
                 return true;
 
@@ -165,7 +176,8 @@ public sealed class SessionIdentity : ISessionIdentity
                 currentLease.RoomId,
                 currentLease.AuthorityId,
                 controllerId,
-                currentLease.Epoch);
+                currentLease.Epoch,
+                currentLease.IsPaused);
             return true;
         }
     }

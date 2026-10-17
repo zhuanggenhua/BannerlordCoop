@@ -36,6 +36,20 @@ public class MapStatePatchTests
     }
 
     [Fact]
+    public void ListenAuthoritySkipsMapTickForPausedLease()
+    {
+        var authority = new Mock<ICampaignAuthorityContext>();
+        authority.Setup(context => context.TryGetLocalAuthorityLease(out It.Ref<AuthorityLease>.IsAny))
+            .Returns((out AuthorityLease lease) =>
+            {
+                lease = new AuthorityLease("room-a", "authority-paused", string.Empty, 2, isPaused: true);
+                return false;
+            });
+
+        Assert.False(MapStatePatch.ShouldTickMapMode(true, true, authority.Object));
+    }
+
+    [Fact]
     public void OtherModesKeepTheirExistingMapTickPath()
     {
         Assert.True(MapStatePatch.ShouldTickMapMode(false, false, null));

@@ -100,6 +100,25 @@ public class SaveGameHandlerTests
     }
 
     [Fact]
+    public void GameSaved_PersistsPausedAuthorityLease()
+    {
+        var messageBroker = new TestMessageBroker();
+        var saveManager = new StubSaveManager(null!);
+        var identity = new SessionIdentity();
+        var lease = new AuthorityLease("room-a", "authority-paused", string.Empty, 2, isPaused: true);
+        Assert.True(identity.TryRestore(lease));
+        Assert.True(identity.TrySetRoomHostControllerId("room-host-a"));
+        using var handler = CreateSavingHandler(messageBroker, saveManager, sessionIdentity: identity);
+
+        messageBroker.Publish(new object(), new GameSaved(SaveName));
+
+        Assert.True(saveManager.SavedSession.AuthorityPaused);
+        Assert.Equal(lease.AuthorityId, saveManager.SavedSession.AuthorityId);
+        Assert.Equal(lease.Epoch, saveManager.SavedSession.AuthorityEpoch);
+        Assert.Equal(string.Empty, saveManager.SavedSession.AuthorityControllerId);
+    }
+
+    [Fact]
     public void GameSaved_PreservesSavedRoomHostWhenIdentityHasNoRoomHost()
     {
         var messageBroker = new TestMessageBroker();
@@ -147,6 +166,29 @@ public class SaveGameHandlerTests
         Assert.Equal(lease, identity.CurrentLease);
         Assert.True(identity.IsConfirmed);
         Assert.Equal("room-host-a", identity.RoomHostControllerId);
+    }
+
+    [Fact]
+    public void GameLoaded_RestoresPausedAuthorityLease()
+    {
+        var messageBroker = new TestMessageBroker();
+        var lease = new AuthorityLease("room-a", "authority-paused", string.Empty, 2, isPaused: true);
+        var identity = new SessionIdentity();
+        using var handler = new SaveGameHandler(
+            messageBroker,
+            new StubSaveManager(SessionWith(Array.Empty<Player>(), lease, "room-host-a")),
+            new Mock<ICoopSessionProvider>().Object,
+            new Mock<IPlayerManager>().Object,
+            new Mock<IPlayerPartyRestorer>().Object,
+            new Mock<INetwork>().Object,
+            new Mock<IObjectManager>().Object,
+            identity);
+
+        messageBroker.Publish(new object(), new GameLoaded(SaveName));
+
+        Assert.Equal(lease, identity.CurrentLease);
+        Assert.True(identity.CurrentLease.IsPaused);
+        Assert.True(identity.IsConfirmed);
     }
 
     [Fact]
@@ -443,6 +485,7 @@ public class SaveGameHandlerTests
             authorityId: lease?.AuthorityId,
             authorityControllerId: lease?.AuthorityControllerId,
             authorityEpoch: lease?.Epoch ?? 0,
-            roomHostControllerId: roomHostControllerId);
+            roomHostControllerId: roomHostControllerId,
+            authorityPaused: lease?.IsPaused ?? false);
     }
 }

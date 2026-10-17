@@ -67,6 +67,7 @@ public sealed class ListenAuthorityStateCommand : ICoopCommand
         players.TryGetPlayer(controller.ControllerId, out var local);
         return new CoopCommandResult(true,
             $"mode={ModInformation.SessionMode}|room={identity.RoomId}|authority={identity.AuthorityId}|local={controller.ControllerId}" +
+            $"|authorityController={identity.AuthorityControllerId}|epoch={identity.Epoch}|leasePaused={identity.CurrentLease.IsPaused}" +
             $"|campaign={Campaign.Current.GetHashCode()}|hero={hero?.StringId}|party={party?.StringId}|clan={hero?.Clan?.StringId}" +
             $"|players={players.Players.Count}|localConnected={players.IsConnected(local)}|localPeer={players.TryGetPeer(controller.ControllerId, out _)}" +
             $"|localHeroRegistrations={players.Players.Count(p => p.HeroId == local?.HeroId)}|localPartyRegistrations={players.Players.Count(p => p.MobilePartyId == local?.MobilePartyId)}" +

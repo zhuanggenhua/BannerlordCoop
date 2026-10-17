@@ -100,6 +100,7 @@ internal class CampaignTimePacingPatches
         if (authorityContextAvailable)
         {
             bool localAuthority = authorityContext.TryGetLocalAuthorityLease(out var lease);
+            if (lease.IsPaused) return false;
             if (lease.IsValid) return !localAuthority;
         }
 

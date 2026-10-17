@@ -54,6 +54,7 @@ public readonly struct CampaignTimePacket : IPacket
 
     public bool Matches(AuthorityLease lease) =>
         lease.IsValid &&
+        !lease.IsPaused &&
         Epoch == lease.Epoch &&
         string.Equals(RoomId, lease.RoomId, StringComparison.Ordinal) &&
         string.Equals(AuthorityId, lease.AuthorityId, StringComparison.Ordinal) &&

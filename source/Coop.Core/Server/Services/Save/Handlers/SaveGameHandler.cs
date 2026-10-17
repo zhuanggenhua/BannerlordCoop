@@ -132,7 +132,8 @@ internal class SaveGameHandler : IHandler
             lease?.Epoch ?? current?.AuthorityEpoch ?? 0,
             string.IsNullOrWhiteSpace(sessionIdentity?.RoomHostControllerId)
                 ? current?.RoomHostControllerId
-                : sessionIdentity.RoomHostControllerId);
+                : sessionIdentity.RoomHostControllerId,
+            lease?.IsPaused ?? current?.AuthorityPaused ?? false);
 
         coopSessionProvider.CoopSession = session;
 
@@ -162,13 +163,15 @@ internal class SaveGameHandler : IHandler
             loaded?.AuthorityId,
             loaded?.AuthorityControllerId,
             loaded?.AuthorityEpoch ?? 0,
-            loaded?.RoomHostControllerId);
+            loaded?.RoomHostControllerId,
+            loaded?.AuthorityPaused ?? false);
 
         var savedLease = new AuthorityLease(
             savedSession.RoomId,
             savedSession.AuthorityId,
             savedSession.AuthorityControllerId,
-            savedSession.AuthorityEpoch);
+            savedSession.AuthorityEpoch,
+            savedSession.AuthorityPaused);
         bool restoredLease = sessionIdentity != null && savedSession.AuthorityEpoch > 0 &&
             sessionIdentity.TryRestore(savedLease, savedSession.RoomHostControllerId);
         if (sessionIdentity != null && savedSession.AuthorityEpoch > 0 && !restoredLease)
