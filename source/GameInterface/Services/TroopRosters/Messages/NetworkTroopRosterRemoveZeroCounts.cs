@@ -8,7 +8,7 @@ namespace GameInterface.Services.TroopRosters.Messages;
 /// Roster-level, so it needs no per-character identity.
 /// </summary>
 [ProtoContract(SkipConstructor = true)]
-internal readonly struct NetworkTroopRosterRemoveZeroCounts : ICommand
+internal readonly struct NetworkTroopRosterRemoveZeroCounts : ICommand, ICampaignAuthorityScopedMessage
 {
     [ProtoMember(1)]
     public readonly uint RosterId;

@@ -3,6 +3,7 @@ using Common.Logging;
 using Common.Messaging;
 using Common.Util;
 using GameInterface.Policies;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.ObjectManager;
 using GameInterface.Services.TroopRosters.Messages;
 using HarmonyLib;
@@ -67,7 +68,7 @@ internal class TroopRosterPatches
         }
 
         if (CallOriginalPolicy.IsOriginalAllowed()) return true;
-        if (ModInformation.IsClient)
+        if (CallOriginalPolicy.IsClientMutationBlocked())
         {
             if (ShouldReportClientMutation(ModInformation.IsClient, IsRegistered(__instance)))
                 Logger.Error("Client attempted to {methodName} on a managed {type}", nameof(TroopRoster.AddToCountsAtIndex), typeof(TroopRoster));
@@ -99,7 +100,7 @@ internal class TroopRosterPatches
     private static void PrefixRemoveZeroCounts(TroopRoster __instance)
     {
         if (CallOriginalPolicy.IsOriginalAllowed()) return;
-        if (ModInformation.IsClient)
+        if (CallOriginalPolicy.IsClientMutationBlocked())
         {
             if (ShouldReportClientMutation(ModInformation.IsClient, IsRegistered(__instance)))
                 Logger.Error("Client attempted to {methodName} on a managed {type}", nameof(TroopRoster.RemoveZeroCounts), typeof(TroopRoster));
@@ -116,7 +117,7 @@ internal class TroopRosterPatches
     private static void PostfixRemoveZeroCounts(TroopRoster __instance)
     {
         if (CallOriginalPolicy.IsOriginalAllowed()) return;
-        if (ModInformation.IsClient) return;
+        if (CallOriginalPolicy.IsClientMutationBlocked()) return;
         if (!IsRegistered(__instance)) return;
 
         __instance.InitializeCachedData();
@@ -127,7 +128,7 @@ internal class TroopRosterPatches
     private static void PrefixSetElementNumber(TroopRoster __instance, int index, int number)
     {
         if (CallOriginalPolicy.IsOriginalAllowed()) return;
-        if (ModInformation.IsClient)
+        if (CallOriginalPolicy.IsClientMutationBlocked())
         {
             if (ShouldReportClientMutation(ModInformation.IsClient, IsRegistered(__instance)))
                 Logger.Error("Client attempted to {methodName} on a managed {type}", nameof(TroopRoster.SetElementNumber), typeof(TroopRoster));
@@ -149,7 +150,7 @@ internal class TroopRosterPatches
     private static void PostfixSetElementNumber(TroopRoster __instance)
     {
         if (CallOriginalPolicy.IsOriginalAllowed()) return;
-        if (ModInformation.IsClient) return;
+        if (CallOriginalPolicy.IsClientMutationBlocked()) return;
         if (!IsRegistered(__instance)) return;
 
         // SetElementNumber overwrites the element without updating cached totals.
@@ -161,7 +162,7 @@ internal class TroopRosterPatches
     private static void PrefixSetElementWoundedNumber(TroopRoster __instance, int index, int number)
     {
         if (CallOriginalPolicy.IsOriginalAllowed()) return;
-        if (ModInformation.IsClient)
+        if (CallOriginalPolicy.IsClientMutationBlocked())
         {
             if (ShouldReportClientMutation(ModInformation.IsClient, IsRegistered(__instance)))
                 Logger.Error("Client attempted to {methodName} on a managed {type}", nameof(TroopRoster.SetElementWoundedNumber), typeof(TroopRoster));
@@ -181,7 +182,7 @@ internal class TroopRosterPatches
     private static void PostfixSetElementWoundedNumber(TroopRoster __instance)
     {
         if (CallOriginalPolicy.IsOriginalAllowed()) return;
-        if (ModInformation.IsClient) return;
+        if (CallOriginalPolicy.IsClientMutationBlocked()) return;
         if (!IsRegistered(__instance)) return;
 
         // SetElementWoundedNumber overwrites the element without updating cached totals.
@@ -193,7 +194,7 @@ internal class TroopRosterPatches
     private static void PrefixSetElementXp(TroopRoster __instance, int index, int number)
     {
         if (CallOriginalPolicy.IsOriginalAllowed()) return;
-        if (ModInformation.IsClient)
+        if (CallOriginalPolicy.IsClientMutationBlocked())
         {
             if (ShouldReportClientMutation(ModInformation.IsClient, IsRegistered(__instance)))
                 Logger.Error("Client attempted to {methodName} on a managed {type}", nameof(TroopRoster.SetElementXp), typeof(TroopRoster));
@@ -241,7 +242,8 @@ internal class TroopRosterAddToCountsPatch
     {
         if (!__state) return;
         if (!AllowedThread.IsThisThreadAllowed()) return;
-        if (ModInformation.IsClient) return;
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return;
+        if (CallOriginalPolicy.IsClientMutationBlocked()) return;
         if (__instance == null || character == null) return;
         if (!TroopRosterPatches.IsRegistered(__instance)) return;
 

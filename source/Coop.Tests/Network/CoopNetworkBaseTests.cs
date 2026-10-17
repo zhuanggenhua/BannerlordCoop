@@ -6,10 +6,13 @@ using Common.Network.Session;
 using Common.Session;
 using Coop.Tests.Extensions;
 using Coop.Core.Common.Network;
+using Coop.Core.Client.Services.TroopRosters.Messages;
 using Coop.Core.Server.Services.MobileParties.Packets;
 using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.MobileParties.Messages.Behavior;
 using GameInterface.Services.MobileParties.Data;
+using GameInterface.Services.MobileParties.Messages;
+using GameInterface.Services.TroopRosters.Messages;
 using GameInterface.Surrogates;
 using LiteNetLib;
 using Moq;
@@ -101,6 +104,76 @@ public class CoopNetworkBaseTests
         Assert.Equal(11, roundTrip.RequestSequence);
         Assert.Equal(42u, roundTrip.BehaviorUpdateData.MobilePartyId);
         Assert.False(roundTrip.MatchesLease(new AuthorityLease("room-a", "authority-b", "controller-b", 4)));
+    }
+
+    [Fact]
+    public void RecruitmentRequestAndAuthorityCommand_RoundTripWithLeaseAndTroopSelection()
+    {
+        _ = new SurrogateCollection();
+        var lease = new AuthorityLease("room-a", "authority-b", "controller-b", 5);
+        var troops = new[] { new TroopInfo("hero-a", "troop-a", 2) };
+        var request = new ClientRequestRecruitment("party-a", troops, requestSequence: 11, lease: lease);
+        using var requestStream = new MemoryStream();
+        Serializer.Serialize(requestStream, request);
+        requestStream.Position = 0;
+        var requestRoundTrip = Serializer.Deserialize<ClientRequestRecruitment>(requestStream);
+
+        Assert.True(requestRoundTrip.MatchesLease(lease));
+        Assert.Equal(11, requestRoundTrip.RequestSequence);
+        Assert.Equal("party-a", requestRoundTrip.MobilePartyId);
+        Assert.Equal("troop-a", Assert.Single(requestRoundTrip.TroopsInCart).CharacterObjectId);
+
+        var command = new NetworkCampaignAuthorityRecruitmentCommand(
+            lease, 3, "controller-a", "party-a", troops);
+        using var commandStream = new MemoryStream();
+        Serializer.Serialize(commandStream, command);
+        commandStream.Position = 0;
+        var commandRoundTrip = Serializer.Deserialize<NetworkCampaignAuthorityRecruitmentCommand>(commandStream);
+
+        Assert.True(commandRoundTrip.Matches(lease));
+        Assert.Equal(3, commandRoundTrip.Sequence);
+        Assert.Equal("controller-a", commandRoundTrip.OriginControllerId);
+        Assert.Equal("troop-a", Assert.Single(commandRoundTrip.TroopsInCart).CharacterObjectId);
+    }
+
+    [Fact]
+    public void RecruitmentRosterAndVolunteerResultsUseAuthorityLeaseEnvelopes()
+    {
+        _ = new SurrogateCollection();
+        var config = Mock.Of<INetworkConfig>();
+        var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
+        var batcher = new ReliableMessageBatcher<NetPeer>(serializer);
+        using var cancellation = new CancellationTokenSource();
+        var authorityContext = new Mock<ICampaignAuthorityContext>();
+        var lease = new AuthorityLease("room-a", "authority-b", "controller-b", 5);
+        authorityContext.Setup(context => context.TryGetLocalAuthorityLease(out It.Ref<AuthorityLease>.IsAny))
+            .Returns((out AuthorityLease current) =>
+            {
+                current = lease;
+                return true;
+            });
+        using var network = new TestNetwork(config, serializer, batcher, cancellation, authorityContext.Object);
+
+        network.SendAll(new NetworkTroopRosterElementBatch(
+            rosterId: 7,
+            characterId: 9,
+            operations: new[] { TroopRosterElementOperation.AddCounts(1, 0, 0, removeDepleted: true) }));
+        var rosterEnvelope = DeserializeEnvelope(network.LastBroadcast, serializer);
+        var rosterDelta = Assert.IsType<NetworkTroopRosterElementBatch>(
+            serializer.Deserialize<IMessage>(rosterEnvelope.Payload));
+        Assert.Equal(lease.Epoch, rosterEnvelope.Epoch);
+        Assert.Equal(7u, rosterDelta.RosterId);
+        Assert.Equal(1, Assert.Single(rosterDelta.Operations).Count);
+
+        network.SendAll(new UpdateVolunteers(new System.Collections.Generic.Dictionary<uint, uint[]>
+        {
+            [17] = new uint[] { 0, 42 },
+        }));
+        var volunteerEnvelope = DeserializeEnvelope(network.LastBroadcast, serializer);
+        var volunteerDelta = Assert.IsType<UpdateVolunteers>(
+            serializer.Deserialize<IMessage>(volunteerEnvelope.Payload));
+        Assert.Equal(lease.Epoch, volunteerEnvelope.Epoch);
+        Assert.Equal(new uint[] { 0, 42 }, volunteerDelta.UpdatedVolunteerTypeIds[17]);
     }
 
     [Fact]

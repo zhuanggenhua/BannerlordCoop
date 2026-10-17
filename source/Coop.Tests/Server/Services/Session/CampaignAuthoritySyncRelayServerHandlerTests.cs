@@ -12,6 +12,7 @@ using GameInterface.Services.Players;
 using GameInterface.Services.Players.Data;
 using GameInterface.Services.MobileParties.Data;
 using GameInterface.Services.MobileParties.Messages.Behavior;
+using GameInterface.Services.TroopRosters.Messages;
 using GameInterface.Surrogates;
 using LiteNetLib;
 using Moq;
@@ -55,6 +56,39 @@ public class CampaignAuthoritySyncRelayServerHandlerTests
 
         Assert.Equal(42u, applied.BehaviorUpdateData.MobilePartyId);
         Assert.Same(guestPeer, appliedSource);
+        network.Verify(value => value.SendAllBut(guestPeer, It.Is<NetworkCampaignAuthoritySyncEnvelope>(
+            forwarded => forwarded.Sequence == 1 && forwarded.Epoch == 2)), Times.Once);
+    }
+
+    [Fact]
+    public void RelaysRecruitmentRosterDeltaForCurrentRemoteLease()
+    {
+        var messageBroker = new TestMessageBroker();
+        var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
+        var identity = new SessionIdentity();
+        Assert.True(identity.TryApply(new AuthorityLease("room-a", "authority-b", "guest", 2), "host"));
+        var peerFactory = new TestNetwork();
+        NetPeer guestPeer = peerFactory.CreatePeer();
+        var player = new Player("guest", "hero-guest", "party-guest", "clan-guest", "character-guest");
+        var playerManager = new Mock<IPlayerManager>();
+        playerManager.Setup(manager => manager.TryGetPlayer(guestPeer, out player)).Returns(true);
+        var connections = new Mock<IConnectionCollection>();
+        connections.Setup(value => value.HasCompletedCampaignSynchronization(guestPeer)).Returns(true);
+        var network = new Mock<INetwork>();
+        NetworkTroopRosterElementBatch applied = default;
+        messageBroker.Subscribe<NetworkTroopRosterElementBatch>(payload => applied = payload.What);
+        using var handler = new CampaignAuthoritySyncRelayServerHandler(
+            messageBroker, connections.Object, playerManager.Object, network.Object, identity, serializer);
+        var rosterDelta = new NetworkTroopRosterElementBatch(
+            7, 9, new[] { TroopRosterElementOperation.AddCounts(1, 0, 0, removeDepleted: true) });
+        var envelope = new NetworkCampaignAuthoritySyncEnvelope(
+            "room-a", "authority-b", "guest", 2, 1, serializer.Serialize(rosterDelta));
+
+        messageBroker.Publish(guestPeer, envelope);
+
+        Assert.Equal(7u, applied.RosterId);
+        Assert.Equal(9u, applied.CharacterId);
+        Assert.Equal(1, Assert.Single(applied.Operations).Count);
         network.Verify(value => value.SendAllBut(guestPeer, It.Is<NetworkCampaignAuthoritySyncEnvelope>(
             forwarded => forwarded.Sequence == 1 && forwarded.Epoch == 2)), Times.Once);
     }

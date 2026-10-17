@@ -8,7 +8,7 @@ namespace GameInterface.Services.TroopRosters.Messages;
 /// <see cref="OwnerPartyId"/> is null when the roster has no owner party.
 /// </summary>
 [ProtoContract(SkipConstructor = true)]
-internal record NetworkPartyOwnerSet(string RosterId, string OwnerPartyId) : ICommand
+internal record NetworkPartyOwnerSet(string RosterId, string OwnerPartyId) : ICommand, ICampaignAuthorityScopedMessage
 {
     [ProtoMember(1)]
     public string RosterId { get; } = RosterId;

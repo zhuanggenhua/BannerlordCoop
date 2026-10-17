@@ -9,7 +9,7 @@ namespace GameInterface.Services.TroopRosters.Messages;
 /// earlier delta), since a placeholder would corrupt the roster's cached totals.
 /// </summary>
 [ProtoContract(SkipConstructor = true)]
-internal readonly struct NetworkTroopRosterSetWoundedNumber : ICommand
+internal readonly struct NetworkTroopRosterSetWoundedNumber : ICommand, ICampaignAuthorityScopedMessage
 {
     [ProtoMember(1)]
     public readonly uint RosterId;

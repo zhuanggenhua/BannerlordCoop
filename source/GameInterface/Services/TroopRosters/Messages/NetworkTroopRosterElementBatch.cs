@@ -9,7 +9,7 @@ namespace GameInterface.Services.TroopRosters.Messages;
 /// identities only once.
 /// </summary>
 [ProtoContract(SkipConstructor = true)]
-internal readonly struct NetworkTroopRosterElementBatch : ICommand, IJoinCatchUpMergeMessage
+internal readonly struct NetworkTroopRosterElementBatch : ICommand, IJoinCatchUpMergeMessage, ICampaignAuthorityScopedMessage
 {
     private const int MaxJoinCatchUpOperations = 32;
     [ProtoMember(1)]

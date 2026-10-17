@@ -5,7 +5,7 @@ using System.Collections.Generic;
 namespace GameInterface.Services.MobileParties.Messages;
 
 [ProtoContract(SkipConstructor = true)]
-internal readonly struct UpdateVolunteers : ICommand
+internal readonly struct UpdateVolunteers : ICommand, ICampaignAuthorityScopedMessage
 {
     [ProtoMember(1)]
     public readonly Dictionary<uint, uint[]> UpdatedVolunteerTypeIds;

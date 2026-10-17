@@ -10,7 +10,7 @@ namespace GameInterface.Services.TroopRosters.Messages;
 /// placeholder would corrupt the roster's cached totals.
 /// </summary>
 [ProtoContract(SkipConstructor = true)]
-internal readonly struct NetworkTroopRosterSetNumber : ICommand
+internal readonly struct NetworkTroopRosterSetNumber : ICommand, ICampaignAuthorityScopedMessage
 {
     [ProtoMember(1)]
     public readonly uint RosterId;
