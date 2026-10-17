@@ -33,11 +33,10 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private readonly INetwork network;
     private readonly ISessionIdentity sessionIdentity;
     private readonly object peerGate = new object();
-    private readonly object localReportGate = new object();
     private readonly object selectionGate = new object();
     private readonly object leaseGate = new object();
     private readonly Dictionary<NetPeer, string> peerControllerIds = new Dictionary<NetPeer, string>();
-    private readonly Timer availabilityTimer;
+    private readonly Timer reconciliationTimer;
     private bool campaignReady;
     private bool mapReady;
     private long localRevision;
@@ -50,7 +49,6 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private string pendingBarrierCandidateControllerId = string.Empty;
     private bool hasPendingBarrier;
     private bool pendingBarrierAcknowledged;
-    private int heartbeatQueued;
     private int disposed;
 
     public CampaignSimulationAvailabilityServerHandler(
@@ -74,13 +72,13 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         messageBroker.Subscribe<NetworkCampaignSimulationAvailabilityReport>(Handle_AvailabilityReport);
         messageBroker.Subscribe<NetworkCampaignAuthorityHandoffBarrierApplied>(Handle_HandoffBarrierApplied);
         messageBroker.Subscribe<PlayerDisconnected>(Handle_PlayerDisconnected);
-        availabilityTimer = new Timer(_ => QueueLocalHeartbeat(), null, 1000, 1000);
+        reconciliationTimer = new Timer(_ => ReconcileCurrentAvailability(), null, 1000, 1000);
     }
 
     public void Dispose()
     {
         Interlocked.Exchange(ref disposed, 1);
-        availabilityTimer.Dispose();
+        reconciliationTimer.Dispose();
         messageBroker.Unsubscribe<CampaignReady>(Handle_CampaignReady);
         messageBroker.Unsubscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Unsubscribe<NetworkCampaignSimulationAvailabilityReport>(Handle_AvailabilityReport);
@@ -94,13 +92,13 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
 
     private void Handle_CampaignReady(MessagePayload<CampaignReady> _)
     {
-        lock (localReportGate) campaignReady = true;
+        campaignReady = true;
         ReportLocalAvailability();
     }
 
     private void Handle_MapReadinessChanged(MessagePayload<CampaignMapSimulationReadinessChanged> payload)
     {
-        lock (localReportGate) mapReady = payload.What.IsMapReady;
+        mapReady = payload.What.IsMapReady;
         ReportLocalAvailability();
     }
 
@@ -143,71 +141,17 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         if (coordinator.Remove(controllerId)) ReconcileCurrentAvailability();
     }
 
-    private void QueueLocalHeartbeat()
+    private void ReportLocalAvailability()
     {
-        if (Volatile.Read(ref disposed) != 0 || !ModInformation.IsListenAuthority) return;
+        if (!ModInformation.IsListenAuthority || !campaignReady) return;
 
-        bool queueHeartbeat;
-        lock (localReportGate)
-        {
-            queueHeartbeat = campaignReady && Interlocked.Exchange(ref heartbeatQueued, 1) == 0;
-        }
-
-        if (queueHeartbeat)
-        {
-            try
-            {
-                // Read native player registration and refresh readiness on the game thread. If that
-                // thread stops pumping, the room will stop receiving fresh local-ready reports.
-                GameThread.EnqueueSafe(() =>
-                {
-                    try
-                    {
-                        if (Volatile.Read(ref disposed) == 0) RefreshLocalAvailabilityAndReconcile();
-                    }
-                    finally
-                    {
-                        Interlocked.Exchange(ref heartbeatQueued, 0);
-                    }
-                }, context: nameof(CampaignSimulationAvailabilityServerHandler));
-            }
-            catch (Exception ex)
-            {
-                Interlocked.Exchange(ref heartbeatQueued, 0);
-                Logger.Warning(ex, "Could not queue local campaign availability heartbeat");
-            }
-        }
-
-        // Keep expiry decisions moving even if the game thread stopped pumping and the local
-        // heartbeat could not run. A stale host report must be able to fence its own lease.
-        ReconcileCurrentAvailability();
-    }
-
-    private void ReportLocalAvailability(bool reconcile = true)
-    {
-        if (!ModInformation.IsListenAuthority) return;
-
-        bool accepted;
-        lock (localReportGate)
-        {
-            if (!campaignReady) return;
-
-            var controllerId = controllerIdProvider.ControllerId;
-            bool localPlayerRegistered = playerManager.TryGetPlayer(controllerId, out _);
-            var availability = mapReady && localPlayerRegistered
-                ? CampaignSimulationAvailability.MapReady
-                : CampaignSimulationAvailability.Unavailable;
-            if (localRevision < long.MaxValue) localRevision++;
-            accepted = coordinator.Report(controllerId, availability, localRevision);
-        }
-
-        if (reconcile && accepted) ReconcileCurrentAvailability();
-    }
-
-    internal void RefreshLocalAvailabilityAndReconcile()
-    {
-        ReportLocalAvailability(reconcile: false);
-        ReconcileCurrentAvailability();
+        var controllerId = controllerIdProvider.ControllerId;
+        bool localPlayerRegistered = playerManager.TryGetPlayer(controllerId, out _);
+        var availability = mapReady && localPlayerRegistered
+            ? CampaignSimulationAvailability.MapReady
+            : CampaignSimulationAvailability.Unavailable;
+        localRevision = localRevision == long.MaxValue ? 1 : localRevision + 1;
+        if (coordinator.Report(controllerId, availability, localRevision)) ReconcileCurrentAvailability();
     }
 
     internal void ReconcileCurrentAvailability()
