@@ -24,17 +24,21 @@ public class CampaignSimulationAvailabilityClientHandlerTests
         Assert.False(network.SentNetworkMessages.ContainsKey(peer.Id));
 
         messageBroker.Publish(this, new ClientCampaignReady());
+        // The periodic heartbeat renews the report even when map readiness has not changed.
+        handler.SendCurrentAvailability();
         messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
         messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(false));
 
         var reports = System.Linq.Enumerable.ToArray(
             network.GetPeerMessagesFromType<NetworkCampaignSimulationAvailabilityReport>(peer));
-        Assert.Equal(3, reports.Length);
+        Assert.Equal(4, reports.Length);
         Assert.Equal(CampaignSimulationAvailability.MapReady, reports[0].Availability);
         Assert.Equal(1, reports[0].Revision);
         Assert.Equal(CampaignSimulationAvailability.MapReady, reports[1].Availability);
         Assert.Equal(2, reports[1].Revision);
-        Assert.Equal(CampaignSimulationAvailability.Unavailable, reports[2].Availability);
+        Assert.Equal(CampaignSimulationAvailability.MapReady, reports[2].Availability);
         Assert.Equal(3, reports[2].Revision);
+        Assert.Equal(CampaignSimulationAvailability.Unavailable, reports[3].Availability);
+        Assert.Equal(4, reports[3].Revision);
     }
 }

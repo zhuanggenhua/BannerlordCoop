@@ -23,7 +23,7 @@ namespace Coop.Tests.Server.Services.Session;
 public class CampaignSimulationAvailabilityServerHandlerTests
 {
     [Fact]
-    public void StaleReadinessHeartbeatPausesTheLocalHostLease()
+    public void StoppedLocalReadinessHeartbeatsPauseTheLocalHostLease()
     {
         var previousMode = ModInformation.SessionMode;
         ModInformation.SessionMode = SessionMode.ListenAuthority;
@@ -66,6 +66,55 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             Assert.Equal(2, identity.Epoch);
             network.Verify(value => value.SendAll(It.Is<NetworkAuthorityLeaseSnapshot>(
                 snapshot => snapshot.IsPaused && snapshot.Epoch == 2)), Times.Once);
+        }
+        finally
+        {
+            ModInformation.SessionMode = previousMode;
+        }
+    }
+
+    [Fact]
+    public void LocalReadinessHeartbeatRenewsTheHostLeaseWhileMapReady()
+    {
+        var previousMode = ModInformation.SessionMode;
+        ModInformation.SessionMode = SessionMode.ListenAuthority;
+        try
+        {
+            var now = new System.DateTime(2026, 10, 18, 0, 0, 0, System.DateTimeKind.Utc);
+            var messageBroker = new TestMessageBroker();
+            var identity = new SessionIdentity();
+            Assert.True(identity.TryApply(new AuthorityLease("room-a", "authority-a", "host", 1), "host"));
+            var coordinator = new CampaignAuthorityAvailabilityCoordinator(
+                identity,
+                new CampaignAuthorityCandidateSelector(),
+                () => now,
+                System.TimeSpan.FromSeconds(3));
+            var hostPlayer = new Player("host", "hero-host", "party-host", "clan-host", "character-host");
+            var playerManager = new Mock<IPlayerManager>();
+            playerManager.Setup(manager => manager.TryGetPlayer("host", out hostPlayer)).Returns(true);
+            var connections = new Mock<IConnectionCollection>();
+            var controllerId = new ControllerIdProvider();
+            controllerId.SetControllerId("host");
+
+            using var handler = new CampaignSimulationAvailabilityServerHandler(
+                messageBroker,
+                coordinator,
+                connections.Object,
+                playerManager.Object,
+                controllerId,
+                Mock.Of<INetwork>(),
+                identity);
+
+            messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
+            messageBroker.Publish(this, new CampaignReady());
+            now = now.AddSeconds(2);
+            handler.RefreshLocalAvailabilityAndReconcile();
+            now = now.AddSeconds(2);
+            handler.RefreshLocalAvailabilityAndReconcile();
+
+            Assert.True(coordinator.IsFreshMapReady("host"));
+            Assert.False(identity.CurrentLease.IsPaused);
+            Assert.Equal(1, identity.Epoch);
         }
         finally
         {
