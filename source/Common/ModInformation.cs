@@ -5,8 +5,16 @@ namespace Common;
 
 public static class ModInformation
 {
-    public static bool IsServer { get; set; } = false;
+    public static SessionMode SessionMode { get; set; } = SessionMode.RemoteReplica;
+    // Legacy sync patches use IsServer to mean world authority, not absence of a local player.
+    public static bool IsServer
+    {
+        get => SessionMode is SessionMode.DedicatedAuthority or SessionMode.ListenAuthority;
+        set => SessionMode = value ? SessionMode.DedicatedAuthority : SessionMode.RemoteReplica;
+    }
     public static bool IsClient => !IsServer;
+    public static bool IsListenAuthority => SessionMode == SessionMode.ListenAuthority;
+    public static bool IsDedicatedAuthority => SessionMode == SessionMode.DedicatedAuthority;
 
     /// <summary>
     /// The mod build stamped on this assembly. Its semantic version comes from the same build
