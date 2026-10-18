@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { Coordinator } from './orchestrator.mjs';
 
 function git(cwd, ...args) {
@@ -56,6 +57,43 @@ function workerResult(board, directory, id = 'implementation') {
 }
 
 const approve = (board, id) => board.review(id, { reviewerId: '/root/independent-review', decision: 'pass', notes: 'Compared committed diff, scope and test receipt.' });
+
+async function heldVerification(board, directory, id) {
+  const started = path.join(directory, 'verification-started.json');
+  const release = path.join(directory, 'verification-release');
+  const command = [process.execPath, '-e', `const fs=require('node:fs');fs.writeFileSync(${JSON.stringify(started)},JSON.stringify({pid:process.pid}));const timer=setInterval(()=>{if(fs.existsSync(${JSON.stringify(release)})){clearInterval(timer);console.log('held verification passed');process.exit(0)}},20);setTimeout(()=>process.exit(88),20000);`];
+  const code = `import { Coordinator } from ${JSON.stringify(new URL('./orchestrator.mjs', import.meta.url).href)}; const result=new Coordinator(process.argv[1]).verify(process.argv[2],{command:${JSON.stringify(command)}});console.log(JSON.stringify(result));`;
+  const child = spawn(process.execPath, ['--input-type=module', '-e', code, board.repo, id], { cwd: board.repo, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  let output = '';
+  child.stdout.on('data', data => { output += data; });
+  child.stderr.on('data', data => { output += data; });
+  const exited = new Promise((resolve, reject) => { child.on('error', reject); child.on('close', (code, signal) => resolve({ code, signal, output })); });
+  for (let attempt = 0; attempt < 500; attempt++) {
+    if (fs.existsSync(started)) return { child, exited, release, commandPid: JSON.parse(fs.readFileSync(started, 'utf8')).pid };
+    if (child.exitCode !== null) break;
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  fs.writeFileSync(release, 'stop');
+  child.kill();
+  await exited;
+  throw new Error(`verification child did not reach its actual command: ${output}`);
+}
+
+function cli(repo, ...args) {
+  return spawnSync(process.execPath, [fileURLToPath(new URL('./orchestrator.mjs', import.meta.url)), '--root', repo, ...args], { encoding: 'utf8', windowsHide: true });
+}
+
+async function releaseVerification(held) {
+  fs.writeFileSync(held.release, 'finish');
+  if (held.child.exitCode === null) held.child.kill();
+  await held.exited;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    try { process.kill(held.commandPid, 0); }
+    catch (error) { if (error.code === 'ESRCH') return; throw error; }
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  process.kill(held.commandPid);
+}
 
 test('init records the accepted baseline without creating repeat tasks', t => {
   const { board } = fixture(t);
@@ -250,6 +288,68 @@ test('failed integrated verification recovers through a linked fix without reope
   assert.equal(board.status().tasks[task.id].status, 'closed');
   assert.equal(fs.existsSync(task.worktree), false);
   assert.equal(fs.existsSync(failed.verification.log), true);
+});
+
+test('long verification releases the state lock for other processes while blocking integration', async t => {
+  const { board, directory, repo } = fixture(t);
+  const { task, handoff } = workerResult(board, directory);
+  board.submit(task.id, handoff);
+  approve(board, task.id);
+  board.integrate(task.id);
+  const review = board.create({ id: 'parallel-review', stream: 'review', readOnly: true, scope: [] });
+  board.assign(review.id, { agentId: '/root/parallel-review' });
+  board.submit(review.id, { ...handoff, taskId: review.id, baseCommit: review.baseCommit, commit: review.baseCommit, changedFiles: [] });
+  approve(board, review.id);
+  const held = await heldVerification(board, directory, task.id);
+  try {
+    const status = cli(repo, 'status');
+    assert.equal(status.status, 0, status.stderr);
+    const observed = JSON.parse(status.stdout);
+    assert.equal(observed.tasks[task.id].status, 'verifying');
+    assert.equal(observed.verificationLease.ownerPid, held.child.pid);
+    assert.equal(fs.existsSync(board.lockFile), false);
+    const created = cli(repo, 'create', '--id', 'parallel-checkpoint', '--stream', 'checkpoint');
+    assert.equal(created.status, 0, created.stderr);
+    assert.equal(JSON.parse(created.stdout).status, 'created');
+    assert.equal(cli(repo, 'assign', '--id', 'parallel-checkpoint', '--agent', '/root/parallel-checkpoint').status, 0);
+    const blocked = cli(repo, 'integrate', '--id', review.id);
+    assert.equal(blocked.status, 1);
+    assert.match(blocked.stderr, /verification lease/);
+    assert.throws(() => board.verify(task.id, { command: [process.execPath, '-e', 'process.exit(0)'] }), /verification lease/);
+    assert.throws(() => board.recoverVerification({ reason: 'Cannot take a live owner lease' }), /still alive/);
+    fs.writeFileSync(held.release, 'finish');
+    const result = await held.exited;
+    assert.equal(result.code, 0, result.output);
+    assert.equal(board.status().tasks[task.id].status, 'verified');
+    assert.equal(board.status().verificationLease, undefined);
+  } finally {
+    await releaseVerification(held);
+  }
+});
+
+test('abandoned verification lease is recoverable only after its real owner process exits', async t => {
+  const { board, directory } = fixture(t);
+  const { task, handoff, command } = workerResult(board, directory);
+  board.submit(task.id, handoff);
+  approve(board, task.id);
+  board.integrate(task.id);
+  const held = await heldVerification(board, directory, task.id);
+  try {
+    assert.throws(() => board.recoverVerification({ reason: 'owner still alive' }), /still alive/);
+    held.child.kill();
+    await held.exited;
+    await releaseVerification(held);
+    const recovered = board.recoverVerification({ reason: 'Observed owner exit, released its controlled test process.' });
+    assert.equal(recovered.status, 'needs_fix');
+    assert.equal(recovered.verification.exitCode, null);
+    assert.equal(recovered.verification.recovered, true);
+    assert.equal(board.status().verificationLease, undefined);
+    assert.equal(board.verify(task.id, { command }).status, 'verified');
+    board.close(task.id);
+    board.cleanup(task.id);
+  } finally {
+    await releaseVerification(held);
+  }
 });
 
 test('interrupt retains writer reservation until the root reports actual agent stop', t => {

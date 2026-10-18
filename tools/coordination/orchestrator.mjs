@@ -277,6 +277,7 @@ export class Coordinator {
   integrate(id) {
     return this.transaction(state => {
       const task = this.task(state, id);
+      if (state.verificationLease) throw new Error(`verification lease ${state.verificationLease.token} blocks coordinator HEAD changes`);
       if (task.status !== 'reviewed') throw new Error('integration requires a passed review');
       this.clean(this.repo);
       this.validateHandoff(task, task.handoff);
@@ -300,8 +301,9 @@ export class Coordinator {
   }
 
   verify(id, { command, timeoutMs = 600000 }) {
-    return this.transaction(state => {
+    const lease = this.transaction(state => {
       const task = this.task(state, id);
+      if (state.verificationLease) throw new Error(`verification lease ${state.verificationLease.token} already active`);
       if (!task.integration || !['integrated', 'verified', 'needs_fix'].includes(task.status)) throw new Error('verification requires integration');
       this.clean(this.repo);
       if (!Array.isArray(command) || !command.length || command.some(value => typeof value !== 'string' || !value)) throw new Error('actual test command array required');
@@ -311,19 +313,64 @@ export class Coordinator {
       if (compiles && !command.some(value => /^[-/]p:ModName=$/i.test(value))) throw new Error('build verification requires -p:ModName= to disable deployment');
       const head = this.git(['rev-parse', 'HEAD']);
       this.git(['merge-base', '--is-ancestor', task.integration.head, head]);
-      const result = spawnSync(command[0], command.slice(1), { cwd: this.repo, encoding: 'utf8', windowsHide: true, timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024 });
-      const log = path.join(this.directory, 'evidence', id, `integration-${Date.now()}.log`);
+      const token = crypto.randomUUID();
+      const log = path.join(this.directory, 'evidence', id, `integration-${token}.log`);
       fs.mkdirSync(path.dirname(log), { recursive: true });
-      const content = `$ ${JSON.stringify(command)}\nHEAD ${head}\n${result.stdout ?? ''}${result.stderr ?? ''}${result.error?.stack ?? ''}\nexitCode=${result.status}\n`;
-      fs.writeFileSync(log, content);
-      task.verificationHistory ??= [];
-      if (task.verification && !task.verificationHistory.some(receipt => receipt.log === task.verification.log)) task.verificationHistory.push(task.verification);
-      task.verification = { head, command, exitCode: result.status, log, sha256: digest(content), at: new Date().toISOString() };
-      task.verificationHistory.push(task.verification);
-      task.status = result.status === 0 && !result.error ? 'verified' : 'needs_fix';
+      const prepared = { token, taskId: id, head, ownerPid: process.pid, command, timeoutMs, log, startedAt: new Date().toISOString() };
+      state.verificationLease = prepared;
+      task.status = 'verifying';
+      task.owner = 'coordinator';
+      task.nextAction = `Verification owned by PID ${process.pid}; independent worker tasks may continue. Recover only after confirming the owner has exited.`;
+      return { state, value: prepared };
+    });
+    const result = spawnSync(command[0], command.slice(1), { cwd: this.repo, encoding: 'utf8', windowsHide: true, timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024 });
+    const content = `$ ${JSON.stringify(command)}\nHEAD ${lease.head}\n${result.stdout ?? ''}${result.stderr ?? ''}${result.error?.stack ?? ''}\nexitCode=${result.status}\n`;
+    fs.writeFileSync(lease.log, content);
+    const finish = () => this.transaction(state => {
+      const task = this.task(state, id);
+      if (state.verificationLease?.token !== lease.token || task.status !== 'verifying') throw new Error('verification lease changed; result cannot be accepted');
+      const observedHead = this.git(['rev-parse', 'HEAD']);
+      this.recordVerification(task, { head: lease.head, observedHead, token: lease.token, command, exitCode: result.status, log: lease.log, sha256: digest(content), at: new Date().toISOString() });
+      task.status = result.status === 0 && !result.error && observedHead === lease.head ? 'verified' : 'needs_fix';
       try { this.clean(this.repo); } catch (error) { task.status = 'needs_fix'; task.verification.dirtyError = error.message; }
       task.owner = 'coordinator';
       task.nextAction = task.status === 'verified' ? `Close task ${id}, then clean its verified worktree.` : `Create a repair task with create --followup-of ${id}; integrate its reviewed fix, then rerun verify --id ${id} on the clean coordinator HEAD.`;
+      delete state.verificationLease;
+      return { state, value: task };
+    });
+    for (let attempt = 0; ; attempt++) {
+      try { return finish(); }
+      catch (error) {
+        if (!error.message.startsWith('coordination lock held') || attempt >= 40) throw error;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50);
+      }
+    }
+  }
+
+  recordVerification(task, receipt) {
+    task.verificationHistory ??= [];
+    if (task.verification && !task.verificationHistory.some(previous => previous.log === task.verification.log)) task.verificationHistory.push(task.verification);
+    task.verification = receipt;
+    task.verificationHistory.push(receipt);
+  }
+
+  recoverVerification({ reason }) {
+    return this.transaction(state => {
+      this.coordinator(state);
+      const lease = state.verificationLease;
+      if (!lease) throw new Error('no verification lease to recover');
+      requireText(reason, 'recovery reason');
+      let dead = false;
+      try { process.kill(lease.ownerPid, 0); }
+      catch (error) { if (error.code === 'ESRCH') dead = true; else throw new Error('cannot confirm verification owner has exited'); }
+      if (!dead) throw new Error('verification owner is still alive; do not steal its lease');
+      const task = this.task(state, lease.taskId);
+      fs.appendFileSync(lease.log, `\nOwner PID ${lease.ownerPid} exited; verification outcome unknown. Recovery: ${reason}\n`);
+      this.recordVerification(task, { head: lease.head, command: lease.command, exitCode: null, log: lease.log, sha256: digest(fs.readFileSync(lease.log)), recovered: true, ownerPid: lease.ownerPid, at: new Date().toISOString() });
+      task.status = 'needs_fix';
+      task.owner = 'coordinator';
+      task.nextAction = `Owner confirmed exited. Rerun verify --id ${task.id} on clean HEAD; no passing outcome was inferred.`;
+      delete state.verificationLease;
       return { state, value: task };
     });
   }
@@ -371,7 +418,7 @@ export class Coordinator {
 }
 
 const help = `Usage: node tools/coordination/orchestrator.mjs --root <repo> <command> [options]
-Commands: init | status | next | create | assign | submit | review | integrate | verify | close | interrupt | cleanup
+Commands: init | status | next | create | assign | submit | review | integrate | verify | recover-verification | close | interrupt | cleanup
 create --id slug --stream authority [--scope path] [--read-only] [--scope-authorization coordinator-reason] [--objective text]
 create --id fix-slug --followup-of failed-integrated-task [--scope narrower-path]
 assign --id slug --agent native-agent-id [--adapter native|cli]
@@ -379,6 +426,7 @@ submit --id slug --handoff absolute-handoff.json
 review --id slug --reviewer independent-agent-id --decision pass|needs_fix --notes text
 integrate --id slug
 verify --id slug [--timeout 600000] -- node --test path/to/test.mjs
+recover-verification --reason text (only after the recorded owner PID has exited)
 close --id slug | cleanup --id slug
 interrupt --id slug --reason text [--agent-status idle|completed|interrupted]
 The root chat invokes native agents; this CLI registers their exclusive worktrees.
@@ -407,6 +455,7 @@ export function main(args = process.argv.slice(2)) {
   else if (command === 'submit') result = board.submit(options.id, json(path.resolve(requireText(options.handoff, 'handoff file'))));
   else if (command === 'review') result = board.review(options.id, { reviewerId: options.reviewer, decision: options.decision, notes: options.notes });
   else if (command === 'verify') result = board.verify(options.id, { command: options.command, timeoutMs: options.timeout ? Number(options.timeout) : undefined });
+  else if (command === 'recover-verification') result = board.recoverVerification({ reason: options.reason });
   else if (command === 'interrupt') result = board.interrupt(options.id, { reason: options.reason, agentStatus: options['agent-status'] });
   else if (['integrate', 'close', 'cleanup'].includes(command)) result = board[command](options.id);
   else throw new Error(`unknown command; ${help}`);
