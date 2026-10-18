@@ -1,4 +1,5 @@
-﻿using Common;
+﻿using Coop.Tests.Mocks;
+using Common;
 using Common.Messaging;
 using Common.Network;
 using Common.PacketHandlers;
@@ -57,7 +58,7 @@ public class CampaignAuthorityHandoffBarrierClientHandlerTests
         var rosters = new CampaignRosterCheckpoint(new[] { new CampaignRosterState(25, new CampaignRosterElementState[0]) });
         var barrier = new NetworkCampaignAuthorityHandoffBarrier(
             "room-a", "paused-authority", 7, "controller-b", 4, checkpoint, rosters, new CampaignClockCheckpoint(777),
-            new CampaignSessionCheckpoint("campaign", "{}"));
+            new CampaignSessionCheckpoint("campaign", "{}"), CampaignHandoffTestServices.Checkpoint());
         var acknowledgement = barrier.ToApplied();
 
         var receivedBarrier = Assert.IsType<NetworkCampaignAuthorityHandoffBarrier>(
@@ -76,6 +77,7 @@ public class CampaignAuthorityHandoffBarrierClientHandlerTests
         Assert.Equal(777, receivedBarrier.ClockCheckpoint.Ticks);
         Assert.Equal("campaign", receivedBarrier.SessionCheckpoint.CampaignId);
         Assert.Equal("{}", receivedBarrier.SessionCheckpoint.SessionJson);
+        Assert.Equal(50, receivedBarrier.SchedulerCheckpoint.MinimumIntervalTicks);
         Assert.Equal(barrier.RoomId, receivedAcknowledgement.RoomId);
         Assert.Equal(barrier.PausedAuthorityId, receivedAcknowledgement.PausedAuthorityId);
         Assert.Equal(barrier.PausedEpoch, receivedAcknowledgement.PausedEpoch);
@@ -108,7 +110,7 @@ public class CampaignAuthorityHandoffBarrierClientHandlerTests
             .Callback(() => { Assert.True(sessionApplied); clockApplied = true; }).Returns(true);
         var barrier = new NetworkCampaignAuthorityHandoffBarrier(
             "room-a", "paused-authority", 7, "controller-b", 4,
-            new RegistryAllocationCheckpoint(200, new Dictionary<string, int>()), rosters, new CampaignClockCheckpoint(777), sessionCheckpoint);
+            new RegistryAllocationCheckpoint(200, new Dictionary<string, int>()), rosters, new CampaignClockCheckpoint(777), sessionCheckpoint, CampaignHandoffTestServices.Checkpoint());
         bool earlierApplyCompleted = false;
         NetworkCampaignAuthorityHandoffBarrierApplied? acknowledgement = null;
         network.Setup(value => value.SendAll(It.IsAny<IMessage>()))
@@ -121,7 +123,7 @@ public class CampaignAuthorityHandoffBarrierClientHandlerTests
             });
 
         using var handler = new CampaignAuthorityHandoffBarrierClientHandler(
-            messageBroker, network.Object, sessionIdentity, controllerIdProvider, objectManager, rosterService.Object, clock.Object, sessions.Object);
+            messageBroker, network.Object, sessionIdentity, controllerIdProvider, objectManager, rosterService.Object, clock.Object, sessions.Object, CampaignHandoffTestServices.Scheduler(), CampaignHandoffTestServices.Drained());
         messageBroker.Publish(this, new ClientCampaignReady());
         messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
 
@@ -159,7 +161,7 @@ public class CampaignAuthorityHandoffBarrierClientHandlerTests
             ? new RegistryAllocationCheckpoint(300, new Dictionary<string, int> { ["type"] = -1 })
             : null;
         using var handler = new CampaignAuthorityHandoffBarrierClientHandler(broker, network.Object, identity, controller,
-            manager, rosterService.Object, Mock.Of<IMapTimeTrackerInterface>(), Mock.Of<ICampaignSessionCheckpointService>());
+            manager, rosterService.Object, Mock.Of<IMapTimeTrackerInterface>(), Mock.Of<ICampaignSessionCheckpointService>(), CampaignHandoffTestServices.Scheduler(), CampaignHandoffTestServices.Drained());
         broker.Publish(this, new ClientCampaignReady());
         broker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
         broker.Publish(this, new NetworkCampaignAuthorityHandoffBarrier("room", "paused", 2, "candidate", 1, checkpoint,
@@ -184,7 +186,7 @@ public class CampaignAuthorityHandoffBarrierClientHandlerTests
         var rosterService = new Mock<ICampaignRosterCheckpointService>();
         rosterService.Setup(value => value.TryApply(It.IsAny<CampaignRosterCheckpoint>())).Returns(false);
         using var handler = new CampaignAuthorityHandoffBarrierClientHandler(broker, network.Object, identity, controller,
-            manager, rosterService.Object, Mock.Of<IMapTimeTrackerInterface>(), Mock.Of<ICampaignSessionCheckpointService>());
+            manager, rosterService.Object, Mock.Of<IMapTimeTrackerInterface>(), Mock.Of<ICampaignSessionCheckpointService>(), CampaignHandoffTestServices.Scheduler(), CampaignHandoffTestServices.Drained());
         broker.Publish(this, new ClientCampaignReady());
         broker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
         broker.Publish(this, new NetworkCampaignAuthorityHandoffBarrier("room", "paused", 2, "candidate", 1,
@@ -216,12 +218,12 @@ public class CampaignAuthorityHandoffBarrierClientHandlerTests
         var sessions = new Mock<ICampaignSessionCheckpointService>();
         sessions.Setup(value => value.TryApply(It.IsAny<CampaignSessionCheckpoint>())).Returns(true);
         using var handler = new CampaignAuthorityHandoffBarrierClientHandler(broker, network.Object, identity, controller,
-            manager, rosters.Object, clock.Object, sessions.Object);
+            manager, rosters.Object, clock.Object, sessions.Object, CampaignHandoffTestServices.Scheduler(), CampaignHandoffTestServices.Drained());
         broker.Publish(this, new ClientCampaignReady());
         broker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
         broker.Publish(this, new NetworkCampaignAuthorityHandoffBarrier("room", "paused", 2, "candidate", 1,
             new RegistryAllocationCheckpoint(50, new Dictionary<string, int>()), new CampaignRosterCheckpoint(new CampaignRosterState[0]),
-            includeClock ? new CampaignClockCheckpoint(ticks) : null));
+            includeClock ? new CampaignClockCheckpoint(ticks) : null, schedulerCheckpoint: CampaignHandoffTestServices.Checkpoint()));
         GameThread.Run(() => { }, blocking: true);
 
         network.Verify(value => value.SendAll(It.IsAny<IMessage>()), Times.Never);
@@ -247,15 +249,52 @@ public class CampaignAuthorityHandoffBarrierClientHandlerTests
         sessions.Setup(value => value.TryApply(It.IsAny<CampaignSessionCheckpoint>())).Returns(false);
         var clock = new Mock<IMapTimeTrackerInterface>();
         using var handler = new CampaignAuthorityHandoffBarrierClientHandler(broker, network.Object, identity, controller,
-            new ObjectManagerService(Mock.Of<ILogger>()), rosters.Object, clock.Object, sessions.Object);
+            new ObjectManagerService(Mock.Of<ILogger>()), rosters.Object, clock.Object, sessions.Object, CampaignHandoffTestServices.Scheduler(), CampaignHandoffTestServices.Drained());
         broker.Publish(this, new ClientCampaignReady());
         broker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
         broker.Publish(this, new NetworkCampaignAuthorityHandoffBarrier("room", "paused", 2, "candidate", 1,
             new RegistryAllocationCheckpoint(50, new Dictionary<string, int>()), new CampaignRosterCheckpoint(new CampaignRosterState[0]),
-            new CampaignClockCheckpoint(777), includeSession ? new CampaignSessionCheckpoint("campaign", "{}") : null));
+            new CampaignClockCheckpoint(777), includeSession ? new CampaignSessionCheckpoint("campaign", "{}") : null, CampaignHandoffTestServices.Checkpoint()));
         GameThread.Run(() => { }, blocking: true);
 
         sessions.Verify(value => value.TryApply(It.IsAny<CampaignSessionCheckpoint>()), Times.Once);
+        clock.Verify(value => value.TryApplyAuthorityHandoffBaseline(It.IsAny<long>()), Times.Never);
+        network.Verify(value => value.SendAll(It.IsAny<IMessage>()), Times.Never);
+        Assert.True(identity.CurrentLease.IsPaused);
+    }
+
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void MissingOrRejectedSchedulerAndFailedAsyncDrainCannotBeAcknowledged(bool includeScheduler, bool drainSucceeds)
+    {
+        var broker = new TestMessageBroker();
+        var network = new Mock<INetwork>();
+        var identity = new SessionIdentity();
+        Assert.True(identity.TryApply(new AuthorityLease("room", "paused", "", 2, isPaused: true), "host"));
+        var controller = new ControllerIdProvider();
+        controller.SetControllerId("candidate");
+        var rosters = new Mock<ICampaignRosterCheckpointService>();
+        rosters.Setup(value => value.TryApply(It.IsAny<CampaignRosterCheckpoint>())).Returns(true);
+        var sessions = new Mock<ICampaignSessionCheckpointService>();
+        sessions.Setup(value => value.TryApply(It.IsAny<CampaignSessionCheckpoint>())).Returns(true);
+        var scheduler = new Mock<ICampaignSchedulerCheckpointService>();
+        scheduler.Setup(value => value.TryApply(It.IsAny<CampaignSchedulerCheckpoint>())).Returns(false);
+        var drain = new Mock<ICampaignAsyncTaskDrain>();
+        drain.Setup(value => value.TryDrain()).Returns(drainSucceeds);
+        var clock = new Mock<IMapTimeTrackerInterface>();
+        using var handler = new CampaignAuthorityHandoffBarrierClientHandler(broker, network.Object, identity, controller,
+            new ObjectManagerService(Mock.Of<ILogger>()), rosters.Object, clock.Object, sessions.Object, scheduler.Object, drain.Object);
+        broker.Publish(this, new ClientCampaignReady());
+        broker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
+        broker.Publish(this, new NetworkCampaignAuthorityHandoffBarrier("room", "paused", 2, "candidate", 1,
+            new RegistryAllocationCheckpoint(50, new Dictionary<string, int>()), new CampaignRosterCheckpoint(new CampaignRosterState[0]),
+            new CampaignClockCheckpoint(777), new CampaignSessionCheckpoint("campaign", "{}"),
+            includeScheduler ? CampaignHandoffTestServices.Checkpoint() : null));
+        GameThread.Run(() => { }, blocking: true);
+        scheduler.Verify(value => value.TryApply(It.IsAny<CampaignSchedulerCheckpoint>()),
+            includeScheduler && drainSucceeds ? Times.Once() : Times.Never());
         clock.Verify(value => value.TryApplyAuthorityHandoffBaseline(It.IsAny<long>()), Times.Never);
         network.Verify(value => value.SendAll(It.IsAny<IMessage>()), Times.Never);
         Assert.True(identity.CurrentLease.IsPaused);

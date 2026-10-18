@@ -19,6 +19,7 @@ public readonly struct NetworkCampaignAuthorityHandoffBarrier : IServerToClientC
     [ProtoMember(7)] public readonly CampaignRosterCheckpoint RosterCheckpoint;
     [ProtoMember(8)] public readonly CampaignClockCheckpoint ClockCheckpoint;
     [ProtoMember(9)] public readonly CampaignSessionCheckpoint SessionCheckpoint;
+    [ProtoMember(10)] public readonly CampaignSchedulerCheckpoint SchedulerCheckpoint;
 
     public NetworkCampaignAuthorityHandoffBarrier(
         string roomId,
@@ -29,7 +30,8 @@ public readonly struct NetworkCampaignAuthorityHandoffBarrier : IServerToClientC
         RegistryAllocationCheckpoint allocationCheckpoint = null,
         CampaignRosterCheckpoint rosterCheckpoint = null,
         CampaignClockCheckpoint clockCheckpoint = null,
-        CampaignSessionCheckpoint sessionCheckpoint = null)
+        CampaignSessionCheckpoint sessionCheckpoint = null,
+        CampaignSchedulerCheckpoint schedulerCheckpoint = null)
     {
         RoomId = roomId ?? string.Empty;
         PausedAuthorityId = pausedAuthorityId ?? string.Empty;
@@ -40,6 +42,7 @@ public readonly struct NetworkCampaignAuthorityHandoffBarrier : IServerToClientC
         RosterCheckpoint = rosterCheckpoint;
         ClockCheckpoint = clockCheckpoint;
         SessionCheckpoint = sessionCheckpoint;
+        SchedulerCheckpoint = schedulerCheckpoint;
     }
 
     public NetworkCampaignAuthorityHandoffBarrierApplied ToApplied() => new NetworkCampaignAuthorityHandoffBarrierApplied(

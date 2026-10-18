@@ -41,6 +41,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private readonly ICampaignRosterCheckpointService rosterCheckpointService;
     private readonly IMapTimeTrackerInterface mapTimeTracker;
     private readonly ICampaignSessionCheckpointService sessionCheckpointService;
+    private readonly ICampaignSchedulerCheckpointService schedulerCheckpointService;
+    private readonly ICampaignAsyncTaskDrain asyncTasks;
     private readonly object peerGate = new object();
     private readonly object localReportGate = new object();
     private readonly object selectionGate = new object();
@@ -75,7 +77,9 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         ISendCoalescer sendCoalescer = null,
         ICampaignRosterCheckpointService rosterCheckpointService = null,
         IMapTimeTrackerInterface mapTimeTracker = null,
-        ICampaignSessionCheckpointService sessionCheckpointService = null)
+        ICampaignSessionCheckpointService sessionCheckpointService = null,
+        ICampaignSchedulerCheckpointService schedulerCheckpointService = null,
+        ICampaignAsyncTaskDrain asyncTasks = null)
     {
         this.messageBroker = messageBroker;
         this.coordinator = coordinator;
@@ -89,6 +93,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         this.rosterCheckpointService = rosterCheckpointService;
         this.mapTimeTracker = mapTimeTracker;
         this.sessionCheckpointService = sessionCheckpointService;
+        this.schedulerCheckpointService = schedulerCheckpointService;
+        this.asyncTasks = asyncTasks;
         messageBroker.Subscribe<CampaignReady>(Handle_CampaignReady);
         messageBroker.Subscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Subscribe<NetworkCampaignSimulationAvailabilityReport>(Handle_AvailabilityReport);
@@ -378,6 +384,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
 
             // Finish the current game-thread tick and send its buffered results while the old lease
             // can still wrap them. Freezing first would turn them into rejected unscoped writes.
+            // Native worker callbacks must remain able to acquire the lease while they finish.
+            if (asyncTasks == null || !asyncTasks.TryDrain()) return;
             bool committedPause = false;
             if (!sessionIdentity.TryExecuteWithLease(currentLease, () =>
             {
@@ -426,7 +434,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
 
     private void TrySendHandoffBarrier(AuthorityLease pausedLease, string candidateControllerId)
     {
-        if (objectManager == null || rosterCheckpointService == null || mapTimeTracker == null || sessionCheckpointService == null) return;
+        if (objectManager == null || rosterCheckpointService == null || mapTimeTracker == null ||
+            sessionCheckpointService == null || schedulerCheckpointService == null) return;
 
         if (!pausedLease.IsPaused || string.IsNullOrWhiteSpace(candidateControllerId) ||
             string.Equals(candidateControllerId, sessionIdentity.RoomHostControllerId, StringComparison.Ordinal) ||
@@ -482,6 +491,13 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             return;
         }
 
+        if (!schedulerCheckpointService.TryCapture(out var schedulerCheckpoint))
+        {
+            Logger.Warning("Could not capture campaign scheduler for controller {ControllerId}; campaign remains paused",
+                candidateControllerId);
+            return;
+        }
+
         var barrier = new NetworkCampaignAuthorityHandoffBarrier(
             pausedLease.RoomId,
             pausedLease.AuthorityId,
@@ -491,7 +507,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             objectManager.CaptureAllocationCheckpoint(),
             rosterCheckpoint,
             new CampaignClockCheckpoint(ticks),
-            sessionCheckpoint);
+            sessionCheckpoint,
+            schedulerCheckpoint);
 
         try
         {

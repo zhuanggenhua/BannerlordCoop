@@ -57,7 +57,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                 playerManager.Object,
                 controllerId,
                 network.Object,
-                identity);
+                identity, asyncTasks: CampaignHandoffTestServices.Drained());
 
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
             messageBroker.Publish(this, new CampaignReady());
@@ -126,7 +126,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                 playerManager.Object,
                 controllerId,
                 Mock.Of<INetwork>(),
-                identity);
+                identity, asyncTasks: CampaignHandoffTestServices.Drained());
 
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
             messageBroker.Publish(this, new CampaignReady());
@@ -224,7 +224,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                 coalescer.Object,
                 rosterService.Object,
                 clock.Object,
-                sessions.Object);
+                sessions.Object, CampaignHandoffTestServices.Scheduler(), CampaignHandoffTestServices.Drained());
 
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
             messageBroker.Publish(this, new CampaignReady());

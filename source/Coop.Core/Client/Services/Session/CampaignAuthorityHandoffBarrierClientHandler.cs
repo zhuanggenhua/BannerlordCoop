@@ -31,6 +31,8 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
     private readonly ICampaignRosterCheckpointService rosterCheckpointService;
     private readonly IMapTimeTrackerInterface mapTimeTracker;
     private readonly ICampaignSessionCheckpointService sessionCheckpointService;
+    private readonly ICampaignSchedulerCheckpointService schedulerCheckpointService;
+    private readonly ICampaignAsyncTaskDrain asyncTasks;
     private bool campaignSynchronized;
     private bool mapReady;
 
@@ -42,7 +44,9 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         IObjectManager objectManager,
         ICampaignRosterCheckpointService rosterCheckpointService,
         IMapTimeTrackerInterface mapTimeTracker,
-        ICampaignSessionCheckpointService sessionCheckpointService)
+        ICampaignSessionCheckpointService sessionCheckpointService,
+        ICampaignSchedulerCheckpointService schedulerCheckpointService,
+        ICampaignAsyncTaskDrain asyncTasks)
     {
         this.messageBroker = messageBroker;
         this.network = network;
@@ -52,6 +56,8 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         this.rosterCheckpointService = rosterCheckpointService;
         this.mapTimeTracker = mapTimeTracker;
         this.sessionCheckpointService = sessionCheckpointService;
+        this.schedulerCheckpointService = schedulerCheckpointService;
+        this.asyncTasks = asyncTasks;
         messageBroker.Subscribe<ClientCampaignReady>(Handle_ClientCampaignReady);
         messageBroker.Subscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Subscribe<NetworkCampaignAuthorityHandoffBarrier>(Handle_HandoffBarrier);
@@ -102,6 +108,8 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
             return;
         }
 
+        if (barrier.SchedulerCheckpoint == null || !asyncTasks.TryDrain()) return;
+
         if (!objectManager.TryApplyAllocationCheckpoint(barrier.AllocationCheckpoint))
         {
             Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; registry allocation checkpoint is missing or invalid",
@@ -119,6 +127,13 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         if (!sessionCheckpointService.TryApply(barrier.SessionCheckpoint))
         {
             Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; co-op session or registered players did not match",
+                barrier.BarrierSequence);
+            return;
+        }
+
+        if (!schedulerCheckpointService.TryApply(barrier.SchedulerCheckpoint))
+        {
+            Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; native campaign scheduler did not match",
                 barrier.BarrierSequence);
             return;
         }

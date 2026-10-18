@@ -181,6 +181,8 @@ public class GameInterfaceModule : Module
             .As<Services.CampaignAuthority.ICampaignSessionCheckpointService>().InstancePerDependency();
         builder.RegisterType<Services.CampaignAuthority.CampaignSchedulerCheckpointService>()
             .As<Services.CampaignAuthority.ICampaignSchedulerCheckpointService>().InstancePerDependency();
+        builder.RegisterType<Services.CampaignAuthority.CampaignAsyncTaskDrain>()
+            .As<Services.CampaignAuthority.ICampaignAsyncTaskDrain>().InstancePerDependency();
         builder.RegisterType<PrisonerSaleValidator>().As<IPrisonerSaleValidator>().InstancePerDependency();
         builder.RegisterType<PlayerRansomReleaseSettlementProvider>().As<IPlayerRansomReleaseSettlementProvider>().InstancePerDependency();
         builder.RegisterType<SessionHeroMeetingDataInterface>().As<ISessionHeroMeetingDataInterface>().InstancePerDependency();
