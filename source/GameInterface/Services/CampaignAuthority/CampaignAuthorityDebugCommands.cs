@@ -44,6 +44,19 @@ public static class CampaignAuthorityDebugCommands
             mainHero = Hero.MainHero?.StringId,
             mainParty = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty?.StringId,
             gameState = GameStateManager.Current?.ActiveState?.GetType().Name,
+            scheduler = Campaign.Current?._campaignPeriodicEventManager == null ? null : new
+            {
+                minimumIntervalTicks = Campaign.Current._campaignPeriodicEventManager.MinimumPeriodicEventInterval.NumTicks,
+                lastGameTimeTicks = Campaign.Current._campaignPeriodicEventManager._lastGameTime.NumTicks,
+                events = Campaign.Current.CustomPeriodicCampaignEvents.Select(value => new
+                {
+                    description = value.description,
+                    periodTicks = value.TriggerPeriod.NumTicks,
+                    initialWaitTicks = value.InitialWait.NumTicks,
+                    nextTriggerTicks = value.NextTriggerTime.NumTicks,
+                    deleted = value.isEventDeleted,
+                }).ToArray(),
+            },
         }));
     }
 

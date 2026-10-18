@@ -1,5 +1,7 @@
-using Common;
+﻿using Common;
 using GameInterface.Services.MobileParties.Extensions;
+using GameInterface.Services.Players;
+using System;
 using TaleWorlds.CampaignSystem.Party;
 
 namespace GameInterface.Services.CampaignAuthority;
@@ -34,8 +36,8 @@ internal static class CampaignSimulationAuthorityPolicy
     }
 
     /// <summary>
-    /// A confirmed remote authority advances AI for all parties. Without a confirmed lease,
-    /// keep the existing per-party ownership rule used by the current server/client model.
+    /// The authority runs world AI. An observer also updates its own player's navigation,
+    /// which CheckMainPartyNeedsUpdate needs to turn a map order into a movement target.
     /// </summary>
     internal static bool CanTickParty(MobileParty party)
     {
@@ -44,10 +46,12 @@ internal static class CampaignSimulationAuthorityPolicy
         {
             bool localAuthority = authorityContext.TryGetLocalAuthorityLease(out var lease);
             if (lease.IsValid)
-                return ShouldTickParty(
-                    authorityKnown: true,
-                    localAuthority: localAuthority,
-                    legacyPartyControl: false);
+            {
+                if (lease.IsPaused) return false;
+                if (localAuthority) return true;
+                return PlayerManager.TryGetControlledObjectInfo(party, out var control) && control.IsControlled &&
+                    !string.Equals(control.ObjectControllerId, lease.AuthorityControllerId, StringComparison.Ordinal);
+            }
         }
 
         return ShouldTickParty(

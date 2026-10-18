@@ -1,5 +1,6 @@
 ﻿using Common;
 using Common.Util;
+using Autofac;
 using GameInterface.Services.Entity;
 using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.MobilePartyAIs.Patches;
@@ -25,6 +26,43 @@ public class MobilePartyAIDisablePatchesTests : IDisposable
             .Field(typeof(PlayerManager), "PlayerObjects")
             .GetValue(null)!;
     private MobileParty? registeredParty;
+
+    [Theory]
+    [InlineData("b", "b", "a", false, false, true)]
+    [InlineData("a", "a", "b", false, false, true)]
+    [InlineData("a", null, "b", false, false, false)]
+    [InlineData("b", "a", "a", false, false, false)]
+    [InlineData("b", "b", "b", false, true, false)]
+    [InlineData("a", "a", "", true, false, false)]
+    [InlineData("b", null, "b", false, false, true)]
+    public void ConfirmedLeaseAllowsOnlyWorldAuthorityOrAnObserversRegisteredLocalParty(
+        string local, string? owner, string writer, bool paused, bool frozen, bool expected)
+    {
+        var party = owner == null ? ObjectHelper.SkipConstructor<MobileParty>() : RegisterPlayerParty(owner, local);
+        var identity = new SessionIdentity();
+        var lease = new AuthorityLease("room", "authority", writer, 3, paused);
+        Assert.True(identity.TryApply(lease, "a"));
+        if (frozen) Assert.True(identity.TryFreezeLocalAuthority(lease, 1));
+        var controller = new ControllerIdProvider();
+        controller.SetControllerId(local);
+        var builder = new ContainerBuilder();
+        builder.RegisterInstance(new CampaignAuthorityContext(identity, controller)).As<ICampaignAuthorityContext>();
+        using var container = builder.Build();
+        bool hadPrevious = ContainerProvider.TryGetContainer(out var previous);
+        var previousMode = ModInformation.SessionMode;
+        try
+        {
+            ModInformation.SessionMode = local == "a" ? SessionMode.ListenAuthority : SessionMode.RemoteReplica;
+            ContainerProvider.SetContainer(container);
+            Assert.Equal(expected, MobilePartyAIDisablePatches.IsTickAuthority(party));
+        }
+        finally
+        {
+            ModInformation.SessionMode = previousMode;
+            if (hadPrevious) ContainerProvider.SetContainer(previous);
+            else ContainerProvider.Clear();
+        }
+    }
 
     public void Dispose()
     {

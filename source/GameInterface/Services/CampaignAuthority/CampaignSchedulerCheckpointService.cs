@@ -67,12 +67,22 @@ internal sealed class CampaignSchedulerCheckpointService : ICampaignSchedulerChe
     internal bool TryApply(CampaignSchedulerCheckpoint checkpoint, CampaignPeriodicEventManager manager,
         IList<MBCampaignEvent> events)
     {
-        if (checkpoint?.Tickers == null || checkpoint.Events == null || manager == null || events == null ||
-            checkpoint.MinimumIntervalTicks != manager.MinimumPeriodicEventInterval.NumTicks ||
-            checkpoint.LastGameTimeTicks < 0 || checkpoint.Events.Length != events.Count) return false;
+        if (checkpoint?.Tickers == null || checkpoint.Events == null || manager == null || events == null) return false;
+        if (checkpoint.MinimumIntervalTicks != manager.MinimumPeriodicEventInterval.NumTicks ||
+            checkpoint.LastGameTimeTicks < 0 || checkpoint.Events.Length != events.Count)
+        {
+            Logger.Warning("Rejected campaign scheduler header: interval source={SourceInterval} local={LocalInterval}, last signal={LastSignal}, events source={SourceEvents} local={LocalEvents}",
+                checkpoint.MinimumIntervalTicks, manager.MinimumPeriodicEventInterval.NumTicks, checkpoint.LastGameTimeTicks,
+                checkpoint.Events.Length, events.Count);
+            return false;
+        }
 
         var bindings = Bind(manager).ToArray();
-        if (checkpoint.Tickers.Length != bindings.Length) return false;
+        if (checkpoint.Tickers.Length != bindings.Length)
+        {
+            Logger.Warning("Rejected campaign scheduler ticker count: source={SourceCount} local={LocalCount}", checkpoint.Tickers.Length, bindings.Length);
+            return false;
+        }
         var apply = new List<Action>();
         for (int i = 0; i < bindings.Length; i++)
         {
