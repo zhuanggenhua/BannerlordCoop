@@ -49,7 +49,11 @@ internal sealed class CampaignSchedulerCheckpointService : ICampaignSchedulerChe
         var states = new List<CampaignPeriodicTickerState>();
         foreach (var ticker in Bind(manager))
         {
-            if (!ticker.TryCapture(out var state)) return false;
+            if (!ticker.TryCapture(out var state))
+            {
+                Logger.Warning("Could not capture native campaign scheduler ticker {TickerName}", ticker.Name);
+                return false;
+            }
             states.Add(state);
         }
         if (events.Any(value => value == null || value.TriggerPeriod.NumTicks <= 0)) return false;
@@ -145,7 +149,9 @@ internal sealed class CampaignSchedulerCheckpointService : ICampaignSchedulerChe
         public bool TryCapture(out CampaignPeriodicTickerState state)
         {
             state = null;
-            if (ticker?._list == null || ticker._currentFrameToTickListFlattened.Count != 0 ||
+            if (ticker?._list == null ||
+                (ticker._currentFrameToTickListFlattened != null && ticker._currentFrameToTickListFlattened.Count != 0) ||
+                (ticker._doParallel && ticker._currentFrameToTickListFlattened == null) ||
                 !ValidCursor(ticker.Index, ticker.TickDebt)) return false;
             var handles = new List<uint>();
             foreach (var value in ticker._list)

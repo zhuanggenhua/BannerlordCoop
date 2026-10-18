@@ -96,6 +96,19 @@ public class CampaignSchedulerCheckpointServiceTests
         Assert.False(source.Service.TryCapture(source.Manager, 0, source.Events, out _));
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LoadedTickersCanOmitUnusedSerialScratchStorageButNotParallelStorage(bool parallel)
+    {
+        var source = Fixture.Create();
+        var restored = (CampaignPeriodicEventManager.PeriodicTicker<MobileParty>)RuntimeHelpers.GetUninitializedObject(
+            typeof(CampaignPeriodicEventManager.PeriodicTicker<MobileParty>));
+        restored.Initialize(new MBReadOnlyList<MobileParty>(source.Parties), _ => { }, parallel);
+        source.Manager._mobilePartyHourlyTicker = restored;
+        Assert.Equal(!parallel, source.Service.TryCapture(source.Manager, 0, source.Events, out _));
+    }
+
     [Fact]
     public void RejectsDifferentEventDefinitionsBeforeChangingAnyCursor()
     {
