@@ -145,8 +145,10 @@ public class CampaignSimulationAvailabilityServerHandlerTests
         }
     }
 
-    [Fact]
-    public void ListenAuthorityCommitsAndReplicatesPausedLeaseThenResumesHostAtANewerEpoch()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TransfersToPreparedGuestAndRequiresFrozenCheckpointBeforeReturnOrAllAwayPause(bool hostReturnsImmediately)
     {
         var previousMode = ModInformation.SessionMode;
         ModInformation.SessionMode = SessionMode.ListenAuthority;
@@ -205,6 +207,13 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                     Assert.True(bufferedResultsFlushed);
             });
             var objectManager = new Mock<IObjectManager>();
+            objectManager.Setup(value => value.TryApplyAllocationCheckpoint(It.IsAny<RegistryAllocationCheckpoint>())).Returns(true);
+            rosterService.Setup(value => value.TryApply(rosters)).Returns(true);
+            sessions.Setup(value => value.TryApply(sessionCheckpoint)).Returns(true);
+            clock.Setup(value => value.TryApplyAuthorityHandoffBaseline(999)).Returns(true);
+            NetworkCampaignAuthorityFreezeRequest freezeRequest = default;
+            network.Setup(value => value.Send(guestPeer, It.IsAny<NetworkCampaignAuthorityFreezeRequest>()))
+                .Callback<LiteNetLib.NetPeer, IMessage>((_, message) => freezeRequest = (NetworkCampaignAuthorityFreezeRequest)message);
             objectManager.Setup(value => value.CaptureAllocationCheckpoint())
                 .Callback(() => Assert.True(GameThread.Instance.IsGameThread))
                 .Returns(new RegistryAllocationCheckpoint(555, new System.Collections.Generic.Dictionary<string, int>()));
@@ -257,21 +266,50 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                 appliedBarrier.RoomId, appliedBarrier.PausedAuthorityId, appliedBarrier.PausedEpoch,
                 appliedBarrier.CandidateControllerId, appliedBarrier.BarrierSequence);
             messageBroker.Publish(guestPeer, applied);
+            GameThread.Run(() => { }, blocking: true);
+            Assert.False(identity.CurrentLease.IsPaused);
+            Assert.Equal("guest", identity.AuthorityControllerId);
+            Assert.Equal(3, identity.Epoch);
+            messageBroker.Publish(guestPeer, applied);
+            GameThread.Run(() => { }, blocking: true);
+            Assert.Equal(3, identity.Epoch);
 
-            // The ordered barrier is a prerequisite, not authority activation: clients still lack
-            // the server-side world mutation relay needed to publish their simulation results.
-            Assert.True(identity.CurrentLease.IsPaused);
-            Assert.Equal(2, identity.Epoch);
-
-            messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
+            if (hostReturnsImmediately)
+                messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
+            else
+                messageBroker.Publish(guestPeer, new NetworkCampaignSimulationAvailabilityReport(
+                    CampaignSimulationAvailability.Unavailable, 2));
 
             GameThread.Run(() => { }, blocking: true);
+            Assert.Equal("guest", identity.AuthorityControllerId);
+            Assert.Equal(3, identity.Epoch);
+            Assert.True(freezeRequest.HandoffSequence > 0);
+            Assert.Equal("host", freezeRequest.CandidateControllerId);
+            messageBroker.Publish(guestPeer, freezeRequest.ToAcknowledged());
+            GameThread.Run(() => { }, blocking: true);
+            Assert.Equal(3, identity.Epoch);
+            Assert.Equal("guest", identity.AuthorityControllerId);
+            bool finalDeltaApplied = false;
+            GameThread.EnqueueSafe(() => finalDeltaApplied = true);
+            sessions.Setup(value => value.TryApply(sessionCheckpoint))
+                .Callback(() => Assert.True(finalDeltaApplied)).Returns(true);
+            messageBroker.Publish(guestPeer, freezeRequest.ToAcknowledged(appliedBarrier.AllocationCheckpoint,
+                rosters, new CampaignClockCheckpoint(999), sessionCheckpoint, CampaignHandoffTestServices.Checkpoint()));
+            GameThread.Run(() => { }, blocking: true);
+
+            if (!hostReturnsImmediately)
+            {
+                Assert.True(identity.CurrentLease.IsPaused);
+                Assert.Equal(4, identity.Epoch);
+                messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
+                GameThread.Run(() => { }, blocking: true);
+            }
 
             Assert.False(identity.CurrentLease.IsPaused);
             Assert.Equal("host", identity.AuthorityControllerId);
-            Assert.Equal(3, identity.Epoch);
+            Assert.Equal(5, identity.Epoch);
             network.Verify(value => value.SendAll(It.Is<NetworkAuthorityLeaseSnapshot>(
-                snapshot => !snapshot.IsPaused && snapshot.AuthorityControllerId == "host" && snapshot.Epoch == 3)), Times.Once);
+                snapshot => !snapshot.IsPaused && snapshot.AuthorityControllerId == "host" && snapshot.Epoch == 5)), Times.Once);
         }
         finally
         {

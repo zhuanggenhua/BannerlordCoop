@@ -61,6 +61,10 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private string pendingBarrierCandidateControllerId = string.Empty;
     private bool hasPendingBarrier;
     private bool pendingBarrierAcknowledged;
+    private AuthorityLease pendingFreezeLease;
+    private string pendingFreezeCandidateControllerId = string.Empty;
+    private long pendingFreezeSequence;
+    private bool hasPendingFreeze;
     private int heartbeatQueued;
     private int leaseReconciliationQueued;
     private int disposed;
@@ -99,6 +103,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         messageBroker.Subscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Subscribe<NetworkCampaignSimulationAvailabilityReport>(Handle_AvailabilityReport);
         messageBroker.Subscribe<NetworkCampaignAuthorityHandoffBarrierApplied>(Handle_HandoffBarrierApplied);
+        messageBroker.Subscribe<NetworkCampaignAuthorityFreezeAcknowledged>(Handle_FreezeAcknowledged);
         messageBroker.Subscribe<PlayerDisconnected>(Handle_PlayerDisconnected);
         reconciliationTimer = new Timer(_ => OnAvailabilityTimer(), null, 1000, 1000);
     }
@@ -111,6 +116,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         messageBroker.Unsubscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Unsubscribe<NetworkCampaignSimulationAvailabilityReport>(Handle_AvailabilityReport);
         messageBroker.Unsubscribe<NetworkCampaignAuthorityHandoffBarrierApplied>(Handle_HandoffBarrierApplied);
+        messageBroker.Unsubscribe<NetworkCampaignAuthorityFreezeAcknowledged>(Handle_FreezeAcknowledged);
         messageBroker.Unsubscribe<PlayerDisconnected>(Handle_PlayerDisconnected);
         lock (selectionGate)
         {
@@ -372,11 +378,20 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
                 return;
             }
 
-            // This interim reconciliation can fence only the local room-host authority. A remote
-            // lease holder must acknowledge a freeze and ordered sync barrier before the relay may
-            // replace its lease; until that handoff exists, never activate a different writer here.
             if (!string.Equals(currentLease.AuthorityControllerId, localControllerId, StringComparison.Ordinal))
+            {
+                if (!selection.IsPaused &&
+                    string.Equals(selection.ControllerId, currentLease.AuthorityControllerId, StringComparison.Ordinal))
+                {
+                    CancelPendingFreeze(currentLease);
+                    return;
+                }
+
+                // No readiness report, disconnect or timeout can substitute for the old writer's
+                // final checkpoint. Even an all-away pause waits for its freeze acknowledgement.
+                TrySendFreezeRequest(currentLease, selection.IsPaused ? roomHostControllerId : selection.ControllerId);
                 return;
+            }
 
             if (!selection.IsPaused &&
                 coordinator.IsFreshMapReady(currentLease.AuthorityControllerId))
@@ -538,7 +553,14 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
 
     private void Handle_HandoffBarrierApplied(MessagePayload<NetworkCampaignAuthorityHandoffBarrierApplied> payload)
     {
-        if (payload.Who is not NetPeer peer ||
+        if (payload.Who is not NetPeer peer) return;
+        GameThread.EnqueueSafe(() => ApplyHandoffBarrierAcknowledgement(peer, payload.What),
+            context: nameof(CampaignSimulationAvailabilityServerHandler));
+    }
+
+    private void ApplyHandoffBarrierAcknowledgement(NetPeer peer, NetworkCampaignAuthorityHandoffBarrierApplied ack)
+    {
+        if (!ModInformation.IsListenAuthority || network == null || sessionIdentity == null ||
             !connections.HasCompletedCampaignSynchronization(peer) ||
             !playerManager.TryGetPlayer(peer, out var player))
             return;
@@ -553,7 +575,6 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
                     !coordinator.IsFreshMapReady(player.ControllerId))
                     return;
 
-                var ack = payload.What;
                 if (ack.BarrierSequence != pendingBarrierSequence ||
                     ack.PausedEpoch != pendingBarrierEpoch ||
                     !string.Equals(ack.RoomId, currentLease.RoomId, StringComparison.Ordinal) ||
@@ -568,16 +589,119 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
                         !string.Equals(knownControllerId, player.ControllerId, StringComparison.Ordinal))
                         return;
                 }
+                if (!playerManager.TryGetPeer(player.ControllerId, out var currentPeer) || currentPeer != peer) return;
 
                 var selection = coordinator.Select();
                 if (selection.IsPaused ||
                     !string.Equals(selection.ControllerId, player.ControllerId, StringComparison.Ordinal))
                     return;
 
+                if (!TryCommitLease(currentLease, player.ControllerId, isPaused: false)) return;
                 pendingBarrierAcknowledged = true;
-                Logger.Information("Controller {ControllerId} applied campaign handoff barrier {BarrierSequence} for paused epoch {Epoch}; campaign remains paused until authority-side world replication is available",
-                    player.ControllerId, pendingBarrierSequence, pendingBarrierEpoch);
+                Logger.Information("Activated controller {ControllerId} after campaign handoff barrier {BarrierSequence} at epoch {Epoch}",
+                    player.ControllerId, pendingBarrierSequence, currentLease.Epoch + 1);
+                ResetPendingBarrier();
             }
+        }
+    }
+
+    private void TrySendFreezeRequest(AuthorityLease currentLease, string candidateControllerId)
+    {
+        if (string.IsNullOrWhiteSpace(candidateControllerId) ||
+            string.Equals(currentLease.AuthorityControllerId, candidateControllerId, StringComparison.Ordinal)) return;
+        if (!hasPendingFreeze || pendingFreezeLease != currentLease ||
+            !string.Equals(pendingFreezeCandidateControllerId, candidateControllerId, StringComparison.Ordinal))
+        {
+            CancelPendingFreeze(currentLease);
+            if (!TryGetNextBarrierSequence(out var sequence)) return;
+            pendingFreezeLease = currentLease;
+            pendingFreezeCandidateControllerId = candidateControllerId;
+            pendingFreezeSequence = sequence;
+            hasPendingFreeze = true;
+        }
+
+        if (!TryGetSynchronizedPeer(currentLease.AuthorityControllerId, out var peer)) return;
+        network.Send(peer, new NetworkCampaignAuthorityFreezeRequest(currentLease,
+            pendingFreezeCandidateControllerId, pendingFreezeSequence));
+        network.FlushPendingMessages();
+    }
+
+    private bool TryGetSynchronizedPeer(string controllerId, out NetPeer peer)
+    {
+        if (!playerManager.TryGetPeer(controllerId, out peer) || peer == null ||
+            !connections.HasCompletedCampaignSynchronization(peer)) return false;
+        lock (peerGate)
+            return peerControllerIds.TryGetValue(peer.Id, out var mapped) &&
+                string.Equals(mapped, controllerId, StringComparison.Ordinal);
+    }
+
+    private void CancelPendingFreeze(AuthorityLease currentLease)
+    {
+        if (!hasPendingFreeze) return;
+        if (pendingFreezeLease == currentLease && TryGetSynchronizedPeer(currentLease.AuthorityControllerId, out var peer))
+        {
+            network.Send(peer, new NetworkCampaignAuthorityFreezeRequest(pendingFreezeLease,
+                pendingFreezeCandidateControllerId, pendingFreezeSequence).ToCanceled());
+            network.FlushPendingMessages();
+        }
+        hasPendingFreeze = false;
+        pendingFreezeLease = default;
+        pendingFreezeCandidateControllerId = string.Empty;
+        pendingFreezeSequence = 0;
+    }
+
+    private void Handle_FreezeAcknowledged(MessagePayload<NetworkCampaignAuthorityFreezeAcknowledged> payload)
+    {
+        if (payload.Who is not NetPeer peer) return;
+        GameThread.EnqueueSafe(() => ApplyFreezeAcknowledgement(peer, payload.What),
+            context: nameof(CampaignSimulationAvailabilityServerHandler));
+    }
+
+    private void ApplyFreezeAcknowledgement(NetPeer peer, NetworkCampaignAuthorityFreezeAcknowledged ack)
+    {
+        if (!ModInformation.IsListenAuthority || network == null || sessionIdentity == null ||
+            !connections.HasCompletedCampaignSynchronization(peer) || !playerManager.TryGetPlayer(peer, out var player)) return;
+        lock (selectionGate)
+        lock (leaseGate)
+        {
+            if (!hasPendingFreeze || !sessionIdentity.TryGetConfirmedLease(out var lease) || lease != pendingFreezeLease ||
+                ack.HandoffSequence != pendingFreezeSequence || ack.Epoch != lease.Epoch ||
+                !string.Equals(ack.RoomId, lease.RoomId, StringComparison.Ordinal) ||
+                !string.Equals(ack.AuthorityId, lease.AuthorityId, StringComparison.Ordinal) ||
+                !string.Equals(ack.AuthorityControllerId, lease.AuthorityControllerId, StringComparison.Ordinal) ||
+                !string.Equals(ack.CandidateControllerId, pendingFreezeCandidateControllerId, StringComparison.Ordinal) ||
+                !string.Equals(player.ControllerId, lease.AuthorityControllerId, StringComparison.Ordinal) ||
+                !TryGetSynchronizedPeer(player.ControllerId, out var currentPeer) || currentPeer != peer) return;
+
+            var selection = coordinator.Select();
+            string candidate = selection.IsPaused ? sessionIdentity.RoomHostControllerId : selection.ControllerId;
+            if (!string.Equals(candidate, pendingFreezeCandidateControllerId, StringComparison.Ordinal))
+            {
+                CancelPendingFreeze(lease);
+                return;
+            }
+
+            // Earlier remote world deltas have already applied in this same game-thread FIFO.
+            if (ack.AllocationCheckpoint == null || ack.RosterCheckpoint == null || ack.SessionCheckpoint == null ||
+                ack.SchedulerCheckpoint == null || asyncTasks == null || !asyncTasks.TryDrain() ||
+                ack.ClockCheckpoint == null || ack.ClockCheckpoint.Ticks < 0 ||
+                objectManager == null || !objectManager.TryApplyAllocationCheckpoint(ack.AllocationCheckpoint) ||
+                rosterCheckpointService == null || !rosterCheckpointService.TryApply(ack.RosterCheckpoint) ||
+                sessionCheckpointService == null || !sessionCheckpointService.TryApply(ack.SessionCheckpoint) ||
+                schedulerCheckpointService == null || !schedulerCheckpointService.TryApply(ack.SchedulerCheckpoint) ||
+                mapTimeTracker == null || !mapTimeTracker.TryApplyAuthorityHandoffBaseline(ack.ClockCheckpoint.Ticks))
+            {
+                Logger.Error("Rejected frozen campaign checkpoint {HandoffSequence} from {ControllerId}; no replacement authority was activated",
+                    ack.HandoffSequence, player.ControllerId);
+                return;
+            }
+
+            if (!TryCommitLease(lease, string.Empty, isPaused: true)) return;
+            hasPendingFreeze = false;
+            ResetPendingBarrier();
+            Logger.Information("Applied final frozen campaign checkpoint {HandoffSequence} from {ControllerId}; reconciling the next writer",
+                ack.HandoffSequence, player.ControllerId);
+            ReconcileLease(coordinator.Select());
         }
     }
 

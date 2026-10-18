@@ -21,6 +21,9 @@ namespace GameInterface.Services.Time.Patches
 
         internal static void ResetReadinessObservation()
         {
+#if DEBUG
+            Services.CampaignAuthority.CampaignAuthorityDebugCommands.YieldMapAuthority = false;
+#endif
             observedStateManager = null;
             lastMapReadiness = null;
             lastReadinessPublishTimestamp = 0;
@@ -73,6 +76,9 @@ namespace GameInterface.Services.Time.Patches
             bool mapReady = Campaign.Current != null &&
                 states.Any(state => state is MapState) &&
                 !states.Any(state => state is MissionState);
+#if DEBUG
+            mapReady &= !Services.CampaignAuthority.CampaignAuthorityDebugCommands.YieldMapAuthority;
+#endif
             long timestamp = Stopwatch.GetTimestamp();
             bool stateManagerChanged = !ReferenceEquals(observedStateManager, __instance);
             bool readinessChanged = !lastMapReadiness.HasValue || lastMapReadiness.Value != mapReady;
