@@ -5,6 +5,12 @@ using GameInterface.Services.Heroes.Enum;
 using GameInterface.Services.Heroes.Interaces;
 using GameInterface.Services.Heroes.Messages;
 using GameInterface.Services.Time.Interfaces;
+using GameInterface.Services.Time.UI;
+using Newtonsoft.Json;
+using SandBox.GauntletUI.Map;
+using System.Linq;
+using TaleWorlds.MountAndBlade;
+using TaleWorlds.ScreenSystem;
 using System;
 using System.Collections.Generic;
 using TaleWorlds.CampaignSystem;
@@ -97,6 +103,36 @@ internal class TimeCommands
     }
 
 #if DEBUG
+    public sealed class GetTimeDisplayCoopCommand : ICoopCommand
+    {
+        public string Prefix => "coop.debug";
+        public string Name => "get_time_display";
+        public string Description => "Reports selected speed, effective pause, and the live map and Mission time view models.";
+        public CoopCommandSide Side => CoopCommandSide.Both;
+        public IExpectedArgs[] ExpectedArgs { get; } = Array.Empty<IExpectedArgs>();
+
+        public CoopCommandResult ProcessCommand(ICoopCommandArgs strings)
+        {
+            if (Campaign.Current == null ||
+                !ContainerProvider.TryResolve<ITimeControlInterface>(out var timeControl))
+                return Failed("A loaded campaign and time control interface are required.");
+
+            ContainerProvider.TryResolve<ISessionIdentity>(out var identity);
+            var selectedMode = timeControl.GetTimeControl();
+            var mapTime = ScreenManager._globalLayers?.OfType<GauntletMapBarGlobalLayer>()
+                .Select(layer => layer._dataSource?.MapTimeControl).FirstOrDefault(value => value != null);
+            return Succeeded(JsonConvert.SerializeObject(new
+            {
+                selectedMode = selectedMode.ToString(),
+                effectiveMode = CampaignTimeDisplay.GetEffectiveMode(selectedMode, identity).ToString(),
+                simulationSuspended = CampaignTimeDisplay.IsSimulationSuspended(identity),
+                mapTimeFlowState = mapTime?.TimeFlowState,
+                mapPaused = mapTime?.IsCurrentlyPausedOnMap,
+                missionMapTimeText = Mission.Current?.GetMissionBehavior<MissionMapTimeView>()?.DisplayText,
+            }));
+        }
+    }
+
     public sealed class GetCampaignTimeCoopCommand : ICoopCommand
     {
         public string Prefix => "coop.debug";

@@ -29,6 +29,8 @@ public sealed class MissionMapTimeView : MissionView, ILocationMissionBehavior
     private GauntletMovieIdentifier movie;
     private bool subscribed;
 
+    internal string DisplayText => dataSource?.MapTimeText;
+
     public MissionMapTimeView(
         IMessageBroker messageBroker, 
         ITimeControlInterface timeControlInterface,
