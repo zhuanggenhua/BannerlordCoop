@@ -7,6 +7,29 @@ namespace GameInterface.Tests.Services.Time;
 public class MapTimeTrackerInterfaceTests
 {
     [Fact]
+    public void HandoffBaselineClearsPendingHardCorrectionAndOldPacingRate()
+    {
+        var tracker = CreateTrackerWithServerRate();
+        Assert.True(tracker.BeginCorrection(5000L, 100L));
+        tracker.ResetAuthorityHandoffPacing(500L);
+
+        Assert.False(tracker.TryConsumeHardSync(out _));
+        tracker.PrepareCorrection(500L, 10L);
+        Assert.Equal(0L, tracker.GetTickCorrection(10L, 0.05f));
+        Assert.False(tracker.BeginCorrection(510L, 1000L));
+        Assert.False(tracker.TryConsumeHardSync(out _));
+    }
+
+    [Fact]
+    public void HandoffBaselineDoesNotReopenJoinCatchUp()
+    {
+        var tracker = CreateJoinTracker(100L);
+        tracker.ResetAuthorityHandoffPacing(500L);
+        Assert.False(tracker.TryCompleteCampaignJoinCatchUp(500L, 0L, out bool refresh));
+        Assert.False(refresh);
+    }
+
+    [Fact]
     public void TryApplyUnderLease_DiscardsApplyAndNotificationAfterLeaseChanges()
     {
         bool leaseIsCurrent = true;

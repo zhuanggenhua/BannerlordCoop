@@ -56,6 +56,9 @@ public interface IMapTimeTrackerInterface : IGameAbstraction
     /// </summary>
     void ApplyCampaignJoinBaseline(long serverTicks);
 
+    /// <summary>Applies the frozen writer's exact clock on the game thread without reopening join catch-up.</summary>
+    bool TryApplyAuthorityHandoffBaseline(long authorityTicks);
+
     /// <summary>
     /// Evaluates post-baseline heartbeats until local campaign time is current.
     /// </summary>
@@ -364,6 +367,30 @@ internal class MapTimeTrackerInterface : IMapTimeTrackerInterface
         joinCatchUpActive = true;
         hasPostJoinBaselineHeartbeat = false;
         joinBaselineRequiresRefresh = false;
+        skipNextServerRateEstimate = true;
+        Volatile.Write(ref waitingForJoinBaseline, false);
+    }
+
+    public bool TryApplyAuthorityHandoffBaseline(long authorityTicks)
+    {
+        var campaign = Campaign.Current;
+        var tracker = campaign?.MapTimeTracker;
+        if (tracker == null || authorityTicks < 0) return false;
+
+        ResetAuthorityHandoffPacing(authorityTicks);
+        tracker._numTicks = authorityTicks;
+        tracker._deltaTimeInTicks = 0L;
+        campaign._dt = 0f;
+        return true;
+    }
+
+    internal void ResetAuthorityHandoffPacing(long authorityTicks)
+    {
+        ResetForCampaignJoin();
+        hasServerTime = true;
+        previousServerTicks = authorityTicks;
+        pendingServerTicks = authorityTicks;
+        skipNextHeartbeatAgeIncrement = true;
         skipNextServerRateEstimate = true;
         Volatile.Write(ref waitingForJoinBaseline, false);
     }
