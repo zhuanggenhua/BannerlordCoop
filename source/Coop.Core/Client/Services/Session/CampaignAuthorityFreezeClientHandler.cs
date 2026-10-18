@@ -8,6 +8,7 @@ using Common.Session;
 using GameInterface.Services.Entity;
 using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.ObjectManager;
+using GameInterface.Services.Time.Interfaces;
 using Serilog;
 
 namespace Coop.Core.Client.Services.Session;
@@ -23,6 +24,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
     private readonly IControllerIdProvider controllerIdProvider;
     private readonly IObjectManager objectManager;
     private readonly ICampaignRosterCheckpointService rosterCheckpointService;
+    private readonly IMapTimeTrackerInterface mapTimeTracker;
     private readonly ISendCoalescer sendCoalescer;
 
     public CampaignAuthorityFreezeClientHandler(
@@ -32,6 +34,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
         IControllerIdProvider controllerIdProvider,
         IObjectManager objectManager,
         ICampaignRosterCheckpointService rosterCheckpointService,
+        IMapTimeTrackerInterface mapTimeTracker,
         ISendCoalescer sendCoalescer = null)
     {
         this.messageBroker = messageBroker;
@@ -40,6 +43,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
         this.controllerIdProvider = controllerIdProvider;
         this.objectManager = objectManager;
         this.rosterCheckpointService = rosterCheckpointService;
+        this.mapTimeTracker = mapTimeTracker;
         this.sendCoalescer = sendCoalescer;
         messageBroker.Subscribe<NetworkCampaignAuthorityFreezeRequest>(Handle_FreezeRequest);
         messageBroker.Subscribe<NetworkCampaignAuthorityFreezeCanceled>(Handle_FreezeCanceled);
@@ -92,7 +96,14 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
                     request.HandoffSequence);
                 return;
             }
-            network.SendAll(request.ToAcknowledged(objectManager.CaptureAllocationCheckpoint(), rosterCheckpoint));
+            if (!mapTimeTracker.TryGetCurrentTicks(out long ticks) || ticks < 0)
+            {
+                Logger.Warning("Could not capture final clock for freeze {HandoffSequence}; local writes remain frozen without acknowledgement",
+                    request.HandoffSequence);
+                return;
+            }
+            network.SendAll(request.ToAcknowledged(objectManager.CaptureAllocationCheckpoint(), rosterCheckpoint,
+                new CampaignClockCheckpoint(ticks)));
             network.FlushPendingMessages();
             Logger.Information("Froze local campaign writes and acknowledged handoff {HandoffSequence} at epoch {Epoch} to controller {CandidateControllerId}",
                 request.HandoffSequence, request.Epoch, request.CandidateControllerId);

@@ -8,6 +8,7 @@ using Coop.Core.Client.Messages;
 using GameInterface.Services.Entity;
 using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.ObjectManager;
+using GameInterface.Services.Time.Interfaces;
 using GameInterface.Services.Time.Messages;
 using Serilog;
 using System;
@@ -28,6 +29,7 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
     private readonly IControllerIdProvider controllerIdProvider;
     private readonly IObjectManager objectManager;
     private readonly ICampaignRosterCheckpointService rosterCheckpointService;
+    private readonly IMapTimeTrackerInterface mapTimeTracker;
     private bool campaignSynchronized;
     private bool mapReady;
 
@@ -37,7 +39,8 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         ISessionIdentity sessionIdentity,
         IControllerIdProvider controllerIdProvider,
         IObjectManager objectManager,
-        ICampaignRosterCheckpointService rosterCheckpointService)
+        ICampaignRosterCheckpointService rosterCheckpointService,
+        IMapTimeTrackerInterface mapTimeTracker)
     {
         this.messageBroker = messageBroker;
         this.network = network;
@@ -45,6 +48,7 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         this.controllerIdProvider = controllerIdProvider;
         this.objectManager = objectManager;
         this.rosterCheckpointService = rosterCheckpointService;
+        this.mapTimeTracker = mapTimeTracker;
         messageBroker.Subscribe<ClientCampaignReady>(Handle_ClientCampaignReady);
         messageBroker.Subscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Subscribe<NetworkCampaignAuthorityHandoffBarrier>(Handle_HandoffBarrier);
@@ -88,6 +92,13 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
             return;
         }
 
+        if (barrier.ClockCheckpoint == null || barrier.ClockCheckpoint.Ticks < 0)
+        {
+            Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; final campaign clock is missing or invalid",
+                barrier.BarrierSequence);
+            return;
+        }
+
         if (!objectManager.TryApplyAllocationCheckpoint(barrier.AllocationCheckpoint))
         {
             Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; registry allocation checkpoint is missing or invalid",
@@ -98,6 +109,13 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         if (!rosterCheckpointService.TryApply(barrier.RosterCheckpoint))
         {
             Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; world rosters did not match the checkpoint",
+                barrier.BarrierSequence);
+            return;
+        }
+
+        if (!mapTimeTracker.TryApplyAuthorityHandoffBaseline(barrier.ClockCheckpoint.Ticks))
+        {
+            Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; final campaign clock could not be applied",
                 barrier.BarrierSequence);
             return;
         }

@@ -28,9 +28,11 @@ public readonly struct NetworkCampaignAuthorityFreezeRequest : IServerToClientCo
     }
 
     public NetworkCampaignAuthorityFreezeAcknowledged ToAcknowledged(
-        RegistryAllocationCheckpoint allocationCheckpoint = null, CampaignRosterCheckpoint rosterCheckpoint = null) =>
+        RegistryAllocationCheckpoint allocationCheckpoint = null, CampaignRosterCheckpoint rosterCheckpoint = null,
+        CampaignClockCheckpoint clockCheckpoint = null) =>
         new NetworkCampaignAuthorityFreezeAcknowledged(
-            RoomId, AuthorityId, AuthorityControllerId, Epoch, CandidateControllerId, HandoffSequence, allocationCheckpoint, rosterCheckpoint);
+            RoomId, AuthorityId, AuthorityControllerId, Epoch, CandidateControllerId, HandoffSequence, allocationCheckpoint,
+            rosterCheckpoint, clockCheckpoint);
 
     public NetworkCampaignAuthorityFreezeCanceled ToCanceled() =>
         new NetworkCampaignAuthorityFreezeCanceled(
@@ -49,6 +51,7 @@ public readonly struct NetworkCampaignAuthorityFreezeAcknowledged : IMessage
     [ProtoMember(6)] public readonly long HandoffSequence;
     [ProtoMember(7)] public readonly RegistryAllocationCheckpoint AllocationCheckpoint;
     [ProtoMember(8)] public readonly CampaignRosterCheckpoint RosterCheckpoint;
+    [ProtoMember(9)] public readonly CampaignClockCheckpoint ClockCheckpoint;
 
     public NetworkCampaignAuthorityFreezeAcknowledged(
         string roomId,
@@ -58,7 +61,8 @@ public readonly struct NetworkCampaignAuthorityFreezeAcknowledged : IMessage
         string candidateControllerId,
         long handoffSequence,
         RegistryAllocationCheckpoint allocationCheckpoint = null,
-        CampaignRosterCheckpoint rosterCheckpoint = null)
+        CampaignRosterCheckpoint rosterCheckpoint = null,
+        CampaignClockCheckpoint clockCheckpoint = null)
     {
         RoomId = roomId ?? string.Empty;
         AuthorityId = authorityId ?? string.Empty;
@@ -68,6 +72,7 @@ public readonly struct NetworkCampaignAuthorityFreezeAcknowledged : IMessage
         HandoffSequence = handoffSequence;
         AllocationCheckpoint = allocationCheckpoint;
         RosterCheckpoint = rosterCheckpoint;
+        ClockCheckpoint = clockCheckpoint;
     }
 }
 

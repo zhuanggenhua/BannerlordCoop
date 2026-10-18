@@ -13,6 +13,7 @@ using Common.Network.Coalescing;
 using GameInterface.Services.Entity;
 using GameInterface.Services.ObjectManager;
 using GameInterface.Services.CampaignAuthority;
+using GameInterface.Services.Time.Interfaces;
 using GameInterface.Services.GameState.Messages;
 using GameInterface.Services.Players;
 using GameInterface.Services.Players.Data;
@@ -179,6 +180,13 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             var rosters = new CampaignRosterCheckpoint(new CampaignRosterState[0]);
             var rosterService = new Mock<ICampaignRosterCheckpointService>();
             rosterService.Setup(value => value.TryCapture(out rosters)).Returns(true);
+            long finalTicks = 999;
+            var clock = new Mock<IMapTimeTrackerInterface>();
+            clock.Setup(value => value.TryGetCurrentTicks(out finalTicks)).Callback(() =>
+            {
+                Assert.True(GameThread.Instance.IsGameThread);
+                Assert.True(identity.CurrentLease.IsPaused);
+            }).Returns(true);
             var coalescer = new Mock<ISendCoalescer>();
             coalescer.Setup(value => value.Flush(network.Object)).Callback(() =>
             {
@@ -210,7 +218,8 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                 identity,
                 objectManager.Object,
                 coalescer.Object,
-                rosterService.Object);
+                rosterService.Object,
+                clock.Object);
 
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
             messageBroker.Publish(this, new CampaignReady());
@@ -236,6 +245,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             Assert.True(appliedBarrier.BarrierSequence > 0);
             Assert.Equal(555u, appliedBarrier.AllocationCheckpoint.NextHandle);
             Assert.Same(rosters, appliedBarrier.RosterCheckpoint);
+            Assert.Equal(999, appliedBarrier.ClockCheckpoint.Ticks);
 
             var applied = new NetworkCampaignAuthorityHandoffBarrierApplied(
                 appliedBarrier.RoomId, appliedBarrier.PausedAuthorityId, appliedBarrier.PausedEpoch,
