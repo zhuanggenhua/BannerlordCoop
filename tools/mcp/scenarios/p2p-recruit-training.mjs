@@ -156,6 +156,25 @@ function assertRecruitCounts(before, after, controller, character) {
         if (previous.controller === controller) assert.equal(right.get(character), (left.get(character) ?? 0) + 1);
     }
 }
+function assertRecruitStock(before, after, purchaser, townId, slot) {
+    assert.ok(townId && before[purchaser].settlement === townId, 'Purchaser has no native recruitment town');
+    assert.equal(after[purchaser].settlement, townId, 'Purchaser left its native recruitment town');
+    const nativeTownViews = [];
+    for (let index = 0; index < after.length; index++) {
+        const previous = new Map(before[index].players.map(player => [player.controller, player.currentSettlement]));
+        assert.deepEqual(after[index].players.map(player => player.controller).sort(), [...previous.keys()].sort());
+        for (const player of after[index].players)
+            assert.equal(player.currentSettlement, previous.get(player.controller),
+                `Recruitment changed ${player.controller} native settlement on ${INSTANCES[index]}`);
+        if (after[index].settlement !== townId) continue;
+        const notable = after[index].volunteers?.find(item => item.nativeId === slot.nativeNotable);
+        assert.ok(notable, 'Selected native notable missing in target-town view');
+        assert.equal(notable.slots.find(item => item.index === slot.index)?.character, null,
+            'Volunteer stock slot was not consumed in target-town view');
+        nativeTownViews.push(INSTANCES[index]);
+    }
+    return { nativeTownConfirmed: true, townId, nativeTownViews };
+}
 function criticalErrors(text) {
     return {
         realTick: (text.match(/Failed to run ["']?Campaign\.RealTick/g) ?? []).length,
@@ -487,6 +506,8 @@ async function run(config) {
     async function recruit(instance, label, localAuthority) {
         const before = await Promise.all(INSTANCES.map(inspect));
         const controller = initial[INSTANCES.indexOf(instance)].controller;
+        const purchaser = INSTANCES.indexOf(instance), townId = before[purchaser].settlement;
+        assert.equal(townId, recruitmentTown.id, 'Purchaser is outside the selected native town');
         assert.equal(before[INSTANCES.indexOf(instance)].localAuthority, localAuthority);
         const slot = recruitSlot(before[INSTANCES.indexOf(instance)], controller, recruitmentTown.sharedSlots);
         const baseline = new Map(before[0].players.map(player => [player.controller, { gold: player.gold, troops: counts(player) }]));
@@ -513,14 +534,14 @@ async function run(config) {
                     assert.equal(player.gold, old.gold - (target ? cost : 0));
                     assert.equal(counts(player), old.troops + (target ? 1 : 0));
                 }
-                const notable = value.volunteers.find(item => item.nativeId === slot.nativeNotable);
-                assert.ok(notable, 'Selected native notable missing on replica');
-                assert.equal(notable.slots.find(item => item.index === slot.index)?.character, null,
-                    'Volunteer stock slot was not consumed on replica');
             }
+            assertRecruitStock(before, values, purchaser, townId, slot);
             await registrations(); return values;
         });
-        return { instance, controller, slot, cart: output, before, after, worlds: await stableWorld(label + ' world') };
+        const worlds = await stableWorld(label + ' world');
+        const stockProof = { ...assertRecruitStock(before, after, purchaser, townId, slot),
+            globalVolunteerHash: worlds[0].volunteerHash, peerGlobalVolunteerHash: worlds[1].volunteerHash };
+        return { instance, controller, slot, cart: output, before, after, worlds, stockProof };
     }
     async function stacks(instance, hero) {
         return memberStacks(await command(instance, 'coop.debug.mobile_party.character_ids', [hero]));
@@ -804,6 +825,8 @@ async function selfTest(recordedPath) {
         }
         const replayed = { start_client: 0, stop_run: 0, read_logs: 0, recruitmentInspect: 0,
             nativeRecruitmentCart: 0, nativeMap: 0, campaignReadyWhileMission: 0 };
+        const latestInspects = new Map(), latestWorlds = new Map(), afterLastCart = new Map();
+        let lastCart, beforeLastCart, lastPurchaser;
         for (const line of recordedText.split(/\r?\n/).filter(Boolean)) {
             const entry = JSON.parse(line);
             if (!entry.data) continue;
@@ -824,6 +847,10 @@ async function selfTest(recordedPath) {
                 const inspected = jsonOutput(entry.data.result.output);
                 assert.ok(Array.isArray(inspected.players));
                 if (!inspected.query) for (const player of inspected.players) assert.ok(Number.isInteger(counts(player)));
+                if (!inspected.query) {
+                    latestInspects.set(entry.args.instance, inspected);
+                    if (lastCart) afterLastCart.set(entry.args.instance, inspected);
+                }
                 replayed.recruitmentInspect++;
             }
             if (entry.name === 'execute_command' && entry.data.result?.succeeded &&
@@ -832,8 +859,31 @@ async function selfTest(recordedPath) {
                 assert.equal(submitted.status, 'submitted'); assert.equal(submitted.cart.length, 1);
                 assert.ok(Number.isInteger(field(submitted.cart[0], 'cost')));
                 assert.ok(Number.isInteger(field(submitted.cart[0], 'index')));
+                lastCart = submitted; lastPurchaser = INSTANCES.indexOf(entry.args.instance);
+                beforeLastCart = INSTANCES.map(instance => latestInspects.get(instance));
+                afterLastCart.clear();
                 replayed.nativeRecruitmentCart++;
             }
+            if (entry.args?.name === 'coop.debug.authority.world_state' && entry.data.result?.succeeded)
+                latestWorlds.set(entry.args.instance, jsonOutput(entry.data.result.output));
+        }
+        if (replayed.nativeRecruitmentCart === 4 && afterLastCart.size === 2) {
+            const after = INSTANCES.map(instance => afterLastCart.get(instance)), townId = beforeLastCart[lastPurchaser].settlement;
+            const slot = { nativeNotable: lastCart.cart[0].notable, index: field(lastCart.cart[0], 'index') };
+            const proof = assertRecruitStock(beforeLastCart, after, lastPurchaser, townId, slot);
+            for (const failure of ['purchaserOutside', 'slotPresent', 'playerTownChanged']) {
+                const changed = JSON.parse(JSON.stringify(after));
+                if (failure === 'purchaserOutside') changed[lastPurchaser].settlement = null;
+                if (failure === 'slotPresent') changed[lastPurchaser].volunteers.find(value => value.nativeId === slot.nativeNotable)
+                    .slots.find(value => value.index === slot.index).character = lastCart.cart[0].character;
+                if (failure === 'playerTownChanged') changed[1].players[0].currentSettlement = 'changed_town';
+                assert.throws(() => assertRecruitStock(beforeLastCart, changed, lastPurchaser, townId, slot));
+            }
+            const worlds = INSTANCES.map(instance => latestWorlds.get(instance));
+            assertWorld(worlds);
+            assert.throws(() => assertWorld([worlds[0], { ...worlds[1], volunteerHash: 'changed_stock' }]));
+            console.log(JSON.stringify({ offlineFourthCartStockReplay: proof, outsideViewVolunteers: after[1 - lastPurchaser].volunteers,
+                worldHashReplay: 'Latest recorded world snapshots; run06 has no post-fourth-cart world_state, so this is not its global stock acceptance.' }));
         }
         assert.ok(replayed.start_client > 0 && replayed.stop_run > 0, 'Recorded response wrappers are incomplete');
         console.log(JSON.stringify({ offlineRecordedWrapperReplay: replayed, record: resolve(recordedPath) }));
