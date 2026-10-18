@@ -1,0 +1,132 @@
+{
+  "status": "partial_pass_precondition_blocked_not_full_acceptance",
+  "runId": "62c18ddb7535452288a669c3367edcb3",
+  "sourceCommit": "a62d7cd9047c7776571475e05817749c0ab73b2d",
+  "passed": false,
+  "cleanupConfirmed": true,
+  "failed": {
+    "message": "No affordable native recruitable slot for testclient1; no stock/gold fixture will be invented",
+    "stack": "Error: No affordable native recruitable slot for testclient1; no stock/gold fixture will be invented\n    at recruitSlot (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:94:11)\n    at recruit (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:380:22)\n    at async feature (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:332:26)\n    at async run (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:503:9)\n    at async file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:646:10"
+  },
+  "features": [
+    {
+      "name": "join-single-native-actors",
+      "status": "PASS",
+      "completedUtc": "2026-10-18T15:53:18.170Z"
+    },
+    {
+      "name": "A-only-world-tick",
+      "status": "PASS",
+      "completedUtc": "2026-10-18T15:53:27.864Z"
+    },
+    {
+      "name": "native-settlement-preparation",
+      "status": "PASS",
+      "completedUtc": "2026-10-18T15:53:31.498Z"
+    },
+    {
+      "name": "A-writer-native-recruit-1",
+      "status": "PASS",
+      "completedUtc": "2026-10-18T15:53:35.217Z",
+      "instance": "server",
+      "controller": "LocalA",
+      "slot": {
+        "notable": "Hero_CharacterObject_1796",
+        "nativeNotable": "CharacterObject_1796",
+        "index": 2,
+        "character": "imperial_recruit",
+        "cost": 20
+      },
+      "cart": {
+        "status": "submitted",
+        "lease": {
+          "RoomId": "68c9f1db7e354c64b32a3d15f1d83152",
+          "AuthorityId": "ada4996b0125409383b6b48f3175b3e4",
+          "AuthorityControllerId": "LocalA",
+          "Epoch": 3,
+          "IsPaused": false,
+          "IsValid": true
+        },
+        "localAuthority": true,
+        "cart": [
+          {
+            "notable": "CharacterObject_1796",
+            "Index": 2,
+            "character": "imperial_recruit",
+            "Cost": 20
+          }
+        ],
+        "goldBefore": 1000,
+        "goldAfterLocal": 980,
+        "troopsBefore": 1,
+        "troopsAfterLocal": 2,
+        "note": "Observer submission completes asynchronously; compare both recruitment.inspect results."
+      }
+    },
+    {
+      "name": "A-to-B-final-checkpoint",
+      "status": "PASS",
+      "completedUtc": "2026-10-18T15:53:40.268Z"
+    },
+    {
+      "name": "A-observer-native-recruit-2",
+      "status": "PASS",
+      "completedUtc": "2026-10-18T15:53:44.057Z",
+      "instance": "server",
+      "controller": "LocalA",
+      "slot": {
+        "notable": "Hero_CharacterObject_1797",
+        "nativeNotable": "CharacterObject_1797",
+        "index": 1,
+        "character": "imperial_recruit",
+        "cost": 20
+      },
+      "cart": {
+        "status": "submitted",
+        "lease": {
+          "RoomId": "68c9f1db7e354c64b32a3d15f1d83152",
+          "AuthorityId": "8990a134809947d5bcefa4fcb85cb82f",
+          "AuthorityControllerId": "testclient1",
+          "Epoch": 5,
+          "IsPaused": false,
+          "IsValid": true
+        },
+        "localAuthority": false,
+        "cart": [
+          {
+            "notable": "CharacterObject_1797",
+            "Index": 1,
+            "character": "imperial_recruit",
+            "Cost": 20
+          }
+        ],
+        "goldBefore": 980,
+        "goldAfterLocal": 980,
+        "troopsBefore": 2,
+        "troopsAfterLocal": 2,
+        "note": "Observer submission completes asynchronously; compare both recruitment.inspect results."
+      }
+    }
+  ],
+  "logs": {
+    "server": {
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-recruit-training-run-02.jsonl.server.log",
+      "sha256": "ca7f8e8c4286c69398821366ee3018be83bda284021ff42f9a1bd014af7ae397",
+      "critical": {
+        "realTick": 0,
+        "duplicateIds": 0,
+        "aiBatch": 0
+      }
+    },
+    "client1": {
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-recruit-training-run-02.jsonl.client1.log",
+      "sha256": "ac2d7b246bd62326411ebc355db433058c2b53a488cb11b917f8ec7a90a9d105",
+      "critical": {
+        "realTick": 0,
+        "duplicateIds": 0,
+        "aiBatch": 0
+      }
+    }
+  },
+  "scope": "B writer recruit, return-A recruit and NPC phases were not reached; native town_ES1 stock exhausted. Catalog selection fix does not seed inventory or currency."
+}

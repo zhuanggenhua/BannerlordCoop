@@ -1,0 +1,84 @@
+{
+  "head": "a62d7cd9047c7776571475e05817749c0ab73b2d",
+  "kind": "actual-regression-with-explicit-baseline-failures",
+  "suites": [
+    {
+      "name": "gi",
+      "rawExitCode": 0,
+      "counters": {
+        "total": 2811,
+        "passed": 2811,
+        "failed": 0,
+        "notExecuted": 0
+      },
+      "addedFailures": [],
+      "removedFailures": [],
+      "baselineFailureCount": 0,
+      "currentFailureCount": 0,
+      "log": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-wave-20261018\\final-gi.log",
+      "logSha256": "4195679a5586b5f65ca05f9479e7cb063633edaa190238587415c84b76acc050",
+      "trx": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-wave-20261018\\final-gi\\final-gi.trx",
+      "trxSha256": "1535be53a9059271b9752c82e5d744b21582e4ae9e968c37a181938cccd7206c"
+    },
+    {
+      "name": "coop",
+      "rawExitCode": 1,
+      "counters": {
+        "total": 1565,
+        "passed": 1370,
+        "failed": 195,
+        "notExecuted": 0
+      },
+      "addedFailures": [],
+      "removedFailures": [],
+      "baselineFailureCount": 195,
+      "currentFailureCount": 195,
+      "log": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-wave-20261018\\final-coop.log",
+      "logSha256": "2dfb1dd6e535082b111a1635ec58b8b3279fff6f07d7f303fdfbb4ee4642af2f",
+      "trx": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-wave-20261018\\final-coop\\final-coop.trx",
+      "trxSha256": "c84416d21e1a108822224cad7bae6147f863454515ed3796c7832b99c7795b08"
+    },
+    {
+      "name": "common",
+      "rawExitCode": 0,
+      "counters": {
+        "total": 423,
+        "passed": 423,
+        "failed": 0,
+        "notExecuted": 0
+      },
+      "addedFailures": [],
+      "removedFailures": [],
+      "baselineFailureCount": 0,
+      "currentFailureCount": 0,
+      "log": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-wave-20261018\\final-common.log",
+      "logSha256": "2879cae1f5a1efff86950f98fa2887145080deb2c4e4396017f6289f026e87c5",
+      "trx": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-wave-20261018\\final-common\\final-common.trx",
+      "trxSha256": "571b44dfdf9c59434acfdc2e2fb743d4282360ac0bc6aa6448014e698b535f6c"
+    },
+    {
+      "name": "e2e",
+      "rawExitCode": 1,
+      "counters": {
+        "total": 70,
+        "passed": 60,
+        "failed": 10,
+        "notExecuted": 0
+      },
+      "addedFailures": [],
+      "removedFailures": [],
+      "baselineFailureCount": 10,
+      "currentFailureCount": 10,
+      "log": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-wave-20261018\\final-e2e.log",
+      "logSha256": "4a57211bfd4bfa4848c1cc2eefd94b17e41d1c77ca63ec39d65264fadf4aca50",
+      "trx": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-wave-20261018\\final-e2e\\final-e2e.trx",
+      "trxSha256": "61c6d0dc281969402550d9e12891ec386bb1b57fbd1ed5e77c22688fd37f38b6"
+    }
+  ],
+  "build": {
+    "rawExitCode": 0,
+    "log": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-wave-20261018\\final-mod-build.log",
+    "sha256": "c03f39f6c51b5da0cb2dbcc7ec58d2fd7f793a5c7ccaa817a3ec4d4132b6d65f"
+  },
+  "passed": true
+}

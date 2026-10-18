@@ -1,0 +1,159 @@
+{
+  "cases": [
+    {
+      "label": "observer-native-town-preparation",
+      "status": "failed_not_accepted",
+      "runId": "74fb3eb53bb54f7d8fdf080319b677f9",
+      "harnessHead": "f6f2690c4dff3d01bc7a252c08d8f9f0fbacbc7f",
+      "passedFeatures": [
+        "join-single-native-actors",
+        "A-only-world-tick"
+      ],
+      "failure": {
+        "message": "native settlement client1 did not converge: Expected values to be strictly equal:\n+ actual - expected\n\n+ null\n- 'town_A1'",
+        "stack": "Error: native settlement client1 did not converge: Expected values to be strictly equal:\n+ actual - expected\n\n+ null\n- 'town_A1'\n    at poll (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:281:15)\n    at async file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:548:61\n    at async feature (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:377:26)\n    at async run (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:539:9)\n    at async file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:733:10"
+      },
+      "cleanup": [
+        {
+          "name": "server",
+          "cleanupComplete": true,
+          "processAlive": false,
+          "processTreeAlive": false
+        },
+        {
+          "name": "client1",
+          "cleanupComplete": true,
+          "processAlive": false,
+          "processTreeAlive": false
+        }
+      ],
+      "rawRecord": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-recruit-training-run-03.jsonl",
+      "rawRecordSha256": "eaf6af02c7cff1deedde0d32c1de25f6d71766d55b8715b5ae782420860f8bd1",
+      "summarySha256": "4bd18fd11b63d82e3acf490f515bfde68f8ba106c75f6ad972d9fc1f3fc9593a",
+      "logChecks": {
+        "server": {
+          "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-recruit-training-run-03.jsonl.server.log",
+          "sha256": "d76dcc706766eea3449ecdf268c31ff8f77c98a32882daf93d7f46b8d59f5821",
+          "critical": {
+            "realTick": 0,
+            "duplicateIds": 0,
+            "aiBatch": 0
+          }
+        },
+        "client1": {
+          "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-recruit-training-run-03.jsonl.client1.log",
+          "sha256": "3f46635ed5a7a618f2279d12b3c152daef4f401047bd8797925ab0f2c43515ed",
+          "critical": {
+            "realTick": 0,
+            "duplicateIds": 0,
+            "aiBatch": 0
+          }
+        }
+      }
+    },
+    {
+      "label": "confirmed-writer-native-town-preparation",
+      "status": "failed_not_accepted",
+      "runId": "7b6b073bf6944d69bda61473d3edfb16",
+      "harnessHead": "d74ea6c5997a41bbb4b70ed69cc404975bb3d03d",
+      "passedFeatures": [
+        "join-single-native-actors",
+        "A-only-world-tick"
+      ],
+      "failure": {
+        "message": "native MapState after location leave client1 did not converge: client1 still has a native Mission",
+        "stack": "Error: native MapState after location leave client1 did not converge: client1 still has a native Mission\n    at poll (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:300:15)\n    at async ensureSettlement (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:460:13)\n    at async file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:589:27\n    at async feature (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:396:26)\n    at async run (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:576:9)\n    at async file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:798:10"
+      },
+      "cleanup": [
+        {
+          "name": "server",
+          "cleanupComplete": true,
+          "processAlive": false,
+          "processTreeAlive": false
+        },
+        {
+          "name": "client1",
+          "cleanupComplete": true,
+          "processAlive": false,
+          "processTreeAlive": false
+        }
+      ],
+      "rawRecord": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-recruit-training-run-04.jsonl",
+      "rawRecordSha256": "2e4944acbc506a729c45a4298bafb25872b936c08b76c6928ffbf9ca9543d6ee",
+      "summarySha256": "99f5d88c3eb616615fbdf888dd1bbbff36ad0ab81805f245faae2975fc0253a4",
+      "logChecks": {
+        "server": {
+          "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-recruit-training-run-04.jsonl.server.log",
+          "sha256": "4219b5bc344400062a78995c9edeab8f5c5954e98b29bae137526f1315bdd4f3",
+          "critical": {
+            "realTick": 0,
+            "duplicateIds": 0,
+            "aiBatch": 0
+          }
+        },
+        "client1": {
+          "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-recruit-training-run-04.jsonl.client1.log",
+          "sha256": "9886e007d97e0e894ec9200a32d86461645b84b781f514722cfd759ce943fade",
+          "critical": {
+            "realTick": 0,
+            "duplicateIds": 0,
+            "aiBatch": 0
+          }
+        }
+      }
+    },
+    {
+      "label": "native-NPC-debug-response-cached-data",
+      "status": "failed_not_accepted",
+      "runId": "af8351dc69914977a42711aaeb850da6",
+      "harnessHead": "f6f2690c4dff3d01bc7a252c08d8f9f0fbacbc7f",
+      "passedFeatures": [
+        "join-single-native-actors",
+        "A-only-world-tick",
+        "native-B-leave-before-handoff",
+        "A-to-B-final-checkpoint"
+      ],
+      "failure": {
+        "message": "NPC XP lord_2_4_1_party_1 did not converge: Expected values to be strictly deep-equal:\n+ actual - expected ... Lines skipped\n\n  [\n    {\n      id: 'sturgian_archer',\n      number: 6,\n+     xp: 433\n-     xp: 265\n    },\n    {\n      id: 'sturgian_brigand',\n      number: 6,\n+     xp: 293\n-     xp: 155\n    },\n    {\n      id: 'sturgian_hardened_brigand',\n      number: 4,\n+     xp: 700\n-     xp: 620\n    },\n    {\n...\n      id: 'sturgian_hunter',\n      number: 7,\n+     xp: 976\n-     xp: 794\n    },\n    {\n      id: 'sturgian_recruit',\n      number: 17,\n+     xp: 565\n-     xp: 242\n    },\n    {\n...\n      id: 'sturgian_soldier',\n      number: 5,\n+     xp: 595\n-     xp: 480\n    },\n    {\n      id: 'sturgian_spearman',\n      number: 7,\n+     xp: 615\n-     xp: 440\n    },\n    {\n...\n      id: 'sturgian_warrior',\n      number: 15,\n+     xp: 793\n-     xp: 478\n    },\n    {\n      id: 'sturgian_woodsman',\n      number: 11,\n+     xp: 283\n-     xp: 52\n    }\n  ]",
+        "stack": "Error: NPC XP lord_2_4_1_party_1 did not converge: Expected values to be strictly deep-equal:\n+ actual - expected ... Lines skipped\n\n  [\n    {\n      id: 'sturgian_archer',\n      number: 6,\n+     xp: 433\n-     xp: 265\n    },\n    {\n      id: 'sturgian_brigand',\n      number: 6,\n+     xp: 293\n-     xp: 155\n    },\n    {\n      id: 'sturgian_hardened_brigand',\n      number: 4,\n+     xp: 700\n-     xp: 620\n    },\n    {\n...\n      id: 'sturgian_hunter',\n      number: 7,\n+     xp: 976\n-     xp: 794\n    },\n    {\n      id: 'sturgian_recruit',\n      number: 17,\n+     xp: 565\n-     xp: 242\n    },\n    {\n...\n      id: 'sturgian_soldier',\n      number: 5,\n+     xp: 595\n-     xp: 480\n    },\n    {\n      id: 'sturgian_spearman',\n      number: 7,\n+     xp: 615\n-     xp: 440\n    },\n    {\n...\n      id: 'sturgian_warrior',\n      number: 15,\n+     xp: 793\n-     xp: 478\n    },\n    {\n      id: 'sturgian_woodsman',\n      number: 11,\n+     xp: 283\n-     xp: 52\n    }\n  ]\n    at poll (file:///E:/code/code%20home/BannerlordCoop/.mcp-local/p2p-npc-run-01.mjs:281:15)\n    at async file:///E:/code/code%20home/BannerlordCoop/.mcp-local/p2p-npc-run-01.mjs:575:17\n    at async feature (file:///E:/code/code%20home/BannerlordCoop/.mcp-local/p2p-npc-run-01.mjs:377:26)\n    at async run (file:///E:/code/code%20home/BannerlordCoop/.mcp-local/p2p-npc-run-01.mjs:560:9)\n    at async file:///E:/code/code%20home/BannerlordCoop/.mcp-local/p2p-npc-run-01.mjs:732:10"
+      },
+      "cleanup": [
+        {
+          "name": "server",
+          "cleanupComplete": true,
+          "processAlive": false,
+          "processTreeAlive": false
+        },
+        {
+          "name": "client1",
+          "cleanupComplete": true,
+          "processAlive": false,
+          "processTreeAlive": false
+        }
+      ],
+      "rawRecord": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-npc-run-01.jsonl",
+      "rawRecordSha256": "f8c7319c2aa53afbaf38e83baa568d64c046098deccfaa471df790207a729ea3",
+      "summarySha256": "d4086b00bc0bcfcb9958cff8a1741e86ece264cdd3ccb505c6b0aa0ba48cbe7b",
+      "logChecks": {
+        "server": {
+          "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-npc-run-01.jsonl.server.log",
+          "sha256": "5d5ac0619101b65b78922268d7e650f31347cd26ff24bdd577672f9b74eae935",
+          "critical": {
+            "realTick": 0,
+            "duplicateIds": 0,
+            "aiBatch": 0
+          }
+        },
+        "client1": {
+          "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-npc-run-01.jsonl.client1.log",
+          "sha256": "9a41daacdccb8b5b718bf65def9a72638a12f1ad62f6d324774dd151722cb74a",
+          "critical": {
+            "realTick": 0,
+            "duplicateIds": 0,
+            "aiBatch": 0
+          }
+        }
+      }
+    }
+  ]
+}

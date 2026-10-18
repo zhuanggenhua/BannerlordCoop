@@ -1,0 +1,173 @@
+{
+  "range": {
+    "fromExclusive": "a6d1ebcc19d9370ab156f6aa8a729e7a447f7aa3",
+    "toInclusive": "a9ac4d8febe426f474c816423494392e48a712ee"
+  },
+  "meaning": "Committed source and tools before this evidence publication. Publication artifacts themselves are listed in the final Git commit.",
+  "files": [
+    {
+      "status": "A",
+      "path": "doc/p2p-authority-wave-2026-10-19.md"
+    },
+    {
+      "status": "M",
+      "path": "source/Common.Tests/Serialization/CampaignSchedulerCheckpointSerializationTests.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/Common/CampaignSchedulerCheckpoint.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/Coop.Core/Client/Services/TroopRosters/Handlers/ClientTroopRosterHandler.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/Coop.Core/Server/Services/Session/CampaignSimulationAvailabilityServerHandler.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/Coop.Core/Server/Services/TroopRosters/Handlers/ServerTroopRosterHandler.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/Coop.Tests/Client/Services/TroopRosters/ClientTroopRosterAuthorityCommandTests.cs"
+    },
+    {
+      "status": "A",
+      "path": "source/Coop.Tests/Server/Services/Session/CampaignAuthorityHandoffFaultTests.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/Coop.Tests/Server/Services/Session/CampaignSimulationAvailabilityServerHandlerTests.cs"
+    },
+    {
+      "status": "A",
+      "path": "source/Coop.Tests/Server/Services/TroopRosters/ListenHostRecruitmentTests.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface.Tests/GameInterface.Tests.csproj"
+    },
+    {
+      "status": "A",
+      "path": "source/GameInterface.Tests/Services/CampaignAuthority/CampaignPeriodicEventIdentityTests.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface.Tests/Services/CampaignAuthority/CampaignSchedulerCheckpointServiceTests.cs"
+    },
+    {
+      "status": "A",
+      "path": "source/GameInterface.Tests/Services/Locations/ListenHostTimeOverlayTests.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface.Tests/Services/MapEvents/MissionStateFinalizeDiagnosticsPatchTests.cs"
+    },
+    {
+      "status": "A",
+      "path": "source/GameInterface.Tests/Services/MobileParties/CampaignAuthorityTrainingBehaviorTests.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface.Tests/Services/Time/MapTimeTrackerInterfaceTests.cs"
+    },
+    {
+      "status": "A",
+      "path": "source/GameInterface.Tests/Services/Time/Patches/MapTimeDisplayPatchesTests.cs"
+    },
+    {
+      "status": "A",
+      "path": "source/GameInterface.Tests/Services/Time/Patches/MapTimeInputDuringPauseTests.cs"
+    },
+    {
+      "status": "A",
+      "path": "source/GameInterface.Tests/Services/Time/PausedObserverClockTests.cs"
+    },
+    {
+      "status": "A",
+      "path": "source/GameInterface.Tests/Services/Time/UI/CampaignTimeDisplayTests.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface.Tests/Services/Time/UI/MissionMapTimeVMTests.cs"
+    },
+    {
+      "status": "A",
+      "path": "source/GameInterface.Tests/Services/TroopRosters/RecruitmentAuthorityRoutingTests.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface.Tests/Utils/Commands/SystemDeveloperDirectCommandTests.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface/Services/CampaignAuthority/CampaignAuthorityDebugCommands.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface/Services/CampaignAuthority/CampaignSchedulerCheckpointService.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface/Services/Locations/Patches/PlayerLocationEntryPatches.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface/Services/MobileParties/Patches/Disable/DisableMobilePartyTrainingBehavior.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface/Services/Time/Commands/TimeCommands.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface/Services/Time/Interaces/MapTimeTrackerInterface.cs"
+    },
+    {
+      "status": "A",
+      "path": "source/GameInterface/Services/Time/Patches/MapTimeDisplayPatches.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface/Services/Time/Patches/TimePatches.cs"
+    },
+    {
+      "status": "A",
+      "path": "source/GameInterface/Services/Time/UI/CampaignTimeDisplay.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface/Services/Time/UI/MissionMapTimeVM.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface/Services/Time/UI/MissionMapTimeView.cs"
+    },
+    {
+      "status": "A",
+      "path": "source/GameInterface/Services/TroopRosters/Commands/RecruitmentDebugCommands.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface/Services/TroopRosters/Messages/RecruitmentAttempted.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface/Services/TroopRosters/Patches/RecruitmentVMPatches.cs"
+    },
+    {
+      "status": "M",
+      "path": "tools/coordination/orchestrator.mjs"
+    },
+    {
+      "status": "M",
+      "path": "tools/coordination/orchestrator.test.mjs"
+    },
+    {
+      "status": "A",
+      "path": "tools/mcp/scenarios/p2p-recruit-training.mjs"
+    }
+  ]
+}

@@ -1,13 +1,14 @@
 # 2026-10-19 P2P 战役权威改造进展
 
-本轮实测通过了观察端重连后的 A→B→A→B、大地图旧权威失联后的安全停住，以及原生地图/Mission 的暂停显示和返回恢复。双人招募只通过了部分路径，NPC 训练独立实测仍未验收。不能把这些结果称为全部 P2P 玩法完成或测试全绿。
+本轮实测通过了观察端重连后的 A→B→A→B、大地图旧权威失联后的安全停住，以及原生地图/Mission 的暂停显示和返回恢复。普通 NPC 原生日训练回调及经验接管也已通过独立双进程实测；双人招募仍只通过了部分路径。不能把这些结果称为全部 P2P 玩法完成或测试全绿。
 
-代码范围为 `a6d1ebcc19d9370ab156f6aa8a729e7a447f7aa3..f6f2690c4dff3d01bc7a252c08d8f9f0fbacbc7f`。主要实机验收使用其中的 `a62d7cd9047c7776571475e05817749c0ab73b2d`；`f6f2690c` 增加真实招募库存的选择和检查，并非新一轮完整玩法验收。A 是房间连接/转发节点，也保留本地玩家；战役写入权可以属于 B。工具中的 `server` 是 A 的单个 ListenHost 游戏进程，`client1` 是 B，没有额外 Dedicated Server 或 A 的本地回环客户端。
+源码范围为 `a6d1ebcc19d9370ab156f6aa8a729e7a447f7aa3..5d827e9bf5e685d6f093ecda15579f0a431871d8`，文档提交另列于 Git 记录。主要实机验收使用其中的 `a62d7cd9047c7776571475e05817749c0ab73b2d`；`f6f2690c` 增加真实招募库存的选择和检查，并非新一轮完整玩法验收。A 是房间连接/转发节点，也保留本地玩家；战役写入权可以属于 B。工具中的 `server` 是 A 的单个 ListenHost 游戏进程，`client1` 是 B，没有额外 Dedicated Server 或 A 的本地回环客户端。
 
 | 已通过场景 | 构建、run、双进程 PID（A / B） | 实测范围 |
 | --- | --- | --- |
 | 重连、交接、旧权威失联 | `a62d7cd9`，`d8ddbb344ebd4670aa192bde76a1b64f`，27816 / 17616 | B 作为观察端断线重连后，再完成 A epoch 3 → B 5 → A 7 → B 9；B 作为写入端失联后 A 不擅自接棒。[证据](../artifacts/p2p-authority/wave-2026-10-19/fault-accepted.json) |
 | 原生地图及双 Mission 暂停/恢复 | `a62d7cd9`，`0f863e7a383a450d92a22f7a8f75163c`，23580 / 4336 | 地图暂停显示、A 进 Mission/B 推进、两人都进 Mission 暂停、B 先回地图恢复、A 返回后优先接棒。[证据](../artifacts/p2p-authority/wave-2026-10-19/ui-accepted-final.json) |
+| 普通 NPC 训练及经验接管 | `5d827e9b`，`f6166a9d789d44089cd9b95522a9f998`，35568 / 6684 | 9 个阶段：A/B 各自唯一世界 Tick、A→B→A、B/A 各一次原生日训练、错误 writer 拒绝、经验/人数/编号连续性、两端关键哈希和精确暂停时钟一致。[证据](../artifacts/p2p-authority/wave-2026-10-19/npc-accepted.json) |
 
 旧权威失联场景曾失败：A 的世界 Tick 已停止，观察时钟仍继续外推。修复把“等待旧权威最终检查点”单独投射为本地停表信号，保留原 lease 和 ACK 屏障，不通过超时或断线伪造交接成功。最终两次取样 UTC `15:50:36.487` 与 `15:50:41.498` 相隔 **5.011 秒**，A 的 `worldTicks=7413`、世界小时 `2186093.878769889`、B writer epoch 9 均完全不变，`dt=0`。UI 保留选定的 `Play_1x`，有效显示为 `Pause`。这是安全停住，不代表已实现 writer-loss 恢复。[原失败](../artifacts/p2p-authority/wave-2026-10-19/writer-loss-observer-clock-failed.json)
 
@@ -33,7 +34,7 @@ UI 场景使用真实 `MissionState`。两人都离开地图后，在 epoch 12 �
 
 后续脚本修正 `968fb76` 已集成为 `d74ea6c5997a41bbb4b70ed69cc404975bb3d03d`，未改变本次部署的 `f6f2690c` Mod 源码构建。该脚本的 run04 `7b6b073bf6944d69bda61473d3edfb16` 再次找到相同十个槽位，但 `location.leave` 后 B 仍有原生 Mission，精确的 MapState 检查失败；仍仅通过前两个 feature，已确认清理。不能把最新脚本或最新 HEAD 都说成完成实机验收，B writer 自己招募等后续路径仍未覆盖。商店货物允许本地差异，不因此放宽共享兵种库存、扣款、兵力和经验的一致性要求。
 
-NPC 独立 run01 `af8351dc69914977a42711aaeb850da6` 未通过，已确认清理。B 接棒后，A 的手动训练命令正确被拒绝，B 的原生回调执行；随后读取的双方实际兵种 XP 一致，例如 `sturgian_recruit` 从 242 增至 565，但调试回执的 `after` 仍为 242，脚本据此报错。定位为 `CaptureXp` 使用 `GetTroopRoster` 缓存，而原生 `SetElementXp` 不更新该缓存版本；读取器修复及重新实机验证尚待完成，不能把本次错误直接当作同步丢失或通过。`coop.debug.authority.training_daily` 只手动执行一次原生 `OnDailyTickParty`，不能证明自然跨日调度已通过；普通 NPC 兵种经验变化也不能证明所有玩家 Clan 的训练/经济模型已经公平。
+NPC 独立 run01 `af8351dc69914977a42711aaeb850da6` 未通过，已确认清理。B 接棒后，A 的手动训练命令正确被拒绝，B 的原生回调执行；随后读取的双方实际兵种 XP 一致，例如 `sturgian_recruit` 从 242 增至 565，但调试回执的 `after` 仍为 242，脚本据此报错。定位为 `CaptureXp` 使用 `GetTroopRoster` 缓存，而原生 `SetElementXp` 不更新该缓存版本；最小修复 `5d827e9b` 改为逐项读取当前数据；先红后绿用例证明原生实际 XP128、缓存100，读取后仍不修改原生缓存或版本。随后独立 run02 通过全部9个阶段，B、返回的A各一次回调的非英雄兵种XP均正增长，人数不变，并同步到观察端；最终7项关键世界数据（含精确ticks）一致，三个分配探针handle和序号递增，角色与队伍未切换，双方英雄/家族/部队注册数各为1。不能把最初的回执缓存错误当作同步丢失。`coop.debug.authority.training_daily` 只手动执行一次原生 `OnDailyTickParty`，不能证明自然跨日调度已通过；普通 NPC 兵种经验变化也不能证明所有玩家 Clan 的训练/经济模型已经公平。
 
 自动化结果以 [final-regression.json](../artifacts/p2p-authority/wave-2026-10-19/final-regression.json) 为准。该文件的 `passed=true` 表示新增失败对比检查通过，**不表示各测试集全部通过**。
 
@@ -45,8 +46,8 @@ NPC 独立 run01 `af8351dc69914977a42711aaeb850da6` 未通过，已确认清理�
 | E2E 指定子集 | 60 / 10，共 70 | 原始退出码 1；失败名称与基线逐项相同；不是全部 E2E。 |
 | 主 Mod Debug | 构建退出码 0 | 构建成功不替代实机验收。 |
 
-`f6f2690c` 在增加招募库存目录和脚本选择后，再次运行 GameInterface **2811/0**，主 Mod Debug **0 错误、8 警告**。构建均显式使用空 `-p:ModName=` 禁止构建钩子自动部署；真正部署和完整双进程场景由总控持有游戏独占锁执行。一次完整 GI 曾有 Mission diagnostics 测试受其他测试清理全局 BattleSpawnGate 干扰，已用跨线程探针确定性复现，最终只给该测试类增加已有禁并行 Collection，原断言及 Battle 生产逻辑未改，红灯证据仍保留。
+`f6f2690c` 在增加招募库存目录和脚本选择后，再次运行 GameInterface **2811/0**，主 Mod Debug **0 错误、8 警告**。`5d827e9b` 的经验回执修复新增1项回归测试，worker实际GI全量 **2812/0**，root集成复跑训练类 **15/0** 并构建退出0，再部署完成上述NPC02实测。构建均显式使用空 `-p:ModName=` 禁止构建钩子自动部署；真正部署和完整双进程场景由总控持有游戏独占锁执行。一次完整 GI 曾有 Mission diagnostics 测试受其他测试清理全局 BattleSpawnGate 干扰，已用跨线程探针确定性复现，最终只给该测试类增加已有禁并行 Collection，原断言及 Battle 生产逻辑未改，红灯证据仍保留。
 
 本轮未验收冷存档/重启恢复、writer-loss 后恢复、物理传输丢包注入、场景 NPC/战斗同步及千人战场。延迟、重复或错误 ACK 的自动化覆盖不等于真实网络故障注入。当前实测没有发现阻止这些**已列明场景**的根本引擎障碍，尚未执行的玩法仍属未验证。
 
-本机原始证据位于 `.git/codex-coordination/evidence/p2p-wave-20261018/`，原始故障/UI 命令记录分别是 `.mcp-local/p2p-fault-run-03.jsonl`、`.mcp-local/p2p-ui-run-03.jsonl`，原生日志和 BMP 位于 `.mcp-local/runs/` 下对应 runId。招募原始记录是 `.mcp-local/p2p-recruit-training-run-02.jsonl`、`p2p-recruit-training-run-03.jsonl`、`p2p-recruit-training-run-04.jsonl` 及各自 summary；NPC01 是 `.mcp-local/p2p-npc-run-01.jsonl` 及 summary。原始 BMP、JSONL 和 TRX 不提交，只提交可移植摘要及哈希。旧 cold-audit 工作树残留的递归删除被工具政策拒绝后仍保留 `cleanup_required` 登记，没有换手段绕过。
+本机原始证据位于 `.git/codex-coordination/evidence/p2p-wave-20261018/`，原始故障/UI 命令记录分别是 `.mcp-local/p2p-fault-run-03.jsonl`、`.mcp-local/p2p-ui-run-03.jsonl`，原生日志和 BMP 位于 `.mcp-local/runs/` 下对应 runId。招募原始记录是 `.mcp-local/p2p-recruit-training-run-02.jsonl`、`p2p-recruit-training-run-03.jsonl`、`p2p-recruit-training-run-04.jsonl` 及各自 summary；NPC01/02 是 `.mcp-local/p2p-npc-run-01.jsonl`、`p2p-npc-run-02.jsonl` 及 summary。原始 BMP、JSONL 和 TRX 不提交，只提交可移植摘要及哈希。旧 cold-audit 工作树残留的递归删除被工具政策拒绝后仍保留 `cleanup_required` 登记，没有换手段绕过。

@@ -1,0 +1,353 @@
+{
+  "status": "FAILED_RETAINED_NOT_ACCEPTED",
+  "runId": "5fcc975280d84d558156883a29ca0171",
+  "codeHead": "af9039ec4d0b2004ef19619921fdda6efa2f67af",
+  "features": [
+    {
+      "name": "join-single-native-actors",
+      "status": "PASS",
+      "startedUtc": "2026-10-18T15:04:15.340Z",
+      "completedUtc": "2026-10-18T15:04:20.240Z",
+      "evidence": {
+        "actors": [
+          [
+            {
+              "mode": "ListenAuthority",
+              "localControllerId": "LocalA",
+              "mainHeroId": "main_hero",
+              "mainPartyId": "player_party",
+              "campaignId": "RVLgBrkkFApz",
+              "hours": 2186083.4815998888,
+              "registeredPlayers": 2,
+              "controllerId": "LocalA",
+              "heroId": "Hero_main_hero",
+              "heroStringId": "main_hero",
+              "clanId": "Clan_player_faction",
+              "characterId": "CharacterObject_main_hero",
+              "gold": 1000,
+              "partyId": "MobileParty_player_party",
+              "partyStringId": "player_party",
+              "x": 658.7773,
+              "y": 278.1635,
+              "troops": 1,
+              "settlementId": null,
+              "items": [],
+              "wounded": 0,
+              "heroRegistrations": 1,
+              "partyRegistrations": 1,
+              "clanRegistrations": 1,
+              "connected": true,
+              "active": true,
+              "mapEvent": "none",
+              "visual": true
+            },
+            {
+              "mode": "ListenAuthority",
+              "localControllerId": "LocalA",
+              "mainHeroId": "main_hero",
+              "mainPartyId": "player_party",
+              "campaignId": "RVLgBrkkFApz",
+              "hours": 2186083.4815998888,
+              "registeredPlayers": 2,
+              "controllerId": "testclient1",
+              "heroId": "Hero_Player",
+              "heroStringId": "Player",
+              "clanId": "Clan_Player",
+              "characterId": "CharacterObject_Player",
+              "gold": 920,
+              "partyId": "MobileParty_Player",
+              "partyStringId": "Player",
+              "x": 658.7773,
+              "y": 277.1635,
+              "troops": 5,
+              "settlementId": "town_ES1",
+              "items": [],
+              "wounded": 0,
+              "heroRegistrations": 1,
+              "partyRegistrations": 1,
+              "clanRegistrations": 1,
+              "connected": true,
+              "active": true,
+              "mapEvent": "none",
+              "visual": true
+            }
+          ],
+          [
+            {
+              "mode": "RemoteReplica",
+              "localControllerId": "testclient1",
+              "mainHeroId": "Player",
+              "mainPartyId": "Player",
+              "campaignId": "RVLgBrkkFApz",
+              "hours": 2186083.4815998888,
+              "registeredPlayers": 2,
+              "controllerId": "LocalA",
+              "heroId": "Hero_main_hero",
+              "heroStringId": "main_hero",
+              "clanId": "Clan_player_faction",
+              "characterId": "CharacterObject_main_hero",
+              "gold": 1000,
+              "partyId": "MobileParty_player_party",
+              "partyStringId": "player_party",
+              "x": 658.7773,
+              "y": 278.1635,
+              "troops": 1,
+              "settlementId": null,
+              "items": [],
+              "wounded": 0,
+              "heroRegistrations": 1,
+              "partyRegistrations": 1,
+              "clanRegistrations": 1,
+              "connected": false,
+              "active": true,
+              "mapEvent": "none",
+              "visual": true
+            },
+            {
+              "mode": "RemoteReplica",
+              "localControllerId": "testclient1",
+              "mainHeroId": "Player",
+              "mainPartyId": "Player",
+              "campaignId": "RVLgBrkkFApz",
+              "hours": 2186083.4815998888,
+              "registeredPlayers": 2,
+              "controllerId": "testclient1",
+              "heroId": "Hero_Player",
+              "heroStringId": "Player",
+              "clanId": "Clan_Player",
+              "characterId": "CharacterObject_Player",
+              "gold": 920,
+              "partyId": "MobileParty_Player",
+              "partyStringId": "Player",
+              "x": 658.7773,
+              "y": 277.1635,
+              "troops": 5,
+              "settlementId": "town_ES1",
+              "items": [],
+              "wounded": 0,
+              "heroRegistrations": 1,
+              "partyRegistrations": 1,
+              "clanRegistrations": 1,
+              "connected": false,
+              "active": true,
+              "mapEvent": "none",
+              "visual": true
+            }
+          ]
+        ],
+        "processes": [
+          {
+            "name": "server",
+            "identity": {
+              "pid": 29744,
+              "startedUtc": "2026-10-18T15:02:09.3611882Z",
+              "role": "server",
+              "platformId": "LocalA",
+              "runToken": "5fcc975280d84d558156883a29ca0171"
+            },
+            "processAlive": true,
+            "status": {
+              "protocolVersion": 1,
+              "uiCapability": "bounded-ui-layers-v1",
+              "pid": 29744,
+              "role": "server",
+              "platformId": "LocalA",
+              "runToken": "5fcc975280d84d558156883a29ca0171",
+              "buildVersion": "0.1.7+d04ac5000be5310a6d0d968c9705ca364e975d16",
+              "assemblyMvid": "6059e0bb-e3ca-48cd-bd48-8363e6f20bd4",
+              "loadedAssemblies": [
+                {
+                  "name": "Common",
+                  "version": "1.0.0.0",
+                  "mvid": "ed53b543-9944-481d-8791-80a04b55cc46",
+                  "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Common.dll"
+                },
+                {
+                  "name": "Coop",
+                  "version": "1.0.0.0",
+                  "mvid": "6059e0bb-e3ca-48cd-bd48-8363e6f20bd4",
+                  "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.dll"
+                },
+                {
+                  "name": "Coop.Core",
+                  "version": "1.0.0.0",
+                  "mvid": "aef2d09c-e83f-4795-9769-6268c6373cda",
+                  "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Core.dll"
+                },
+                {
+                  "name": "Coop.Steam",
+                  "version": "1.0.0.0",
+                  "mvid": "d46f137c-d711-45e3-a757-536a38d02122",
+                  "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Steam.dll"
+                },
+                {
+                  "name": "GameInterface",
+                  "version": "1.0.0.0",
+                  "mvid": "69786c3e-dbf9-4598-8d39-9dfeb3e016d5",
+                  "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\GameInterface.dll"
+                },
+                {
+                  "name": "Missions",
+                  "version": "1.0.0.0",
+                  "mvid": "03d01e69-d673-40e3-a80d-a1df373c13ad",
+                  "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Missions.dll"
+                }
+              ],
+              "processStartedUtc": "2026-10-18T15:02:09.3611882Z",
+              "logPath": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\bin\\Win64_Shipping_Client\\Coop_server.log",
+              "gameThreadInitialized": true,
+              "gameThreadQueueDepth": 0,
+              "commandRegistryReady": true,
+              "activeState": "TaleWorlds.CampaignSystem.GameState.MapState",
+              "topScreen": "SandBox.View.Map.MapScreen",
+              "activeMenu": null,
+              "campaignLoaded": true,
+              "requestedSaveName": "P1B_DirectIP_Recruit",
+              "loadedCampaignId": "RVLgBrkkFApz",
+              "loadedSaveNameConfirmed": false,
+              "missionActive": false,
+              "coopRunning": true,
+              "coopState": "Coop.Core.Server.States.ServerRunningState",
+              "registeredPlayers": 2,
+              "registeredPlayerCount": 2,
+              "connectedPlayerCount": 2,
+              "registeredControllerIds": [
+                "LocalA",
+                "testclient1"
+              ],
+              "connectedControllerIds": [
+                "LocalA",
+                "testclient1"
+              ],
+              "deferredClientJoinEnabled": false,
+              "readyForClientJoin": false,
+              "deferredClientJoinAttempted": false,
+              "readyForCampaignTests": true,
+              "readyForMissionTests": false
+            },
+            "error": null,
+            "processTreeAlive": true,
+            "cleanupComplete": false
+          },
+          {
+            "name": "client1",
+            "identity": {
+              "pid": 30032,
+              "startedUtc": "2026-10-18T15:03:01.1093891Z",
+              "role": "client",
+              "platformId": "testclient1",
+              "runToken": "5fcc975280d84d558156883a29ca0171"
+            },
+            "processAlive": true,
+            "status": {
+              "protocolVersion": 1,
+              "uiCapability": "bounded-ui-layers-v1",
+              "pid": 30032,
+              "role": "client",
+              "platformId": "testclient1",
+              "runToken": "5fcc975280d84d558156883a29ca0171",
+              "buildVersion": "0.1.7+d04ac5000be5310a6d0d968c9705ca364e975d16",
+              "assemblyMvid": "6059e0bb-e3ca-48cd-bd48-8363e6f20bd4",
+              "loadedAssemblies": [
+                {
+                  "name": "Common",
+                  "version": "1.0.0.0",
+                  "mvid": "ed53b543-9944-481d-8791-80a04b55cc46",
+                  "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Common.dll"
+                },
+                {
+                  "name": "Coop",
+                  "version": "1.0.0.0",
+                  "mvid": "6059e0bb-e3ca-48cd-bd48-8363e6f20bd4",
+                  "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.dll"
+                },
+                {
+                  "name": "Coop.Core",
+                  "version": "1.0.0.0",
+                  "mvid": "aef2d09c-e83f-4795-9769-6268c6373cda",
+                  "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Core.dll"
+                },
+                {
+                  "name": "Coop.Steam",
+                  "version": "1.0.0.0",
+                  "mvid": "d46f137c-d711-45e3-a757-536a38d02122",
+                  "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Steam.dll"
+                },
+                {
+                  "name": "GameInterface",
+                  "version": "1.0.0.0",
+                  "mvid": "69786c3e-dbf9-4598-8d39-9dfeb3e016d5",
+                  "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\GameInterface.dll"
+                },
+                {
+                  "name": "Missions",
+                  "version": "1.0.0.0",
+                  "mvid": "03d01e69-d673-40e3-a80d-a1df373c13ad",
+                  "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Missions.dll"
+                }
+              ],
+              "processStartedUtc": "2026-10-18T15:03:01.1093891Z",
+              "logPath": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\bin\\Win64_Shipping_Client\\Coop_client.log",
+              "gameThreadInitialized": true,
+              "gameThreadQueueDepth": 0,
+              "commandRegistryReady": true,
+              "activeState": "TaleWorlds.CampaignSystem.GameState.MapState",
+              "topScreen": "SandBox.View.Map.MapScreen",
+              "activeMenu": "town",
+              "campaignLoaded": true,
+              "requestedSaveName": null,
+              "loadedCampaignId": "RVLgBrkkFApz",
+              "loadedSaveNameConfirmed": false,
+              "missionActive": false,
+              "coopRunning": true,
+              "coopState": "Coop.Core.Client.States.CampaignState",
+              "registeredPlayers": 2,
+              "registeredPlayerCount": null,
+              "connectedPlayerCount": null,
+              "registeredControllerIds": null,
+              "connectedControllerIds": null,
+              "deferredClientJoinEnabled": true,
+              "readyForClientJoin": false,
+              "deferredClientJoinAttempted": true,
+              "readyForCampaignTests": true,
+              "readyForMissionTests": false
+            },
+            "error": null,
+            "processTreeAlive": true,
+            "cleanupComplete": false,
+            "startupPopup": {
+              "outcome": "not_applicable"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "failed": {
+    "message": "stopped critical world did not converge: Stopped native clock differs",
+    "stack": "Error: stopped critical world did not converge: Stopped native clock differs\n    at poll (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:236:15)\n    at async tickForFiveSeconds (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:349:24)\n    at async file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:483:26\n    at async feature (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:332:26)\n    at async run (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:480:9)\n    at async file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:646:10"
+  },
+  "cleanupConfirmed": true,
+  "logs": {
+    "server": {
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-recruit-training-run-01.jsonl.server.log",
+      "sha256": "4bbb177e7db17c4fbbb1789e58791c0e2f026d03dd5702d80a092f466ebaf27d",
+      "critical": {
+        "realTick": 0,
+        "duplicateIds": 0,
+        "aiBatch": 0
+      }
+    },
+    "client1": {
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-recruit-training-run-01.jsonl.client1.log",
+      "sha256": "90fbfd77f2c415b67af376eafbf97d03350785d20d17f25b9d14fc1364679aa2",
+      "critical": {
+        "realTick": 0,
+        "duplicateIds": 0,
+        "aiBatch": 0
+      }
+    }
+  },
+  "processReceipt": ".git/codex-coordination/evidence/p2p-wave-20261018/recruit-training-processes-live.json",
+  "remaining": "Recruitment and NPC training phases were never reached in this run; no acceptance inferred."
+}

@@ -1,0 +1,413 @@
+{
+  "status": "FAILED_RETAINED_NOT_ACCEPTED",
+  "name": "writer-loss-observer-clock",
+  "runId": "17041c71955e41bd9d7e43fe09e87a08",
+  "sourceCommit": "1642df3a394a21b4b567e781f2e9c23621021254",
+  "record": ".mcp-local/p2p-fault-run-02.jsonl",
+  "recordSha256": "21f1a78d52bb56b55a53b34e87d13f3955c7f35ae73c93b5c6e82be9bd4f4425",
+  "states": [
+    {
+      "utc": "2026-10-18T14:39:25.991Z",
+      "side": "server",
+      "pid": 30304,
+      "controller": "LocalA",
+      "lease": {
+        "RoomId": "f96673aafa234a3a8cfcaf3b53be7c4e",
+        "AuthorityId": "c30a02e825d749d3afb87082538aea4a",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 3,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "localAuthority": true,
+      "frozen": false,
+      "worldTicks": 5369,
+      "hours": 2186083.4815998888,
+      "mainHero": "main_hero",
+      "mainParty": "player_party",
+      "schedulerEvent0": {
+        "description": null,
+        "periodTicks": 36000000,
+        "initialWaitTicks": 23583056,
+        "nextTriggerTicks": 78699028920652,
+        "deleted": false
+      }
+    },
+    {
+      "utc": "2026-10-18T14:39:26.746Z",
+      "side": "client1",
+      "pid": 34076,
+      "controller": "testclient1",
+      "lease": {
+        "RoomId": "f96673aafa234a3a8cfcaf3b53be7c4e",
+        "AuthorityId": "c30a02e825d749d3afb87082538aea4a",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 3,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "localAuthority": false,
+      "frozen": false,
+      "worldTicks": 0,
+      "hours": 2186083.4815998888,
+      "mainHero": "Player",
+      "mainParty": "Player",
+      "schedulerEvent0": {
+        "description": null,
+        "periodTicks": 36000000,
+        "initialWaitTicks": 23583056,
+        "nextTriggerTicks": 78699028920652,
+        "deleted": false
+      }
+    },
+    {
+      "utc": "2026-10-18T14:39:26.756Z",
+      "side": "server",
+      "pid": 30304,
+      "controller": "LocalA",
+      "lease": {
+        "RoomId": "f96673aafa234a3a8cfcaf3b53be7c4e",
+        "AuthorityId": "c30a02e825d749d3afb87082538aea4a",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 3,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "localAuthority": true,
+      "frozen": false,
+      "worldTicks": 5439,
+      "hours": 2186083.4815998888,
+      "mainHero": "main_hero",
+      "mainParty": "player_party",
+      "schedulerEvent0": {
+        "description": null,
+        "periodTicks": 36000000,
+        "initialWaitTicks": 23583056,
+        "nextTriggerTicks": 78699028920652,
+        "deleted": false
+      }
+    },
+    {
+      "utc": "2026-10-18T14:39:26.876Z",
+      "side": "client1",
+      "pid": 34076,
+      "controller": "testclient1",
+      "lease": {
+        "RoomId": "f96673aafa234a3a8cfcaf3b53be7c4e",
+        "AuthorityId": "c30a02e825d749d3afb87082538aea4a",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 3,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "localAuthority": false,
+      "frozen": false,
+      "worldTicks": 0,
+      "hours": 2186083.4815998888,
+      "mainHero": "Player",
+      "mainParty": "Player",
+      "schedulerEvent0": {
+        "description": null,
+        "periodTicks": 36000000,
+        "initialWaitTicks": 23583056,
+        "nextTriggerTicks": 78699028920652,
+        "deleted": false
+      }
+    },
+    {
+      "utc": "2026-10-18T14:39:29.891Z",
+      "side": "server",
+      "pid": 30304,
+      "controller": "LocalA",
+      "lease": {
+        "RoomId": "f96673aafa234a3a8cfcaf3b53be7c4e",
+        "AuthorityId": "67fedfdfc5934714b269bbb9d4126195",
+        "AuthorityControllerId": "",
+        "Epoch": 4,
+        "IsPaused": true,
+        "IsValid": true
+      },
+      "localAuthority": false,
+      "frozen": false,
+      "worldTicks": 5633,
+      "hours": 2186083.4891190277,
+      "mainHero": "main_hero",
+      "mainParty": "player_party",
+      "schedulerEvent0": {
+        "description": null,
+        "periodTicks": 36000000,
+        "initialWaitTicks": 23583056,
+        "nextTriggerTicks": 78699028920652,
+        "deleted": false
+      }
+    },
+    {
+      "utc": "2026-10-18T14:39:29.908Z",
+      "side": "client1",
+      "pid": 34076,
+      "controller": "testclient1",
+      "lease": {
+        "RoomId": "f96673aafa234a3a8cfcaf3b53be7c4e",
+        "AuthorityId": "67fedfdfc5934714b269bbb9d4126195",
+        "AuthorityControllerId": "",
+        "Epoch": 4,
+        "IsPaused": true,
+        "IsValid": true
+      },
+      "localAuthority": false,
+      "frozen": false,
+      "worldTicks": 0,
+      "hours": 2186083.5131311943,
+      "mainHero": "Player",
+      "mainParty": "Player",
+      "schedulerEvent0": {
+        "description": null,
+        "periodTicks": 36000000,
+        "initialWaitTicks": 23583056,
+        "nextTriggerTicks": 78699028920652,
+        "deleted": false
+      }
+    },
+    {
+      "utc": "2026-10-18T14:39:30.981Z",
+      "side": "server",
+      "pid": 30304,
+      "controller": "LocalA",
+      "lease": {
+        "RoomId": "f96673aafa234a3a8cfcaf3b53be7c4e",
+        "AuthorityId": "a0f90109d85b494a8cd3faf904586407",
+        "AuthorityControllerId": "testclient1",
+        "Epoch": 5,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "localAuthority": false,
+      "frozen": false,
+      "worldTicks": 5633,
+      "hours": 2186083.536676861,
+      "mainHero": "main_hero",
+      "mainParty": "player_party",
+      "schedulerEvent0": {
+        "description": null,
+        "periodTicks": 36000000,
+        "initialWaitTicks": 23583056,
+        "nextTriggerTicks": 78699028920652,
+        "deleted": false
+      }
+    },
+    {
+      "utc": "2026-10-18T14:39:30.986Z",
+      "side": "client1",
+      "pid": 34076,
+      "controller": "testclient1",
+      "lease": {
+        "RoomId": "f96673aafa234a3a8cfcaf3b53be7c4e",
+        "AuthorityId": "a0f90109d85b494a8cd3faf904586407",
+        "AuthorityControllerId": "testclient1",
+        "Epoch": 5,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "localAuthority": true,
+      "frozen": false,
+      "worldTicks": 5637,
+      "hours": 2186083.5536387777,
+      "mainHero": "Player",
+      "mainParty": "Player",
+      "schedulerEvent0": {
+        "description": null,
+        "periodTicks": 36000000,
+        "initialWaitTicks": 23583056,
+        "nextTriggerTicks": 78699028920652,
+        "deleted": false
+      }
+    },
+    {
+      "utc": "2026-10-18T14:39:33.011Z",
+      "side": "client1",
+      "pid": 34076,
+      "controller": "testclient1",
+      "lease": {
+        "RoomId": "f96673aafa234a3a8cfcaf3b53be7c4e",
+        "AuthorityId": "a0f90109d85b494a8cd3faf904586407",
+        "AuthorityControllerId": "testclient1",
+        "Epoch": 5,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "localAuthority": true,
+      "frozen": false,
+      "worldTicks": 5703,
+      "hours": 2186084.1628720276,
+      "mainHero": "Player",
+      "mainParty": "Player",
+      "schedulerEvent0": {
+        "description": null,
+        "periodTicks": 36000000,
+        "initialWaitTicks": 23583056,
+        "nextTriggerTicks": 78699064920652,
+        "deleted": false
+      }
+    },
+    {
+      "utc": "2026-10-18T14:39:39.544Z",
+      "side": "server",
+      "pid": 30304,
+      "controller": "LocalA",
+      "lease": {
+        "RoomId": "f96673aafa234a3a8cfcaf3b53be7c4e",
+        "AuthorityId": "a0f90109d85b494a8cd3faf904586407",
+        "AuthorityControllerId": "testclient1",
+        "Epoch": 5,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "localAuthority": false,
+      "frozen": false,
+      "worldTicks": 5633,
+      "hours": 2186086.043312889,
+      "mainHero": "main_hero",
+      "mainParty": "player_party",
+      "schedulerEvent0": {
+        "description": null,
+        "periodTicks": 36000000,
+        "initialWaitTicks": 23583056,
+        "nextTriggerTicks": 78699028920652,
+        "deleted": false
+      }
+    },
+    {
+      "utc": "2026-10-18T14:39:44.560Z",
+      "side": "server",
+      "pid": 30304,
+      "controller": "LocalA",
+      "lease": {
+        "RoomId": "f96673aafa234a3a8cfcaf3b53be7c4e",
+        "AuthorityId": "a0f90109d85b494a8cd3faf904586407",
+        "AuthorityControllerId": "testclient1",
+        "Epoch": 5,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "localAuthority": false,
+      "frozen": false,
+      "worldTicks": 5633,
+      "hours": 2186087.5480160275,
+      "mainHero": "main_hero",
+      "mainParty": "player_party",
+      "schedulerEvent0": {
+        "description": null,
+        "periodTicks": 36000000,
+        "initialWaitTicks": 23583056,
+        "nextTriggerTicks": 78699028920652,
+        "deleted": false
+      }
+    },
+    {
+      "utc": "2026-10-18T14:39:44.626Z",
+      "side": "server",
+      "pid": 30304,
+      "controller": "LocalA",
+      "lease": {
+        "RoomId": "f96673aafa234a3a8cfcaf3b53be7c4e",
+        "AuthorityId": "a0f90109d85b494a8cd3faf904586407",
+        "AuthorityControllerId": "testclient1",
+        "Epoch": 5,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "localAuthority": false,
+      "frozen": false,
+      "worldTicks": 5633,
+      "hours": 2186087.5680162776,
+      "mainHero": "main_hero",
+      "mainParty": "player_party",
+      "schedulerEvent0": {
+        "description": null,
+        "periodTicks": 36000000,
+        "initialWaitTicks": 23583056,
+        "nextTriggerTicks": 78699028920652,
+        "deleted": false
+      }
+    }
+  ],
+  "mutationCommands": [
+    {
+      "utc": "2026-10-18T14:39:29.613Z",
+      "side": "server",
+      "args": {
+        "run_id": "17041c71955e41bd9d7e43fe09e87a08",
+        "instance": "server",
+        "name": "coop.debug.set_time_mode",
+        "arguments": [
+          "Play_1x",
+          "force-live-test"
+        ]
+      },
+      "output": "Time control force-set for live testing to Play_1x"
+    },
+    {
+      "utc": "2026-10-18T14:39:29.872Z",
+      "side": "server",
+      "args": {
+        "run_id": "17041c71955e41bd9d7e43fe09e87a08",
+        "instance": "server",
+        "name": "coop.debug.authority.availability",
+        "arguments": [
+          "yield"
+        ]
+      },
+      "output": "yielded=True|mapReady=False"
+    },
+    {
+      "utc": "2026-10-18T14:39:36.532Z",
+      "side": "client1",
+      "args": {
+        "run_id": "17041c71955e41bd9d7e43fe09e87a08",
+        "instance": "client1",
+        "name": "coop.debug.connection.disconnect",
+        "arguments": []
+      },
+      "output": "Client session is returning to the main menu."
+    },
+    {
+      "utc": "2026-10-18T14:39:36.537Z",
+      "side": "server",
+      "args": {
+        "run_id": "17041c71955e41bd9d7e43fe09e87a08",
+        "instance": "server",
+        "name": "coop.debug.authority.availability",
+        "arguments": [
+          "auto"
+        ]
+      },
+      "output": "yielded=False|mapReady=True"
+    }
+  ],
+  "logFiles": [
+    {
+      "side": "server",
+      "path": ".mcp-local/runs/17041c71955e41bd9d7e43fe09e87a08/server.log",
+      "sha256": "408d9b0a125866481867d693926f8b9c8132daf91811ab120b45ceba61d3d50d"
+    },
+    {
+      "side": "client1",
+      "path": ".mcp-local/runs/17041c71955e41bd9d7e43fe09e87a08/client1.log",
+      "sha256": "7b2157969b39be36093810f6e6101242a278d0d63246a0609201e82146edad9f"
+    }
+  ],
+  "cleanup": [
+    {
+      "name": "server",
+      "processAlive": false,
+      "processTreeAlive": false,
+      "cleanupComplete": true
+    },
+    {
+      "name": "client1",
+      "processAlive": false,
+      "processTreeAlive": false,
+      "cleanupComplete": true
+    }
+  ]
+}
