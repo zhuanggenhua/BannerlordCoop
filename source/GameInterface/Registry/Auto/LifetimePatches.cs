@@ -2,6 +2,7 @@
 using Common.Logging;
 using Common.Messaging;
 using GameInterface.Policies;
+using GameInterface.Services.CampaignAuthority;
 using Serilog;
 using TaleWorlds.Core;
 
@@ -17,12 +18,12 @@ internal class LifetimePatches<T>
 
         if (typeof(T) == typeof(Equipment) && TransientEquipmentSyncScope.IsActive) return;
 
-        if (ModInformation.IsClient)
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation())
         {
             if (typeof(T) == typeof(Equipment))
-                Logger.Error("Client created managed {name}; caller={Caller}", __instance.GetType(), System.Environment.StackTrace);
+                Logger.Error("Non-authority replica created managed {name}; caller={Caller}", __instance.GetType(), System.Environment.StackTrace);
             else
-                Logger.Error("Client created managed {name}", __instance.GetType());
+                Logger.Error("Non-authority replica created managed {name}", __instance.GetType());
             return;
         }
 
@@ -40,9 +41,9 @@ internal class LifetimePatches<T>
         // Call original if we call this function
         if (CallOriginalPolicy.IsOriginalAllowed()) return;
 
-        if (ModInformation.IsClient)
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation())
         {
-            Logger.Error("Client destroyed managed {name}", __instance.GetType());
+            Logger.Error("Non-authority replica destroyed managed {name}", __instance.GetType());
             return;
         }
 

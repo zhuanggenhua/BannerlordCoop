@@ -1,5 +1,7 @@
 ﻿using Common;
 using Moq;
+using GameInterface.Services.CampaignAuthority;
+using GameInterface.Services.Entity;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -11,6 +13,32 @@ namespace GameInterface.Tests.Services;
 [Collection(ModInformationRoleCollection.Name)]
 public class ObjectManagerHandleTests
 {
+    [Theory]
+    [InlineData(SessionMode.RemoteReplica, "guest", true)]
+    [InlineData(SessionMode.ListenAuthority, "host", false)]
+    public void ConfirmedCampaignLeaseControlsHandleAllocationIndependentlyOfTransportRole(
+        SessionMode mode, string localControllerId, bool shouldAllocate)
+    {
+        var previousMode = ModInformation.SessionMode;
+        try
+        {
+            ModInformation.SessionMode = mode;
+            var identity = new SessionIdentity();
+            Assert.True(identity.TryApply(new AuthorityLease("room", "authority-guest", "guest", 3), "host"));
+            var controller = new ControllerIdProvider();
+            controller.SetControllerId(localControllerId);
+            var manager = new ObjectManagerService(Mock.Of<ILogger>(), new CampaignAuthorityContext(identity, controller));
+            var instance = new object();
+
+            Assert.True(manager.AddExisting("created", instance));
+            Assert.Equal(shouldAllocate, manager.TryGetHandle(instance, out _));
+        }
+        finally
+        {
+            ModInformation.SessionMode = previousMode;
+        }
+    }
+
     [Fact]
     public void ServerRegistration_AssignsMonotonicHandlesWithoutReuse()
     {

@@ -4,7 +4,7 @@ using ProtoBuf;
 namespace GameInterface.Registry.Auto;
 
 [ProtoContract(SkipConstructor = true)]
-readonly struct NetworkDestroyInstance<T> : ICommand
+readonly struct NetworkDestroyInstance<T> : ICommand, ICampaignAuthorityScopedMessage
 {
     [ProtoMember(1)]
     public readonly uint InstanceHandle;

@@ -3,7 +3,7 @@ using ProtoBuf;
 
 namespace GameInterface.Registry.Auto;
 [ProtoContract(SkipConstructor = true)]
-readonly struct NetworkCreateInstance<T> : ICommand
+readonly struct NetworkCreateInstance<T> : ICommand, ICampaignAuthorityScopedMessage
 {
     [ProtoMember(1)]
     public readonly string InstanceId;

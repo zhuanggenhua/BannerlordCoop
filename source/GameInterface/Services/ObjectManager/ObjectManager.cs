@@ -1,5 +1,6 @@
 ﻿using Common;
 using Serilog;
+using GameInterface.Services.CampaignAuthority;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -107,6 +108,7 @@ public interface IObjectManager
 public class ObjectManager : IObjectManager
 {
     private readonly ILogger logger;
+    private readonly ICampaignAuthorityContext authorityContext;
 
     protected readonly ConcurrentDictionary<string, object> idObjs = new ConcurrentDictionary<string, object>();
     protected ConditionalWeakTable<object, string> objsIds = new ConditionalWeakTable<object, string>();
@@ -120,9 +122,10 @@ public class ObjectManager : IObjectManager
 
     private readonly object _gate = new();
 
-    public ObjectManager(ILogger logger)
+    public ObjectManager(ILogger logger, ICampaignAuthorityContext authorityContext = null)
     {
         this.logger = logger;
+        this.authorityContext = authorityContext;
     }
 
     public bool RunRegistrationTransaction(Func<bool> registerAndValidate)
@@ -476,7 +479,11 @@ public class ObjectManager : IObjectManager
             return retiredHandle.Value;
         }
 
-        if (!ModInformation.IsServer) return 0;
+        if (authorityContext != null && authorityContext.TryGetCurrentLease(out var lease) && lease.IsValid)
+        {
+            if (!authorityContext.TryGetLocalAuthorityLease(out _)) return 0;
+        }
+        else if (!ModInformation.IsServer) return 0;
 
         if (nextHandle == 0)
             throw new InvalidOperationException("Object handle space exhausted.");
