@@ -62,6 +62,9 @@ internal class TroopRosterRegistry : AutoRegistryBase<TroopRoster>
 
         foreach (var settlement in Settlement.All)
         {
+            if (settlement?.Party?.MemberRoster != null)
+                RegisterExistingObject($"{nameof(Settlement.Party.MemberRoster)}_{settlement.StringId}", settlement.Party.MemberRoster);
+
             if (settlement?.Party?.PrisonRoster == null) continue;
 
             RegisterExistingObject($"{nameof(Settlement.Party.PrisonRoster)}_{settlement.StringId}", settlement.Party.PrisonRoster);
