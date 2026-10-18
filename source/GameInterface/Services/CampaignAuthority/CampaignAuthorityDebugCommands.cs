@@ -44,6 +44,22 @@ public static class CampaignAuthorityDebugCommands
             mainHero = Hero.MainHero?.StringId,
             mainParty = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty?.StringId,
             gameState = GameStateManager.Current?.ActiveState?.GetType().Name,
+            mainNavigation = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty == null ? null : new
+            {
+                x = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty.Position.X,
+                y = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty.Position.Y,
+                targetX = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty.TargetPosition.X,
+                targetY = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty.TargetPosition.Y,
+                moveX = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty.MoveTargetPoint.X,
+                moveY = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty.MoveTargetPoint.Y,
+                behavior = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty.DefaultBehavior.ToString(),
+                shortTermBehavior = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty.ShortTermBehavior.ToString(),
+                mode = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty.PartyMoveMode.ToString(),
+                disabled = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty.Ai.IsDisabled,
+                needsUpdate = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty.Ai.DefaultBehaviorNeedsUpdate,
+                nextCheck = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty.Ai._nextAiCheckTime.NumTicks,
+                dt = Campaign.Current._dt,
+            },
             scheduler = Campaign.Current?._campaignPeriodicEventManager == null ? null : new
             {
                 minimumIntervalTicks = Campaign.Current._campaignPeriodicEventManager.MinimumPeriodicEventInterval.NumTicks,

@@ -1,0 +1,428 @@
+{
+  "runId": "8615ff3ed2d0497e8852e9b1fa03267b",
+  "sourceCommit": "413930e50",
+  "status": "control_plane_round_trip_passed_player_position_divergence",
+  "accepted": false,
+  "processes": [
+    {
+      "name": "server",
+      "pid": 27188,
+      "role": "server",
+      "build": "0.1.7+413930e5088b13ab50b5e05bd24a45099e52ea1d",
+      "campaign": "RVLgBrkkFApz"
+    },
+    {
+      "name": "client1",
+      "pid": 11348,
+      "role": "client",
+      "build": "0.1.7+413930e5088b13ab50b5e05bd24a45099e52ea1d",
+      "campaign": "RVLgBrkkFApz"
+    }
+  ],
+  "leaseObservations": [
+    {
+      "utc": "2026-10-18T05:27:04.208Z",
+      "side": "server",
+      "lease": {
+        "RoomId": "a815d66ec78548fc912967858613ec66",
+        "AuthorityId": "eabd61e791af42dc85c11b0bda8e7862",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 3,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 5980,
+      "localAuthority": true,
+      "mainHero": "main_hero",
+      "mainParty": "player_party"
+    },
+    {
+      "utc": "2026-10-18T05:27:04.411Z",
+      "side": "client1",
+      "lease": {
+        "RoomId": "a815d66ec78548fc912967858613ec66",
+        "AuthorityId": "eabd61e791af42dc85c11b0bda8e7862",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 3,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 0,
+      "localAuthority": false,
+      "mainHero": "Player",
+      "mainParty": "Player"
+    },
+    {
+      "utc": "2026-10-18T05:27:04.428Z",
+      "side": "server",
+      "lease": {
+        "RoomId": "a815d66ec78548fc912967858613ec66",
+        "AuthorityId": "eabd61e791af42dc85c11b0bda8e7862",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 3,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 6001,
+      "localAuthority": true,
+      "mainHero": "main_hero",
+      "mainParty": "player_party"
+    },
+    {
+      "utc": "2026-10-18T05:27:04.742Z",
+      "side": "client1",
+      "lease": {
+        "RoomId": "a815d66ec78548fc912967858613ec66",
+        "AuthorityId": "eabd61e791af42dc85c11b0bda8e7862",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 3,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 0,
+      "localAuthority": false,
+      "mainHero": "Player",
+      "mainParty": "Player"
+    },
+    {
+      "utc": "2026-10-18T05:27:15.438Z",
+      "side": "server",
+      "lease": {
+        "RoomId": "a815d66ec78548fc912967858613ec66",
+        "AuthorityId": "b3623840bfe04370b75760dc39a65a07",
+        "AuthorityControllerId": "",
+        "Epoch": 4,
+        "IsPaused": true,
+        "IsValid": true
+      },
+      "worldTicks": 6485,
+      "localAuthority": false,
+      "mainHero": "main_hero",
+      "mainParty": "player_party"
+    },
+    {
+      "utc": "2026-10-18T05:27:15.452Z",
+      "side": "client1",
+      "lease": {
+        "RoomId": "a815d66ec78548fc912967858613ec66",
+        "AuthorityId": "b3623840bfe04370b75760dc39a65a07",
+        "AuthorityControllerId": "",
+        "Epoch": 4,
+        "IsPaused": true,
+        "IsValid": true
+      },
+      "worldTicks": 0,
+      "localAuthority": false,
+      "mainHero": "Player",
+      "mainParty": "Player"
+    },
+    {
+      "utc": "2026-10-18T05:27:16.473Z",
+      "side": "server",
+      "lease": {
+        "RoomId": "a815d66ec78548fc912967858613ec66",
+        "AuthorityId": "cc9f52ca039b472ab5471eb4145865f4",
+        "AuthorityControllerId": "testclient1",
+        "Epoch": 5,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 6485,
+      "localAuthority": false,
+      "mainHero": "main_hero",
+      "mainParty": "player_party"
+    },
+    {
+      "utc": "2026-10-18T05:27:16.494Z",
+      "side": "client1",
+      "lease": {
+        "RoomId": "a815d66ec78548fc912967858613ec66",
+        "AuthorityId": "cc9f52ca039b472ab5471eb4145865f4",
+        "AuthorityControllerId": "testclient1",
+        "Epoch": 5,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 6501,
+      "localAuthority": true,
+      "mainHero": "Player",
+      "mainParty": "Player"
+    },
+    {
+      "utc": "2026-10-18T05:27:21.522Z",
+      "side": "client1",
+      "lease": {
+        "RoomId": "a815d66ec78548fc912967858613ec66",
+        "AuthorityId": "cc9f52ca039b472ab5471eb4145865f4",
+        "AuthorityControllerId": "testclient1",
+        "Epoch": 5,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 6701,
+      "localAuthority": true,
+      "mainHero": "Player",
+      "mainParty": "Player"
+    },
+    {
+      "utc": "2026-10-18T05:27:21.533Z",
+      "side": "server",
+      "lease": {
+        "RoomId": "a815d66ec78548fc912967858613ec66",
+        "AuthorityId": "cc9f52ca039b472ab5471eb4145865f4",
+        "AuthorityControllerId": "testclient1",
+        "Epoch": 5,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 6485,
+      "localAuthority": false,
+      "mainHero": "main_hero",
+      "mainParty": "player_party"
+    },
+    {
+      "utc": "2026-10-18T05:27:28.534Z",
+      "side": "server",
+      "lease": {
+        "RoomId": "a815d66ec78548fc912967858613ec66",
+        "AuthorityId": "cc9f52ca039b472ab5471eb4145865f4",
+        "AuthorityControllerId": "testclient1",
+        "Epoch": 5,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 6485,
+      "localAuthority": false,
+      "mainHero": "main_hero",
+      "mainParty": "player_party"
+    },
+    {
+      "utc": "2026-10-18T05:27:28.541Z",
+      "side": "client1",
+      "lease": {
+        "RoomId": "a815d66ec78548fc912967858613ec66",
+        "AuthorityId": "cc9f52ca039b472ab5471eb4145865f4",
+        "AuthorityControllerId": "testclient1",
+        "Epoch": 5,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 6966,
+      "localAuthority": true,
+      "mainHero": "Player",
+      "mainParty": "Player"
+    },
+    {
+      "utc": "2026-10-18T05:27:29.551Z",
+      "side": "server",
+      "lease": {
+        "RoomId": "a815d66ec78548fc912967858613ec66",
+        "AuthorityId": "b4854152dd2c4574995fa7196d37976e",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 7,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 6998,
+      "localAuthority": true,
+      "mainHero": "main_hero",
+      "mainParty": "player_party"
+    },
+    {
+      "utc": "2026-10-18T05:27:29.574Z",
+      "side": "client1",
+      "lease": {
+        "RoomId": "a815d66ec78548fc912967858613ec66",
+        "AuthorityId": "b4854152dd2c4574995fa7196d37976e",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 7,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 6969,
+      "localAuthority": false,
+      "mainHero": "Player",
+      "mainParty": "Player"
+    },
+    {
+      "utc": "2026-10-18T05:27:34.587Z",
+      "side": "server",
+      "lease": {
+        "RoomId": "a815d66ec78548fc912967858613ec66",
+        "AuthorityId": "b4854152dd2c4574995fa7196d37976e",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 7,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 7223,
+      "localAuthority": true,
+      "mainHero": "main_hero",
+      "mainParty": "player_party"
+    },
+    {
+      "utc": "2026-10-18T05:27:34.644Z",
+      "side": "client1",
+      "lease": {
+        "RoomId": "a815d66ec78548fc912967858613ec66",
+        "AuthorityId": "b4854152dd2c4574995fa7196d37976e",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 7,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 6969,
+      "localAuthority": false,
+      "mainHero": "Player",
+      "mainParty": "Player"
+    }
+  ],
+  "finalParties": [
+    {
+      "side": "server",
+      "state": {
+        "mode": "ListenAuthority",
+        "localControllerId": "LocalA",
+        "mainHeroId": "main_hero",
+        "mainPartyId": "player_party",
+        "campaignId": "RVLgBrkkFApz",
+        "hours": 2186090.6781655555,
+        "registeredPlayers": 2,
+        "controllerId": "LocalA",
+        "heroId": "Hero_main_hero",
+        "heroStringId": "main_hero",
+        "clanId": "Clan_player_faction",
+        "characterId": "CharacterObject_main_hero",
+        "gold": 1000,
+        "partyId": "MobileParty_player_party",
+        "partyStringId": "player_party",
+        "x": 656.7773,
+        "y": 278.1635,
+        "troops": 1,
+        "settlementId": null,
+        "items": [],
+        "wounded": 0,
+        "heroRegistrations": 1,
+        "partyRegistrations": 1,
+        "clanRegistrations": 1,
+        "connected": true,
+        "active": true,
+        "mapEvent": "none",
+        "visual": true
+      }
+    },
+    {
+      "side": "server",
+      "state": {
+        "mode": "ListenAuthority",
+        "localControllerId": "LocalA",
+        "mainHeroId": "main_hero",
+        "mainPartyId": "player_party",
+        "campaignId": "RVLgBrkkFApz",
+        "hours": 2186090.684532139,
+        "registeredPlayers": 2,
+        "controllerId": "testclient1",
+        "heroId": "Hero_Player",
+        "heroStringId": "Player",
+        "clanId": "Clan_Player",
+        "characterId": "CharacterObject_Player",
+        "gold": 920,
+        "partyId": "MobileParty_Player",
+        "partyStringId": "Player",
+        "x": 658.7773,
+        "y": 277.1635,
+        "troops": 5,
+        "settlementId": null,
+        "items": [],
+        "wounded": 0,
+        "heroRegistrations": 1,
+        "partyRegistrations": 1,
+        "clanRegistrations": 1,
+        "connected": true,
+        "active": true,
+        "mapEvent": "none",
+        "visual": true
+      }
+    },
+    {
+      "side": "client1",
+      "state": {
+        "mode": "RemoteReplica",
+        "localControllerId": "testclient1",
+        "mainHeroId": "Player",
+        "mainPartyId": "Player",
+        "campaignId": "RVLgBrkkFApz",
+        "hours": 2186090.645143278,
+        "registeredPlayers": 2,
+        "controllerId": "LocalA",
+        "heroId": "Hero_main_hero",
+        "heroStringId": "main_hero",
+        "clanId": "Clan_player_faction",
+        "characterId": "CharacterObject_main_hero",
+        "gold": 1000,
+        "partyId": "MobileParty_player_party",
+        "partyStringId": "player_party",
+        "x": 658.7773,
+        "y": 278.1635,
+        "troops": 1,
+        "settlementId": null,
+        "items": [],
+        "wounded": 0,
+        "heroRegistrations": 1,
+        "partyRegistrations": 1,
+        "clanRegistrations": 1,
+        "connected": false,
+        "active": true,
+        "mapEvent": "none",
+        "visual": true
+      }
+    },
+    {
+      "side": "client1",
+      "state": {
+        "mode": "RemoteReplica",
+        "localControllerId": "testclient1",
+        "mainHeroId": "Player",
+        "mainPartyId": "Player",
+        "campaignId": "RVLgBrkkFApz",
+        "hours": 2186090.6512046945,
+        "registeredPlayers": 2,
+        "controllerId": "testclient1",
+        "heroId": "Hero_Player",
+        "heroStringId": "Player",
+        "clanId": "Clan_Player",
+        "characterId": "CharacterObject_Player",
+        "gold": 920,
+        "partyId": "MobileParty_Player",
+        "partyStringId": "Player",
+        "x": 658.7773,
+        "y": 277.1635,
+        "troops": 5,
+        "settlementId": null,
+        "items": [],
+        "wounded": 0,
+        "heroRegistrations": 1,
+        "partyRegistrations": 1,
+        "clanRegistrations": 1,
+        "connected": false,
+        "active": true,
+        "mapEvent": "none",
+        "visual": true
+      }
+    }
+  ],
+  "cleanup": [
+    {
+      "name": "server",
+      "cleanupComplete": true,
+      "processAlive": false,
+      "processTreeAlive": false
+    },
+    {
+      "name": "client1",
+      "cleanupComplete": true,
+      "processAlive": false,
+      "processTreeAlive": false
+    }
+  ]
+}

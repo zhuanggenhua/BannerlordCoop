@@ -1,5 +1,6 @@
 ﻿using Common;
 using Common.Logging;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.MobilePartyAIs;
 using HarmonyLib;
 using Serilog;
@@ -26,15 +27,9 @@ internal static class PartiesThinkPatch
 
     [HarmonyPatch("PartiesThink")]
     [HarmonyPrefix]
-    private static bool PartiesThinkPrefix(Campaign __instance, ref float dt)
+    internal static bool PartiesThinkPrefix(Campaign __instance, ref float dt)
     {
-        if (ModInformation.IsClient)
-        {
-            if (MobileParty.MainParty.DefaultBehavior == AiBehavior.EscortParty)
-                MobileParty.MainParty.Ai.Tick(dt);
-
-            return false;
-        }
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
 
         IPartyAiBatchRunner current = BoundRunner;
         if (current == null)
