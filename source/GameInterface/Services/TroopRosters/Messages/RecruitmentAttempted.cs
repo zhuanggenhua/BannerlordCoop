@@ -1,5 +1,6 @@
 ﻿using Common.Messaging;
 using ProtoBuf;
+using GameInterface.Services.CampaignAuthority;
 using System.Collections.Generic;
 using System.Linq;
 using TaleWorlds.CampaignSystem;
@@ -11,11 +12,14 @@ public readonly struct RecruitmentAttempted : IEvent
     public readonly MobileParty MobileParty;
 
     public readonly (Hero, CharacterObject, int)[] TroopsInCart;
+    public readonly AuthorityLease ObservedLease;
 
-    public RecruitmentAttempted(MobileParty mobileParty, IEnumerable<(Hero, CharacterObject, int)> troopsInCart)
+    public RecruitmentAttempted(MobileParty mobileParty, IEnumerable<(Hero, CharacterObject, int)> troopsInCart,
+        AuthorityLease observedLease = default)
     {
         MobileParty = mobileParty;
         TroopsInCart = troopsInCart.ToArray();
+        ObservedLease = observedLease;
     }
 }
 

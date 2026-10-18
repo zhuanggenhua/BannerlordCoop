@@ -11,6 +11,8 @@ using GameInterface.Services.TroopRosters.Messages;
 using Serilog;
 using System.Collections.Generic;
 using System.Threading;
+using TaleWorlds.CampaignSystem.Party;
+using static GameInterface.Services.ObjectManager.ObjectManager;
 
 using Common;
 
@@ -94,25 +96,22 @@ public class ClientTroopRosterHandler : IHandler
     internal void HandleAuthorityRecruitmentCommand(
         MessagePayload<NetworkCampaignAuthorityRecruitmentCommand> payload)
     {
-        var command = payload.What;
-        if (!authorityContext.TryGetLocalAuthorityLease(out var lease) ||
-            !command.Matches(lease) ||
-            !players.TryGetPlayer(command.OriginControllerId, out Player player) || player == null ||
-            player.MobilePartyId != command.MobilePartyId ||
-            !TryAdvanceAuthorityCommandSequence(lease, command.Sequence))
-            return;
-
         GameThread.RunSafe(() =>
         {
-            // Ownership may change while the command waits for the game thread.
-            if (!authorityContext.TryGetLocalAuthorityLease(out var currentLease) || currentLease != lease ||
+            var command = payload.What;
+            // Resolve ownership, lease and sequence in the same FIFO as freeze/checkpoint application.
+            // A rejected poll-thread command must never consume a later valid command's sequence.
+            if (!authorityContext.TryGetLocalAuthorityLease(out var lease) || !command.Matches(lease) ||
                 !players.TryGetPlayer(command.OriginControllerId, out Player currentPlayer) ||
-                currentPlayer == null || currentPlayer.MobilePartyId != command.MobilePartyId)
+                currentPlayer == null ||
+                Compact(currentPlayer.MobilePartyId, typeof(MobileParty)) != Compact(command.MobilePartyId, typeof(MobileParty)) ||
+                !TryAdvanceAuthorityCommandSequence(lease, command.Sequence))
                 return;
 
             try
             {
-                troopRosterInterface.HandleOnRecruitmentDone(command.MobilePartyId, command.TroopsInCart);
+                authorityContext.TryExecuteWithCurrentLease(lease, () =>
+                    troopRosterInterface.HandleOnRecruitmentDone(command.MobilePartyId, command.TroopsInCart));
             }
             catch (System.Exception e)
             {
