@@ -177,6 +177,8 @@ public class GameInterfaceModule : Module
         builder.RegisterType<PlayerTroopXpRelevance>().As<IPlayerTroopXpRelevance>().InstancePerDependency();
         builder.RegisterType<Services.CampaignAuthority.CampaignRosterCheckpointService>()
             .As<Services.CampaignAuthority.ICampaignRosterCheckpointService>().InstancePerDependency();
+        builder.RegisterType<Services.CampaignAuthority.CampaignSessionCheckpointService>()
+            .As<Services.CampaignAuthority.ICampaignSessionCheckpointService>().InstancePerDependency();
         builder.RegisterType<PrisonerSaleValidator>().As<IPrisonerSaleValidator>().InstancePerDependency();
         builder.RegisterType<PlayerRansomReleaseSettlementProvider>().As<IPlayerRansomReleaseSettlementProvider>().InstancePerDependency();
         builder.RegisterType<SessionHeroMeetingDataInterface>().As<ISessionHeroMeetingDataInterface>().InstancePerDependency();

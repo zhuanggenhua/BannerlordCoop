@@ -41,16 +41,20 @@ internal class CoopSessionUpdateHandler : IHandler
         if (ModInformation.IsServer) return;
 
         var session = obj.What.UpdatedSession;
-        
+        InitializeSessionReaders(messageBroker, this, session);
+    }
+
+    internal static void InitializeSessionReaders(IMessageBroker messageBroker, object source, Save.Data.ICoopSession session)
+    {
         // Load updated session data
-        messageBroker.Publish(this, new InitializeClientCraftingData(session.CraftingPlayerData));
-        messageBroker.Publish(this, new InitializeClientWorkshopData(session.WorkshopPlayerData));
-        messageBroker.Publish(this, new InitializeClientCaravansData(session.CaravansPlayerData));
-        messageBroker.Publish(this, new InitializeClientAlleyData(session.AlleyPlayerData));
-        messageBroker.Publish(this, new InitializeClientInteractionsData(session.InteractionsPlayerData));
-        messageBroker.Publish(this, new InitializeClientTradeData(session.TradePlayerData));
-        messageBroker.Publish(this, new InitializeClientInventoryData(session.InventoryPlayerData));
-        messageBroker.Publish(this, new InitializeClientHeroMeetingData(session.HeroMeetingData));
-        messageBroker.Publish(this, new InitializeClientAgingData(session.AgingPlayerData));
+        messageBroker.Publish(source, new InitializeClientCraftingData(session.CraftingPlayerData));
+        messageBroker.Publish(source, new InitializeClientWorkshopData(session.WorkshopPlayerData));
+        messageBroker.Publish(source, new InitializeClientCaravansData(session.CaravansPlayerData));
+        messageBroker.Publish(source, new InitializeClientAlleyData(session.AlleyPlayerData));
+        messageBroker.Publish(source, new InitializeClientInteractionsData(session.InteractionsPlayerData));
+        messageBroker.Publish(source, new InitializeClientTradeData(session.TradePlayerData));
+        messageBroker.Publish(source, new InitializeClientInventoryData(session.InventoryPlayerData));
+        messageBroker.Publish(source, new InitializeClientHeroMeetingData(session.HeroMeetingData));
+        messageBroker.Publish(source, new InitializeClientAgingData(session.AgingPlayerData));
     }
 }
