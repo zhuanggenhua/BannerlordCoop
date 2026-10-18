@@ -32,12 +32,14 @@ public sealed class MissionMapTimeVM : ViewModel
 
     public void SetTimeControlMode(TimeControlEnum mode)
     {
+        if (selectedMode == mode && mapTimeText != null) return;
         selectedMode = mode;
         RefreshTimeText();
     }
 
     public void SetSimulationSuspended(bool suspended)
     {
+        if (simulationSuspended == suspended) return;
         simulationSuspended = suspended;
         RefreshTimeText();
     }

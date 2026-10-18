@@ -63,8 +63,11 @@ public sealed class MissionMapTimeView : MissionView, ILocationMissionBehavior
     {
         base.OnMissionScreenTick(dt);
 
-        // Lease changes do not change the selected time mode or publish a time-speed message.
-        dataSource?.SetSimulationSuspended(CampaignTimeDisplay.IsSimulationSuspended());
+        if (dataSource == null) return;
+
+        // Local host speed changes and lease pauses need not publish a received time-speed message.
+        dataSource.SetTimeControlMode(timeControlInterface.GetTimeControl());
+        dataSource.SetSimulationSuspended(CampaignTimeDisplay.IsSimulationSuspended());
     }
 
     public override void OnMissionScreenFinalize()

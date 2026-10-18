@@ -8,6 +8,7 @@ using GameInterface.Services.Heroes.Interaces;
 using GameInterface.Services.Heroes.Messages;
 using GameInterface.Services.Time;
 using GameInterface.Services.Time.Interfaces;
+using GameInterface.Services.Time.UI;
 using HarmonyLib;
 using SandBox.View.Map;
 using System.Collections.Generic;
@@ -113,7 +114,7 @@ internal class AllowTimeControlFromControlsPatches
 {
     [HarmonyPatch(nameof(MapTimeControlVM.ExecuteTimeControlChange))]
     [HarmonyPrefix]
-    private static bool ExecuteTimeControlChangePrefix(ref MapTimeControlVM __instance, int selectedTimeSpeed)
+    internal static bool ExecuteTimeControlChangePrefix(ref MapTimeControlVM __instance, int selectedTimeSpeed)
     {
         using (new AllowedThread())
         {
@@ -124,20 +125,24 @@ internal class AllowTimeControlFromControlsPatches
                 return false;
             }
 
+            // A forced UI pause must not make a click on Pause look like the already-selected speed.
+            int currentFlowState = CampaignTimeDisplay.IsSimulationSuspended() && Campaign.Current != null
+                ? (int)Campaign.Current.GetSimplifiedTimeControlMode()
+                : __instance._timeFlowState;
             int num = selectedTimeSpeed;
-            if (__instance._timeFlowState == 3 && num == 2)
+            if (currentFlowState == 3 && num == 2)
             {
                 num = 4;
             }
-            else if (__instance._timeFlowState == 4 && num == 1)
+            else if (currentFlowState == 4 && num == 1)
             {
                 num = 3;
             }
-            else if (__instance._timeFlowState == 2 && num == 0)
+            else if (currentFlowState == 2 && num == 0)
             {
                 num = 6;
             }
-            if (num != __instance._timeFlowState)
+            if (num != currentFlowState)
             {
                 __instance.TimeFlowState = num;
                 __instance.SetTimeSpeed(selectedTimeSpeed);
