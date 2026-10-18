@@ -1,6 +1,7 @@
 ﻿using Common;
 using Common.Messaging;
 using GameInterface.Services.CampaignAuthority;
+using GameInterface.Services.MobileParties.Extensions;
 using GameInterface.Services.MobileParties.Handlers;
 using GameInterface.Services.MobileParties.Messages;
 using HarmonyLib;
@@ -43,12 +44,42 @@ internal class RecruitmentCampaignBehaviorPatch
     }
 
     [HarmonyPrefix]
-    [HarmonyPatch("HourlyTickParty")]
-    private static bool HourlyTickPartyPrefix(ref MobileParty mobileParty)
+    [HarmonyPatch(nameof(RecruitmentCampaignBehavior.DailyTickSettlement))]
+    internal static bool DailyTickSettlementAuthorityPrefix()
+        => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
+
+    [HarmonyPrefix]
+    [HarmonyPatch(nameof(RecruitmentCampaignBehavior.OnBeforeSettlementEntered))]
+    internal static bool OnBeforeSettlementEnteredAuthorityPrefix()
+        => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
+
+    [HarmonyPrefix]
+    [HarmonyPatch(nameof(RecruitmentCampaignBehavior.OnNewGameCreatedPartialFollowUpEnd))]
+    internal static bool OnNewGameCreatedPartialFollowUpEndAuthorityPrefix()
+        => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
+
+    [HarmonyPrefix]
+    [HarmonyPatch(nameof(RecruitmentCampaignBehavior.OnTroopRecruited))]
+    internal static bool OnTroopRecruitedAuthorityPrefix()
+        => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
+
+    [HarmonyPrefix]
+    [HarmonyPatch(nameof(RecruitmentCampaignBehavior.OnUnitRecruited))]
+    internal static bool OnUnitRecruitedAuthorityPrefix()
+        => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
+    [HarmonyPrefix]
+    [HarmonyPatch(nameof(RecruitmentCampaignBehavior.HourlyTickParty))]
+    internal static bool HourlyTickPartyPrefix(ref MobileParty mobileParty)
     {
-        // TODO disable for player parties
-        return false;
+        if (mobileParty == null) return false;
+
+        return ShouldRunHourlyRecruitment(
+            CampaignSimulationAuthorityPolicy.CanRunWorldSimulation(),
+            mobileParty.IsPlayerParty());
     }
+
+    internal static bool ShouldRunHourlyRecruitment(bool isCampaignAuthority, bool isPlayerParty)
+        => isCampaignAuthority && !isPlayerParty;
 
     /// <summary>
     /// Mercenary tavern hire runs on the conversing client and adds the troops + deducts the gold
@@ -121,19 +152,19 @@ internal class RecruitmentCampaignBehaviorPatch
     }
 
     [HarmonyPrefix]
-    [HarmonyPatch("DailyTickTown")]
-    private static void DailyTickTownPrefix(RecruitmentCampaignBehavior __instance, Town town, out MercenaryStockState __state)
+    [HarmonyPatch(nameof(RecruitmentCampaignBehavior.DailyTickTown))]
+    internal static bool DailyTickTownPrefix(RecruitmentCampaignBehavior __instance, Town town, out MercenaryStockState __state)
     {
-        __state = CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()
-            ? GetMercenaryStockState(__instance, town)
-            : default;
+        bool canRun = CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
+        __state = canRun ? GetMercenaryStockState(__instance, town) : default;
+        return canRun;
     }
 
     [HarmonyPostfix]
     [HarmonyPatch("DailyTickTown")]
-    private static void DailyTickTownPostfix(RecruitmentCampaignBehavior __instance, Town town, MercenaryStockState __state)
+    private static void DailyTickTownPostfix(RecruitmentCampaignBehavior __instance, Town town, MercenaryStockState __state, bool __runOriginal)
     {
-        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return;
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation() || !__runOriginal) return;
 
         PublishMercenaryStockIfChanged(__instance, town, __state);
     }
@@ -234,7 +265,7 @@ internal class RecruitmentCampaignBehaviorPatch
         return MercenaryStockHandler.IsMercenaryTown(town);
     }
 
-    private readonly struct MercenaryStockState
+    internal readonly struct MercenaryStockState
     {
         public readonly bool IsMercenaryTown;
         public readonly Town Town;
