@@ -1,5 +1,7 @@
 ﻿using TaleWorlds.CampaignSystem;
 
+using TaleWorlds.CampaignSystem.Party;
+
 namespace GameInterface.Services.CampaignAuthority;
 
 public interface ICampaignObserverFrame
@@ -21,5 +23,8 @@ internal sealed class CampaignObserverFrame : ICampaignObserverFrame
             campaign._tickData.InitializeDataCache();
         }
         campaign._tickData.RealTick(campaign._dt, realDt);
+        var party = MobileParty.MainParty;
+        if (party?.Ai != null && CampaignSimulationAuthorityPolicy.CanTickParty(party))
+            party.Ai.Tick(campaign._dt);
     }
 }

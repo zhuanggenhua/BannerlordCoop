@@ -1,5 +1,6 @@
 ﻿using Common;
 using GameInterface.Services.MapTracks.Interfaces;
+using GameInterface.Services.CampaignAuthority;
 using HarmonyLib;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
@@ -13,13 +14,19 @@ internal class MapTracksCampaignBehaviorPatches
 {
     [HarmonyPatch(nameof(MapTracksCampaignBehavior.GameLoadFinished))]
     [HarmonyPrefix]
-    public static bool GameLoadFinishedPrefix() => ModInformation.IsServer;
+    public static bool GameLoadFinishedPrefix(MapTracksCampaignBehavior __instance)
+    {
+        if (ModInformation.IsServer) return true;
+        // Observers receive visible tracks separately, but need the timer when promoted.
+        if (__instance._quarterHourlyTick == null) __instance.AddEventHandler();
+        return false;
+    }
 
     [HarmonyPatch(nameof(MapTracksCampaignBehavior.OnHourlyTick))]
     [HarmonyPrefix]
     public static bool OnHourlyTickPrefix(MapTracksCampaignBehavior __instance)
     {
-        if (ModInformation.IsClient) return false;
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
 
         // Replace with interface method to run for all players
         ContainerProvider.TryResolve<IMapTracksCampaignBehaviorInterface>(out var mapTracksCampaignBehaviorInterface);
@@ -31,17 +38,17 @@ internal class MapTracksCampaignBehaviorPatches
 
     [HarmonyPatch(nameof(MapTracksCampaignBehavior.OnHourlyTickParty))]
     [HarmonyPrefix]
-    public static bool OnHourlyTickPartyPrefix() => ModInformation.IsServer;
+    public static bool OnHourlyTickPartyPrefix() => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
 
     [HarmonyPatch(nameof(MapTracksCampaignBehavior.OnMobilePartyDestroyed))]
     [HarmonyPrefix]
-    public static bool OnMobilePartyDestroyedPrefix() => ModInformation.IsServer;
+    public static bool OnMobilePartyDestroyedPrefix() => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
 
     [HarmonyPatch(nameof(MapTracksCampaignBehavior.QuarterHourlyTick))]
     [HarmonyPrefix]
     public static bool QuarterHourlyTickPrefix(MapTracksCampaignBehavior __instance)
     {
-        if (ModInformation.IsClient) return false;
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
 
         // Replace with interface method to run for all players
         ContainerProvider.TryResolve<IMapTracksCampaignBehaviorInterface>(out var mapTracksCampaignBehaviorInterface);
@@ -55,7 +62,7 @@ internal class MapTracksCampaignBehaviorPatches
     [HarmonyPrefix]
     public static bool IsTrackDroppedPrefix(MapTracksCampaignBehavior __instance, ref bool __result, MobileParty mobileParty)
     {
-        if (ModInformation.IsClient) return false;
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
 
         ContainerProvider.TryResolve<IMapTracksCampaignBehaviorInterface>(out var mapTracksCampaignBehaviorInterface);
 
@@ -68,7 +75,7 @@ internal class MapTracksCampaignBehaviorPatches
     [HarmonyPrefix]
     public static bool AddTrackPrefix(MapTracksCampaignBehavior __instance, MobileParty party, CampaignVec2 trackPosition, Vec2 trackDirection)
     {
-        if (ModInformation.IsClient) return false;
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
 
         ContainerProvider.TryResolve<IMapTracksCampaignBehaviorInterface>(out var mapTracksCampaignBehaviorInterface);
 

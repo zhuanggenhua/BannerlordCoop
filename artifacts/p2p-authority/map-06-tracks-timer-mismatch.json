@@ -1,0 +1,356 @@
+{
+  "runId": "14b8c71d86d14d27bbaa39ff648fd674",
+  "sourceCommit": "03840e280",
+  "status": "failed_safe_pause_at_scheduler_header",
+  "blocker": "MapTracksCampaignBehavior.GameLoadFinished was skipped on remote replicas, omitting its quarter-hour event",
+  "schedulerStates": [
+    {
+      "instance": "server",
+      "state": {
+        "controller": "LocalA",
+        "roomHost": "LocalA",
+        "lease": {
+          "RoomId": "e11af95ac4f14de3b409e2ca0d245275",
+          "AuthorityId": "149407364e854d7a93ef9951ad2d2138",
+          "AuthorityControllerId": "LocalA",
+          "Epoch": 3,
+          "IsPaused": false,
+          "IsValid": true
+        },
+        "localAuthority": true,
+        "frozen": false,
+        "yielded": false,
+        "campaign": "RVLgBrkkFApz",
+        "worldTicks": 5280,
+        "hours": 2186083.4815998888,
+        "mainHero": "main_hero",
+        "mainParty": "player_party",
+        "gameState": "MapState",
+        "scheduler": {
+          "minimumIntervalTicks": 1800000,
+          "lastGameTimeTicks": 78699005337596,
+          "events": [
+            {
+              "description": null,
+              "periodTicks": 36000000,
+              "initialWaitTicks": 23583056,
+              "nextTriggerTicks": 78699028920652,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 3600000,
+              "initialWaitTicks": 36000000,
+              "nextTriggerTicks": 78699041337596,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 36000000,
+              "initialWaitTicks": 7269841,
+              "nextTriggerTicks": 78699012607437,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 3600000,
+              "initialWaitTicks": 36000000,
+              "nextTriggerTicks": 78699041337596,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 36000000,
+              "initialWaitTicks": 3935815,
+              "nextTriggerTicks": 78699009273411,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 3600000,
+              "initialWaitTicks": 36000000,
+              "nextTriggerTicks": 78699041337596,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 36000000,
+              "initialWaitTicks": 32851621,
+              "nextTriggerTicks": 78699038189217,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 3600000,
+              "initialWaitTicks": 36000000,
+              "nextTriggerTicks": 78699041337596,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 36000000,
+              "initialWaitTicks": 35536760,
+              "nextTriggerTicks": 78699040874356,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 3600000,
+              "initialWaitTicks": 36000000,
+              "nextTriggerTicks": 78699041337596,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 36000000,
+              "initialWaitTicks": 26096648,
+              "nextTriggerTicks": 78699031434244,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 3600000,
+              "initialWaitTicks": 36000000,
+              "nextTriggerTicks": 78699041337596,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 36000000,
+              "initialWaitTicks": 2177024,
+              "nextTriggerTicks": 78699007514620,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 3600000,
+              "initialWaitTicks": 36000000,
+              "nextTriggerTicks": 78699041337596,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 864000000,
+              "initialWaitTicks": 377370368,
+              "nextTriggerTicks": 78699382707964,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 36000000,
+              "initialWaitTicks": 17370364,
+              "nextTriggerTicks": 78699022707960,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 9000000,
+              "initialWaitTicks": 33481456,
+              "nextTriggerTicks": 78699038819052,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 140625,
+              "initialWaitTicks": 99904,
+              "nextTriggerTicks": 78699005437500,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 9000000,
+              "initialWaitTicks": 3600000,
+              "nextTriggerTicks": 78699008937596,
+              "deleted": false
+            }
+          ]
+        }
+      }
+    },
+    {
+      "instance": "client1",
+      "state": {
+        "controller": "testclient1",
+        "roomHost": "LocalA",
+        "lease": {
+          "RoomId": "e11af95ac4f14de3b409e2ca0d245275",
+          "AuthorityId": "149407364e854d7a93ef9951ad2d2138",
+          "AuthorityControllerId": "LocalA",
+          "Epoch": 3,
+          "IsPaused": false,
+          "IsValid": true
+        },
+        "localAuthority": false,
+        "frozen": false,
+        "yielded": false,
+        "campaign": "RVLgBrkkFApz",
+        "worldTicks": 0,
+        "hours": 2186083.4815998888,
+        "mainHero": "Player",
+        "mainParty": "Player",
+        "gameState": "MapState",
+        "scheduler": {
+          "minimumIntervalTicks": 1800000,
+          "lastGameTimeTicks": 0,
+          "events": [
+            {
+              "description": null,
+              "periodTicks": 36000000,
+              "initialWaitTicks": 23583056,
+              "nextTriggerTicks": 78699028920652,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 3600000,
+              "initialWaitTicks": 36000000,
+              "nextTriggerTicks": 78699041337596,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 36000000,
+              "initialWaitTicks": 7269841,
+              "nextTriggerTicks": 78699012607437,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 3600000,
+              "initialWaitTicks": 36000000,
+              "nextTriggerTicks": 78699041337596,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 36000000,
+              "initialWaitTicks": 3935815,
+              "nextTriggerTicks": 78699009273411,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 3600000,
+              "initialWaitTicks": 36000000,
+              "nextTriggerTicks": 78699041337596,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 36000000,
+              "initialWaitTicks": 32851621,
+              "nextTriggerTicks": 78699038189217,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 3600000,
+              "initialWaitTicks": 36000000,
+              "nextTriggerTicks": 78699041337596,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 36000000,
+              "initialWaitTicks": 35536760,
+              "nextTriggerTicks": 78699040874356,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 3600000,
+              "initialWaitTicks": 36000000,
+              "nextTriggerTicks": 78699041337596,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 36000000,
+              "initialWaitTicks": 26096648,
+              "nextTriggerTicks": 78699031434244,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 3600000,
+              "initialWaitTicks": 36000000,
+              "nextTriggerTicks": 78699041337596,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 36000000,
+              "initialWaitTicks": 2177024,
+              "nextTriggerTicks": 78699007514620,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 3600000,
+              "initialWaitTicks": 36000000,
+              "nextTriggerTicks": 78699041337596,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 864000000,
+              "initialWaitTicks": 377370368,
+              "nextTriggerTicks": 78699382707964,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 36000000,
+              "initialWaitTicks": 17370364,
+              "nextTriggerTicks": 78699022707960,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 9000000,
+              "initialWaitTicks": 33481456,
+              "nextTriggerTicks": 78699038819052,
+              "deleted": false
+            },
+            {
+              "description": null,
+              "periodTicks": 140625,
+              "initialWaitTicks": 99904,
+              "nextTriggerTicks": 78699005437500,
+              "deleted": false
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "cleanup": [
+    {
+      "name": "server",
+      "identity": {
+        "pid": 27036,
+        "startedUtc": "2026-10-18T04:44:42.3535875Z",
+        "role": "server",
+        "platformId": "LocalA",
+        "runToken": "14b8c71d86d14d27bbaa39ff648fd674"
+      },
+      "processAlive": false,
+      "processTreeAlive": false,
+      "cleanupComplete": true
+    },
+    {
+      "name": "client1",
+      "identity": {
+        "pid": 26228,
+        "startedUtc": "2026-10-18T04:45:29.8407782Z",
+        "role": "client",
+        "platformId": "testclient1",
+        "runToken": "14b8c71d86d14d27bbaa39ff648fd674"
+      },
+      "processAlive": false,
+      "processTreeAlive": false,
+      "cleanupComplete": true
+    }
+  ],
+  "artifacts": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\14b8c71d86d14d27bbaa39ff648fd674"
+}
