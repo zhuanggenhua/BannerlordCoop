@@ -56,6 +56,24 @@ public class ListenAuthorityModeTests
     }
 
     [Fact]
+    public void LeaseScopedApplyRunsOnlyWhileTheExpectedLeaseIsCurrent()
+    {
+        var identity = new SessionIdentity();
+        var active = new AuthorityLease("room-a", "authority-a", "controller-a", 1);
+        var paused = new AuthorityLease("room-a", "authority-paused", string.Empty, 2, isPaused: true);
+        Assert.True(identity.TryApply(active));
+
+        bool applied = false;
+        Assert.True(identity.TryExecuteWithLease(active, () => applied = true));
+        Assert.True(applied);
+
+        Assert.True(identity.TryApply(paused));
+        applied = false;
+        Assert.False(identity.TryExecuteWithLease(active, () => applied = true));
+        Assert.False(applied);
+    }
+
+    [Fact]
     public void AuthorityLeaseRejectsStaleEpochAndConflictingSameEpoch()
     {
         var identity = new SessionIdentity();

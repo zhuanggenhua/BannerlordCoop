@@ -7,18 +7,35 @@ namespace GameInterface.Tests.Services.Time;
 public class MapTimeTrackerInterfaceTests
 {
     [Fact]
-    public void TryApplyIfCurrent_DiscardsQueuedWorkAfterLeaseChanges()
+    public void TryApplyUnderLease_DiscardsApplyAndNotificationAfterLeaseChanges()
     {
         bool leaseIsCurrent = true;
         bool applied = false;
+        bool notified = false;
 
-        Assert.True(MapTimeTrackerInterface.TryApplyIfCurrent(() => leaseIsCurrent, () => applied = true));
+        Func<Action, bool> applyUnderLease = action =>
+        {
+            if (!leaseIsCurrent) return false;
+            action();
+            return true;
+        };
+
+        Assert.True(MapTimeTrackerInterface.TryApplyUnderLease(
+            applyUnderLease,
+            () => applied = true,
+            () => notified = true));
         Assert.True(applied);
+        Assert.True(notified);
 
         leaseIsCurrent = false;
         applied = false;
-        Assert.False(MapTimeTrackerInterface.TryApplyIfCurrent(() => leaseIsCurrent, () => applied = true));
+        notified = false;
+        Assert.False(MapTimeTrackerInterface.TryApplyUnderLease(
+            applyUnderLease,
+            () => applied = true,
+            () => notified = true));
         Assert.False(applied);
+        Assert.False(notified);
     }
 
     [Fact]

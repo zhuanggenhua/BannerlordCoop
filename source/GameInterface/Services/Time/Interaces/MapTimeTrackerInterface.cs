@@ -26,14 +26,18 @@ public interface IMapTimeTrackerInterface : IGameAbstraction
     /// <param name="oneWayLatencySeconds">The estimated time the sample spent travelling from server to client.</param>
     void SyncCampaignTime(long serverTicks, float oneWayLatencySeconds);
 
-    /// <summary>Queues a correction that is discarded if its authority lease is no longer current when applied.</summary>
-    void SyncCampaignTime(long serverTicks, float oneWayLatencySeconds, Func<bool> isStillCurrent);
+    /// <summary>Queues a correction and applies/notifies it atomically with respect to authority lease changes.</summary>
+    void SyncCampaignTime(
+        long serverTicks,
+        float oneWayLatencySeconds,
+        Func<Action, bool> applyUnderLease,
+        Action onApplied);
 
     /// <summary>Applies an exact authority sample to the local campaign clock on the game thread.</summary>
     void ApplyAuthorityTimeSample(long authorityTicks);
 
-    /// <summary>Queues an exact clock sample that is discarded if its authority lease is no longer current.</summary>
-    void ApplyAuthorityTimeSample(long authorityTicks, Func<bool> isStillCurrent);
+    /// <summary>Queues an exact clock sample that is applied atomically with respect to authority lease changes.</summary>
+    void ApplyAuthorityTimeSample(long authorityTicks, Func<Action, bool> applyUnderLease);
 
     /// <summary>
     /// Applies the pending server-time correction to the current client simulation frame.
@@ -85,18 +89,21 @@ internal class MapTimeTrackerInterface : IMapTimeTrackerInterface
         public long Ticks { get; }
         public float OneWayLatencySeconds { get; }
         public bool ApplyExactly { get; }
-        public Func<bool> IsStillCurrent { get; }
+        public Func<Action, bool> ApplyUnderLease { get; }
+        public Action OnApplied { get; }
 
         public ServerTimeSample(
             long ticks,
             float oneWayLatencySeconds,
             bool applyExactly = false,
-            Func<bool> isStillCurrent = null)
+            Func<Action, bool> applyUnderLease = null,
+            Action onApplied = null)
         {
             Ticks = ticks;
             OneWayLatencySeconds = oneWayLatencySeconds;
             ApplyExactly = applyExactly;
-            IsStillCurrent = isStillCurrent;
+            ApplyUnderLease = applyUnderLease;
+            OnApplied = onApplied;
         }
     }
 
@@ -155,28 +162,36 @@ internal class MapTimeTrackerInterface : IMapTimeTrackerInterface
 
     public void SyncCampaignTime(long serverTicks, float oneWayLatencySeconds)
     {
-        SyncCampaignTime(serverTicks, oneWayLatencySeconds, isStillCurrent: null);
+        SyncCampaignTime(serverTicks, oneWayLatencySeconds, applyUnderLease: null, onApplied: null);
     }
 
-    public void SyncCampaignTime(long serverTicks, float oneWayLatencySeconds, Func<bool> isStillCurrent)
+    public void SyncCampaignTime(
+        long serverTicks,
+        float oneWayLatencySeconds,
+        Func<Action, bool> applyUnderLease,
+        Action onApplied)
     {
         if (Volatile.Read(ref waitingForJoinBaseline)) return;
 
         // The game thread only needs the newest sample; queued historical samples add artificial latency.
         Volatile.Write(ref latestServerTimeSample,
-            new ServerTimeSample(serverTicks, oneWayLatencySeconds, isStillCurrent: isStillCurrent));
+            new ServerTimeSample(
+                serverTicks,
+                oneWayLatencySeconds,
+                applyUnderLease: applyUnderLease,
+                onApplied: onApplied));
         QueueLatestServerTime();
     }
 
     public void ApplyAuthorityTimeSample(long authorityTicks)
     {
-        ApplyAuthorityTimeSample(authorityTicks, isStillCurrent: null);
+        ApplyAuthorityTimeSample(authorityTicks, applyUnderLease: null);
     }
 
-    public void ApplyAuthorityTimeSample(long authorityTicks, Func<bool> isStillCurrent)
+    public void ApplyAuthorityTimeSample(long authorityTicks, Func<Action, bool> applyUnderLease)
     {
         Volatile.Write(ref latestServerTimeSample,
-            new ServerTimeSample(authorityTicks, 0f, applyExactly: true, isStillCurrent: isStillCurrent));
+            new ServerTimeSample(authorityTicks, 0f, applyExactly: true, applyUnderLease: applyUnderLease));
         QueueLatestServerTime();
     }
 
@@ -208,7 +223,7 @@ internal class MapTimeTrackerInterface : IMapTimeTrackerInterface
                 long maxServerProgressTicks = CampaignTime.Hours(6f).NumTicks;
                 if (maxServerProgressTicks <= 0L) return;
 
-                bool sampleApplied = TryApplyIfCurrent(appliedSample.IsStillCurrent, () =>
+                bool sampleApplied = TryApplyUnderLease(appliedSample.ApplyUnderLease, () =>
                 {
                     if (appliedSample.ApplyExactly)
                     {
@@ -223,7 +238,7 @@ internal class MapTimeTrackerInterface : IMapTimeTrackerInterface
                             maxServerProgressTicks,
                             appliedSample.OneWayLatencySeconds);
                     }
-                });
+                }, appliedSample.OnApplied);
                 if (!sampleApplied) return;
             }
             while (ReferenceEquals(appliedSample, Volatile.Read(ref latestServerTimeSample)) == false);
@@ -239,11 +254,24 @@ internal class MapTimeTrackerInterface : IMapTimeTrackerInterface
         }
     }
 
-    internal static bool TryApplyIfCurrent(Func<bool> isStillCurrent, Action apply)
+    internal static bool TryApplyUnderLease(
+        Func<Action, bool> applyUnderLease,
+        Action apply,
+        Action onApplied = null)
     {
-        if (isStillCurrent != null && !isStillCurrent()) return false;
-        apply();
-        return true;
+        Action applyWithNotification = () =>
+        {
+            apply();
+            onApplied?.Invoke();
+        };
+
+        if (applyUnderLease == null)
+        {
+            applyWithNotification();
+            return true;
+        }
+
+        return applyUnderLease(applyWithNotification);
     }
 
     public void ApplyClientSimulationTime(Campaign campaign, float realDt)

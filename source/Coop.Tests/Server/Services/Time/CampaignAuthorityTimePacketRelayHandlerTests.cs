@@ -51,10 +51,10 @@ public sealed class CampaignAuthorityTimePacketRelayHandlerTests
 
         var packetManager = new Mock<IPacketManager>();
         var mapTime = new Mock<IMapTimeTrackerInterface>();
-        Func<bool> sampleStillCurrent = null;
+        Func<Action, bool> applyUnderLease = null;
         mapTime
-            .Setup(value => value.ApplyAuthorityTimeSample(123456L, It.IsAny<Func<bool>>()))
-            .Callback<long, Func<bool>>((_, isStillCurrent) => sampleStillCurrent = isStillCurrent);
+            .Setup(value => value.ApplyAuthorityTimeSample(123456L, It.IsAny<Func<Action, bool>>()))
+            .Callback<long, Func<Action, bool>>((_, apply) => applyUnderLease = apply);
         var network = new Mock<INetwork>();
         CampaignTimePacket relayed = default;
         network.Setup(value => value.Send(observerPeer, It.IsAny<IPacket>()))
@@ -74,12 +74,16 @@ public sealed class CampaignAuthorityTimePacketRelayHandlerTests
         handler.HandlePacket(authorityPeer, sample);
 
         mapTime.Verify(
-            value => value.ApplyAuthorityTimeSample(123456L, It.IsAny<Func<bool>>()),
+            value => value.ApplyAuthorityTimeSample(123456L, It.IsAny<Func<Action, bool>>()),
             Times.Once);
-        Assert.NotNull(sampleStillCurrent);
-        Assert.True(sampleStillCurrent());
+        Assert.NotNull(applyUnderLease);
+        bool applied = false;
+        Assert.True(applyUnderLease(() => applied = true));
+        Assert.True(applied);
         Assert.True(identity.TryApply(new AuthorityLease("room-a", "authority-paused", string.Empty, 5, isPaused: true)));
-        Assert.False(sampleStillCurrent());
+        applied = false;
+        Assert.False(applyUnderLease(() => applied = true));
+        Assert.False(applied);
         Assert.True(relayed.Matches(lease));
         Assert.Equal(123456L, relayed.ServerTicks);
         Assert.Equal(17, relayed.JoinPacketsRemaining);
@@ -115,7 +119,7 @@ public sealed class CampaignAuthorityTimePacketRelayHandlerTests
         handler.HandlePacket(peer, new CampaignTimePacket(123456L, -1, currentLease));
 
         mapTime.Verify(
-            value => value.ApplyAuthorityTimeSample(It.IsAny<long>(), It.IsAny<Func<bool>>()),
+            value => value.ApplyAuthorityTimeSample(It.IsAny<long>(), It.IsAny<Func<Action, bool>>()),
             Times.Never);
         network.Verify(value => value.Send(It.IsAny<NetPeer>(), It.IsAny<IPacket>()), Times.Never);
     }

@@ -36,10 +36,16 @@ public class CampaignTimePacketHandlerTests
         var packetManager = new Mock<IPacketManager>();
         var mapTimeTracker = new Mock<IMapTimeTrackerInterface>();
         var identity = CreateConfirmedIdentity();
-        Func<bool> sampleStillCurrent = null;
+        Func<Action, bool> applyUnderLease = null;
+        Action sampleApplied = null;
         mapTimeTracker
-            .Setup(m => m.SyncCampaignTime(It.IsAny<long>(), It.IsAny<float>(), It.IsAny<Func<bool>>()))
-            .Callback<long, float, Func<bool>>((_, _, isStillCurrent) => sampleStillCurrent = isStillCurrent);
+            .Setup(m => m.SyncCampaignTime(
+                It.IsAny<long>(), It.IsAny<float>(), It.IsAny<Func<Action, bool>>(), It.IsAny<Action>()))
+            .Callback<long, float, Func<Action, bool>, Action>((_, _, apply, onApplied) =>
+            {
+                applyUnderLease = apply;
+                sampleApplied = onApplied;
+            });
         var handler = new CampaignTimePacketHandler(
             broker, packetManager.Object, mapTimeTracker.Object, identity);
         var packet = new CampaignTimePacket(123456L, -1, CurrentLease);
@@ -47,12 +53,15 @@ public class CampaignTimePacketHandlerTests
         handler.HandlePacket(null, packet);
 
         mapTimeTracker.Verify(
-            m => m.SyncCampaignTime(packet.ServerTicks, 0f, It.IsAny<Func<bool>>()),
+            m => m.SyncCampaignTime(
+                packet.ServerTicks, 0f, It.IsAny<Func<Action, bool>>(), It.IsAny<Action>()),
             Times.Once);
-        Assert.NotNull(sampleStillCurrent);
-        Assert.True(sampleStillCurrent());
+        Assert.NotNull(applyUnderLease);
+        Assert.NotNull(sampleApplied);
+        Assert.True(applyUnderLease(sampleApplied));
+        Assert.Single(broker.GetMessagesFromType<CampaignTimeSampleReceived>());
         Assert.True(identity.TryApply(new AuthorityLease("room-a", "authority-paused", string.Empty, 3, isPaused: true)));
-        Assert.False(sampleStillCurrent());
+        Assert.False(applyUnderLease(sampleApplied));
         var sample = Assert.Single(broker.GetMessagesFromType<CampaignTimeSampleReceived>());
         Assert.Equal(-1, sample.JoinPacketsRemaining);
     }
@@ -63,11 +72,25 @@ public class CampaignTimePacketHandlerTests
         var broker = new TestMessageBroker();
         var packetManager = new Mock<IPacketManager>();
         var mapTimeTracker = new Mock<IMapTimeTrackerInterface>();
+        Func<Action, bool> applyUnderLease = null;
+        Action sampleApplied = null;
+        mapTimeTracker
+            .Setup(m => m.SyncCampaignTime(
+                It.IsAny<long>(), It.IsAny<float>(), It.IsAny<Func<Action, bool>>(), It.IsAny<Action>()))
+            .Callback<long, float, Func<Action, bool>, Action>((_, _, apply, onApplied) =>
+            {
+                applyUnderLease = apply;
+                sampleApplied = onApplied;
+            });
         var handler = new CampaignTimePacketHandler(
             broker, packetManager.Object, mapTimeTracker.Object, CreateConfirmedIdentity());
 
         handler.HandlePacket(null, new CampaignTimePacket(123456L, 4321, CurrentLease));
 
+        Assert.Empty(broker.GetMessagesFromType<CampaignTimeSampleReceived>());
+        Assert.NotNull(sampleApplied);
+        Assert.NotNull(applyUnderLease);
+        Assert.True(applyUnderLease(sampleApplied));
         var sample = Assert.Single(broker.GetMessagesFromType<CampaignTimeSampleReceived>());
         Assert.Equal(4321, sample.JoinPacketsRemaining);
     }
@@ -94,7 +117,8 @@ public class CampaignTimePacketHandlerTests
         handler.HandlePacket(null, new CampaignTimePacket(123456L, -1, previousLease));
 
         mapTimeTracker.Verify(
-            m => m.SyncCampaignTime(It.IsAny<long>(), It.IsAny<float>(), It.IsAny<Func<bool>>()),
+            m => m.SyncCampaignTime(
+                It.IsAny<long>(), It.IsAny<float>(), It.IsAny<Func<Action, bool>>(), It.IsAny<Action>()),
             Times.Never);
         Assert.Empty(broker.GetMessagesFromType<CampaignTimeSampleReceived>());
     }
@@ -114,7 +138,8 @@ public class CampaignTimePacketHandlerTests
         handler.HandlePacket(null, new CampaignTimePacket(123456L, -1, pausedLease));
 
         mapTimeTracker.Verify(
-            m => m.SyncCampaignTime(It.IsAny<long>(), It.IsAny<float>(), It.IsAny<Func<bool>>()),
+            m => m.SyncCampaignTime(
+                It.IsAny<long>(), It.IsAny<float>(), It.IsAny<Func<Action, bool>>(), It.IsAny<Action>()),
             Times.Never);
         Assert.Empty(broker.GetMessagesFromType<CampaignTimeSampleReceived>());
     }

@@ -54,11 +54,10 @@ public class CampaignTimePacketHandler : IPacketHandler
         mapTimeTrackerInterface.SyncCampaignTime(
             timePacket.ServerTicks,
             oneWayLatencySeconds,
-            () => sessionIdentity.TryGetConfirmedLease(out var currentLease) &&
-                currentLease == lease && timePacket.Matches(currentLease));
-        messageBroker.Publish(
-            this,
-            new CampaignTimeSampleReceived(timePacket.JoinPacketsRemaining));
+            action => sessionIdentity.TryExecuteWithLease(lease, action),
+            () => messageBroker.Publish(
+                this,
+                new CampaignTimeSampleReceived(timePacket.JoinPacketsRemaining)));
     }
 
     private void Handle_NetworkConnected(MessagePayload<NetworkConnected> obj)

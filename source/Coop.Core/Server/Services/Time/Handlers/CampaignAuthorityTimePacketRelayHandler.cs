@@ -55,8 +55,7 @@ public sealed class CampaignAuthorityTimePacketRelayHandler : IPacketHandler
 
         mapTimeTracker.ApplyAuthorityTimeSample(
             sample.ServerTicks,
-            () => authorityContext.TryGetCurrentLease(out var currentLease) &&
-                currentLease == lease && sample.Matches(currentLease));
+            action => authorityContext.TryExecuteWithCurrentLease(lease, action));
 
         foreach (var connection in connections)
         {

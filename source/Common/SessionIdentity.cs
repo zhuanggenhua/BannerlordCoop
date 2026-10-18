@@ -11,6 +11,7 @@ public interface ISessionIdentity
     long Epoch { get; }
     bool IsConfirmed { get; }
     bool TryGetConfirmedLease(out AuthorityLease lease);
+    bool TryExecuteWithLease(AuthorityLease lease, Action action);
     bool TryApply(AuthorityLease lease);
     bool TryApply(AuthorityLease lease, string roomHostControllerId);
     bool TryRestore(AuthorityLease lease);
@@ -108,6 +109,22 @@ public sealed class SessionIdentity : ISessionIdentity
             }
 
             lease = currentLease;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Executes a small state apply atomically with respect to lease changes. A newer lease cannot become
+    /// current between the equality check and the action's completion.
+    /// </summary>
+    public bool TryExecuteWithLease(AuthorityLease lease, Action action)
+    {
+        if (action == null) throw new ArgumentNullException(nameof(action));
+
+        lock (gate)
+        {
+            if (!isConfirmed || currentLease != lease) return false;
+            action();
             return true;
         }
     }

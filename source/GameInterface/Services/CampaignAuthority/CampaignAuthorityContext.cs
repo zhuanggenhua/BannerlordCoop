@@ -10,6 +10,7 @@ public interface ICampaignAuthorityContext
     bool IsLocalCampaignAuthority { get; }
     bool TryGetCurrentLease(out AuthorityLease lease);
     bool TryGetLocalAuthorityLease(out AuthorityLease lease);
+    bool TryExecuteWithCurrentLease(AuthorityLease lease, Action action);
 }
 
 public sealed class CampaignAuthorityContext : ICampaignAuthorityContext
@@ -43,6 +44,12 @@ public sealed class CampaignAuthorityContext : ICampaignAuthorityContext
 
     public bool TryGetCurrentLease(out AuthorityLease lease) =>
         sessionIdentity.TryGetConfirmedLease(out lease);
+
+    public bool TryExecuteWithCurrentLease(AuthorityLease lease, Action action)
+    {
+        if (!lease.IsValid || lease.IsPaused) return false;
+        return sessionIdentity.TryExecuteWithLease(lease, action);
+    }
 
     public bool TryGetLocalAuthorityLease(out AuthorityLease lease)
     {
