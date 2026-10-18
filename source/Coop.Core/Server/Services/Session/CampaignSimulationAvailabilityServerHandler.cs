@@ -40,6 +40,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private readonly ISendCoalescer sendCoalescer;
     private readonly ICampaignRosterCheckpointService rosterCheckpointService;
     private readonly IMapTimeTrackerInterface mapTimeTracker;
+    private readonly ICampaignSessionCheckpointService sessionCheckpointService;
     private readonly object peerGate = new object();
     private readonly object localReportGate = new object();
     private readonly object selectionGate = new object();
@@ -73,7 +74,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         IObjectManager objectManager = null,
         ISendCoalescer sendCoalescer = null,
         ICampaignRosterCheckpointService rosterCheckpointService = null,
-        IMapTimeTrackerInterface mapTimeTracker = null)
+        IMapTimeTrackerInterface mapTimeTracker = null,
+        ICampaignSessionCheckpointService sessionCheckpointService = null)
     {
         this.messageBroker = messageBroker;
         this.coordinator = coordinator;
@@ -86,6 +88,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         this.sendCoalescer = sendCoalescer;
         this.rosterCheckpointService = rosterCheckpointService;
         this.mapTimeTracker = mapTimeTracker;
+        this.sessionCheckpointService = sessionCheckpointService;
         messageBroker.Subscribe<CampaignReady>(Handle_CampaignReady);
         messageBroker.Subscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Subscribe<NetworkCampaignSimulationAvailabilityReport>(Handle_AvailabilityReport);
@@ -423,7 +426,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
 
     private void TrySendHandoffBarrier(AuthorityLease pausedLease, string candidateControllerId)
     {
-        if (objectManager == null || rosterCheckpointService == null || mapTimeTracker == null) return;
+        if (objectManager == null || rosterCheckpointService == null || mapTimeTracker == null || sessionCheckpointService == null) return;
 
         if (!pausedLease.IsPaused || string.IsNullOrWhiteSpace(candidateControllerId) ||
             string.Equals(candidateControllerId, sessionIdentity.RoomHostControllerId, StringComparison.Ordinal) ||
@@ -466,6 +469,13 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             return;
         }
 
+        if (!sessionCheckpointService.TryCapture(out var sessionCheckpoint))
+        {
+            Logger.Warning("Could not capture co-op session for controller {ControllerId}; campaign remains paused without a handoff barrier",
+                candidateControllerId);
+            return;
+        }
+
         if (!TryGetNextBarrierSequence(out var sequence))
         {
             Logger.Error("Cannot issue another campaign handoff barrier; sequence space is exhausted");
@@ -480,7 +490,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             sequence,
             objectManager.CaptureAllocationCheckpoint(),
             rosterCheckpoint,
-            new CampaignClockCheckpoint(ticks));
+            new CampaignClockCheckpoint(ticks),
+            sessionCheckpoint);
 
         try
         {

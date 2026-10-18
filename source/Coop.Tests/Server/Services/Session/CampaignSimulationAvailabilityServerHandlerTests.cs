@@ -187,6 +187,10 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                 Assert.True(GameThread.Instance.IsGameThread);
                 Assert.True(identity.CurrentLease.IsPaused);
             }).Returns(true);
+            var sessionCheckpoint = new CampaignSessionCheckpoint("campaign", "{}");
+            var sessions = new Mock<ICampaignSessionCheckpointService>();
+            sessions.Setup(value => value.TryCapture(out sessionCheckpoint))
+                .Callback(() => Assert.True(identity.CurrentLease.IsPaused)).Returns(true);
             var coalescer = new Mock<ISendCoalescer>();
             coalescer.Setup(value => value.Flush(network.Object)).Callback(() =>
             {
@@ -219,7 +223,8 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                 objectManager.Object,
                 coalescer.Object,
                 rosterService.Object,
-                clock.Object);
+                clock.Object,
+                sessions.Object);
 
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
             messageBroker.Publish(this, new CampaignReady());
@@ -246,6 +251,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             Assert.Equal(555u, appliedBarrier.AllocationCheckpoint.NextHandle);
             Assert.Same(rosters, appliedBarrier.RosterCheckpoint);
             Assert.Equal(999, appliedBarrier.ClockCheckpoint.Ticks);
+            Assert.Same(sessionCheckpoint, appliedBarrier.SessionCheckpoint);
 
             var applied = new NetworkCampaignAuthorityHandoffBarrierApplied(
                 appliedBarrier.RoomId, appliedBarrier.PausedAuthorityId, appliedBarrier.PausedEpoch,

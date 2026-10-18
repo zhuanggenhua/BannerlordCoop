@@ -25,6 +25,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
     private readonly IObjectManager objectManager;
     private readonly ICampaignRosterCheckpointService rosterCheckpointService;
     private readonly IMapTimeTrackerInterface mapTimeTracker;
+    private readonly ICampaignSessionCheckpointService sessionCheckpointService;
     private readonly ISendCoalescer sendCoalescer;
 
     public CampaignAuthorityFreezeClientHandler(
@@ -35,6 +36,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
         IObjectManager objectManager,
         ICampaignRosterCheckpointService rosterCheckpointService,
         IMapTimeTrackerInterface mapTimeTracker,
+        ICampaignSessionCheckpointService sessionCheckpointService,
         ISendCoalescer sendCoalescer = null)
     {
         this.messageBroker = messageBroker;
@@ -44,6 +46,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
         this.objectManager = objectManager;
         this.rosterCheckpointService = rosterCheckpointService;
         this.mapTimeTracker = mapTimeTracker;
+        this.sessionCheckpointService = sessionCheckpointService;
         this.sendCoalescer = sendCoalescer;
         messageBroker.Subscribe<NetworkCampaignAuthorityFreezeRequest>(Handle_FreezeRequest);
         messageBroker.Subscribe<NetworkCampaignAuthorityFreezeCanceled>(Handle_FreezeCanceled);
@@ -102,8 +105,14 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
                     request.HandoffSequence);
                 return;
             }
+            if (!sessionCheckpointService.TryCapture(out var sessionCheckpoint))
+            {
+                Logger.Warning("Could not capture co-op session for freeze {HandoffSequence}; local writes remain frozen without acknowledgement",
+                    request.HandoffSequence);
+                return;
+            }
             network.SendAll(request.ToAcknowledged(objectManager.CaptureAllocationCheckpoint(), rosterCheckpoint,
-                new CampaignClockCheckpoint(ticks)));
+                new CampaignClockCheckpoint(ticks), sessionCheckpoint));
             network.FlushPendingMessages();
             Logger.Information("Froze local campaign writes and acknowledged handoff {HandoffSequence} at epoch {Epoch} to controller {CandidateControllerId}",
                 request.HandoffSequence, request.Epoch, request.CandidateControllerId);

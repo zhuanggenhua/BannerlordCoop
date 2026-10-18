@@ -29,10 +29,10 @@ public readonly struct NetworkCampaignAuthorityFreezeRequest : IServerToClientCo
 
     public NetworkCampaignAuthorityFreezeAcknowledged ToAcknowledged(
         RegistryAllocationCheckpoint allocationCheckpoint = null, CampaignRosterCheckpoint rosterCheckpoint = null,
-        CampaignClockCheckpoint clockCheckpoint = null) =>
+        CampaignClockCheckpoint clockCheckpoint = null, CampaignSessionCheckpoint sessionCheckpoint = null) =>
         new NetworkCampaignAuthorityFreezeAcknowledged(
             RoomId, AuthorityId, AuthorityControllerId, Epoch, CandidateControllerId, HandoffSequence, allocationCheckpoint,
-            rosterCheckpoint, clockCheckpoint);
+            rosterCheckpoint, clockCheckpoint, sessionCheckpoint);
 
     public NetworkCampaignAuthorityFreezeCanceled ToCanceled() =>
         new NetworkCampaignAuthorityFreezeCanceled(
@@ -52,6 +52,7 @@ public readonly struct NetworkCampaignAuthorityFreezeAcknowledged : IMessage
     [ProtoMember(7)] public readonly RegistryAllocationCheckpoint AllocationCheckpoint;
     [ProtoMember(8)] public readonly CampaignRosterCheckpoint RosterCheckpoint;
     [ProtoMember(9)] public readonly CampaignClockCheckpoint ClockCheckpoint;
+    [ProtoMember(10)] public readonly CampaignSessionCheckpoint SessionCheckpoint;
 
     public NetworkCampaignAuthorityFreezeAcknowledged(
         string roomId,
@@ -62,7 +63,8 @@ public readonly struct NetworkCampaignAuthorityFreezeAcknowledged : IMessage
         long handoffSequence,
         RegistryAllocationCheckpoint allocationCheckpoint = null,
         CampaignRosterCheckpoint rosterCheckpoint = null,
-        CampaignClockCheckpoint clockCheckpoint = null)
+        CampaignClockCheckpoint clockCheckpoint = null,
+        CampaignSessionCheckpoint sessionCheckpoint = null)
     {
         RoomId = roomId ?? string.Empty;
         AuthorityId = authorityId ?? string.Empty;
@@ -73,6 +75,7 @@ public readonly struct NetworkCampaignAuthorityFreezeAcknowledged : IMessage
         AllocationCheckpoint = allocationCheckpoint;
         RosterCheckpoint = rosterCheckpoint;
         ClockCheckpoint = clockCheckpoint;
+        SessionCheckpoint = sessionCheckpoint;
     }
 }
 

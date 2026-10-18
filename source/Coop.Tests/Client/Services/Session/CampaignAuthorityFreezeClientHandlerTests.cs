@@ -47,6 +47,10 @@ public class CampaignAuthorityFreezeClientHandlerTests
         var clock = new Mock<IMapTimeTrackerInterface>();
         clock.Setup(value => value.TryGetCurrentTicks(out finalTicks))
             .Callback(() => Assert.True(identity.IsLocallyFrozen(lease))).Returns(true);
+        var sessionCheckpoint = new CampaignSessionCheckpoint("campaign", "{}");
+        var sessions = new Mock<ICampaignSessionCheckpointService>();
+        sessions.Setup(value => value.TryCapture(out sessionCheckpoint))
+            .Callback(() => Assert.True(identity.IsLocallyFrozen(lease))).Returns(true);
         var objectManager = new Mock<IObjectManager>();
         objectManager.Setup(value => value.CaptureAllocationCheckpoint())
             .Callback(() => Assert.True(identity.IsLocallyFrozen(lease)))
@@ -65,7 +69,7 @@ public class CampaignAuthorityFreezeClientHandlerTests
 
         var request = new NetworkCampaignAuthorityFreezeRequest(lease, "controller-a", 44);
         using var handler = new CampaignAuthorityFreezeClientHandler(broker, network.Object, identity, controller,
-            objectManager.Object, rosterService.Object, clock.Object, coalescer.Object);
+            objectManager.Object, rosterService.Object, clock.Object, sessions.Object, coalescer.Object);
         broker.Publish(this, request);
         GameThread.Run(() => { }, blocking: true);
 
@@ -77,6 +81,7 @@ public class CampaignAuthorityFreezeClientHandlerTests
         Assert.Same(checkpoint, acknowledgement.Value.AllocationCheckpoint);
         Assert.Same(rosters, acknowledgement.Value.RosterCheckpoint);
         Assert.Equal(888, acknowledgement.Value.ClockCheckpoint.Ticks);
+        Assert.Same(sessionCheckpoint, acknowledgement.Value.SessionCheckpoint);
 
         broker.Publish(this, request);
         GameThread.Run(() => { }, blocking: true);
@@ -102,7 +107,7 @@ public class CampaignAuthorityFreezeClientHandlerTests
         CampaignRosterCheckpoint checkpoint = null;
         rosterService.Setup(value => value.TryCapture(out checkpoint)).Returns(false);
         using var handler = new CampaignAuthorityFreezeClientHandler(broker, network.Object, identity, controller,
-            Mock.Of<IObjectManager>(), rosterService.Object, Mock.Of<IMapTimeTrackerInterface>());
+            Mock.Of<IObjectManager>(), rosterService.Object, Mock.Of<IMapTimeTrackerInterface>(), Mock.Of<ICampaignSessionCheckpointService>());
         var request = new NetworkCampaignAuthorityFreezeRequest(lease, "host", 33);
         broker.Publish(this, request);
         GameThread.Run(() => { }, blocking: true);
@@ -152,11 +157,42 @@ public class CampaignAuthorityFreezeClientHandlerTests
         var clock = new Mock<IMapTimeTrackerInterface>();
         clock.Setup(value => value.TryGetCurrentTicks(out ticks)).Returns(clockAvailable);
         using var handler = new CampaignAuthorityFreezeClientHandler(broker, network.Object, identity, controller,
-            Mock.Of<IObjectManager>(), rosterService.Object, clock.Object);
+            Mock.Of<IObjectManager>(), rosterService.Object, clock.Object, Mock.Of<ICampaignSessionCheckpointService>());
         broker.Publish(this, new NetworkCampaignAuthorityFreezeRequest(lease, "host", 33));
         GameThread.Run(() => { }, blocking: true);
         Assert.True(identity.IsLocallyFrozen(lease));
         network.Verify(value => value.SendAll(It.IsAny<IMessage>()), Times.Never);
+    }
+
+    [Fact]
+    public void FailedSessionCaptureKeepsOldAuthorityFrozenWithoutAcknowledgement()
+    {
+        var broker = new TestMessageBroker();
+        var identity = new SessionIdentity();
+        var lease = new AuthorityLease("room", "authority", "writer", 2);
+        Assert.True(identity.TryApply(lease, "host"));
+        var controller = new ControllerIdProvider();
+        controller.SetControllerId("writer");
+        var network = new Mock<INetwork>();
+        var rosters = new Mock<ICampaignRosterCheckpointService>();
+        var roster = new CampaignRosterCheckpoint(new CampaignRosterState[0]);
+        rosters.Setup(value => value.TryCapture(out roster)).Returns(true);
+        long ticks = 888;
+        var clock = new Mock<IMapTimeTrackerInterface>();
+        clock.Setup(value => value.TryGetCurrentTicks(out ticks)).Returns(true);
+        var sessions = new Mock<ICampaignSessionCheckpointService>();
+        CampaignSessionCheckpoint checkpoint = null;
+        sessions.Setup(value => value.TryCapture(out checkpoint)).Returns(false);
+        using var handler = new CampaignAuthorityFreezeClientHandler(broker, network.Object, identity, controller,
+            Mock.Of<IObjectManager>(), rosters.Object, clock.Object, sessions.Object);
+        var request = new NetworkCampaignAuthorityFreezeRequest(lease, "host", 33);
+        broker.Publish(this, request);
+        GameThread.Run(() => { }, blocking: true);
+        Assert.True(identity.IsLocallyFrozen(lease));
+        network.Verify(value => value.SendAll(It.IsAny<IMessage>()), Times.Never);
+        broker.Publish(this, request.ToCanceled());
+        GameThread.Run(() => { }, blocking: true);
+        Assert.False(identity.IsLocallyFrozen(lease));
     }
 
     [Fact]
@@ -172,7 +208,7 @@ public class CampaignAuthorityFreezeClientHandlerTests
             serializer.Deserialize<IMessage>(MessagePacket.Create(request, serializer).Data));
         var receivedAcknowledgement = Assert.IsType<NetworkCampaignAuthorityFreezeAcknowledged>(
             serializer.Deserialize<IMessage>(MessagePacket.Create(request.ToAcknowledged(checkpoint, rosters,
-                new CampaignClockCheckpoint(888)), serializer).Data));
+                new CampaignClockCheckpoint(888), new CampaignSessionCheckpoint("campaign", "{}")), serializer).Data));
         var receivedCancellation = Assert.IsType<NetworkCampaignAuthorityFreezeCanceled>(
             serializer.Deserialize<IMessage>(MessagePacket.Create(request.ToCanceled(), serializer).Data));
 
@@ -187,6 +223,8 @@ public class CampaignAuthorityFreezeClientHandlerTests
         Assert.Equal(800, receivedAcknowledgement.AllocationCheckpoint.TypeCounters["type"]);
         Assert.Equal(88u, Assert.Single(receivedAcknowledgement.RosterCheckpoint.Rosters).RosterHandle);
         Assert.Equal(888, receivedAcknowledgement.ClockCheckpoint.Ticks);
+        Assert.Equal("campaign", receivedAcknowledgement.SessionCheckpoint.CampaignId);
+        Assert.Equal("{}", receivedAcknowledgement.SessionCheckpoint.SessionJson);
         Assert.Equal(request.HandoffSequence, receivedCancellation.HandoffSequence);
     }
 }

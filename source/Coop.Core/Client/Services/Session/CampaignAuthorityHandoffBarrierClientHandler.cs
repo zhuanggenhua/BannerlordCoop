@@ -30,6 +30,7 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
     private readonly IObjectManager objectManager;
     private readonly ICampaignRosterCheckpointService rosterCheckpointService;
     private readonly IMapTimeTrackerInterface mapTimeTracker;
+    private readonly ICampaignSessionCheckpointService sessionCheckpointService;
     private bool campaignSynchronized;
     private bool mapReady;
 
@@ -40,7 +41,8 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         IControllerIdProvider controllerIdProvider,
         IObjectManager objectManager,
         ICampaignRosterCheckpointService rosterCheckpointService,
-        IMapTimeTrackerInterface mapTimeTracker)
+        IMapTimeTrackerInterface mapTimeTracker,
+        ICampaignSessionCheckpointService sessionCheckpointService)
     {
         this.messageBroker = messageBroker;
         this.network = network;
@@ -49,6 +51,7 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         this.objectManager = objectManager;
         this.rosterCheckpointService = rosterCheckpointService;
         this.mapTimeTracker = mapTimeTracker;
+        this.sessionCheckpointService = sessionCheckpointService;
         messageBroker.Subscribe<ClientCampaignReady>(Handle_ClientCampaignReady);
         messageBroker.Subscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Subscribe<NetworkCampaignAuthorityHandoffBarrier>(Handle_HandoffBarrier);
@@ -109,6 +112,13 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         if (!rosterCheckpointService.TryApply(barrier.RosterCheckpoint))
         {
             Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; world rosters did not match the checkpoint",
+                barrier.BarrierSequence);
+            return;
+        }
+
+        if (!sessionCheckpointService.TryApply(barrier.SessionCheckpoint))
+        {
+            Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; co-op session or registered players did not match",
                 barrier.BarrierSequence);
             return;
         }
