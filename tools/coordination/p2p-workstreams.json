@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "maxWorkers": 3,
+  "modelPolicy": "inherit-parent",
+  "integrationPolicy": "review-then-test-then-close",
+  "acceptedBaseline": {
+    "commit": "b75d867d553286d80291bf1dd36133e36ce8dcaa",
+    "report": "doc/p2p-authority-live-acceptance-2026-10-18.md",
+    "evidence": [
+      "artifacts/p2p-authority/map-16-accepted.json",
+      "artifacts/p2p-authority/mission-01-accepted.json",
+      "artifacts/p2p-authority/mission-02-pause-resume-accepted.json",
+      "artifacts/p2p-authority/final-regression-comparison-2026-10-18.json"
+    ]
+  },
+  "workstreams": [
+    { "id": "authority", "title": "战役权威与操作归属", "accepted": ["双人大地图 A→B→A", "最终屏障及任期校验"], "next": "调查迁移期间招募和城镇操作的传输身份耦合", "scope": ["source/Coop.Core/", "source/Coop.Tests/"], "dependencies": [] },
+    { "id": "checkpoint", "title": "世界检查点", "accepted": ["编号、兵力经验、共享会话和时钟交接"], "next": "验证动态权威下冷存档重启的连续性", "scope": ["source/Common/", "source/Common.Tests/", "source/GameInterface/Services/CampaignAuthority/"], "dependencies": [] },
+    { "id": "ai", "title": "NPC AI 周期调度", "accepted": ["周期 ticker 游标及债务交接"], "next": "清点仍按传输角色限制的 AI 和经济路径", "scope": ["source/GameInterface/Services/MobilePartyAIs/", "source/GameInterface.Tests/Services/CampaignAuthority/"], "dependencies": [] },
+    { "id": "pause", "title": "暂停与恢复", "accepted": ["真实酒馆 Mission 切换", "全员离开地图暂停和玩家返回恢复"], "next": "使有效租约暂停状态在 UI 中可见", "scope": ["source/GameInterface/Services/Time/", "source/GameInterface.Tests/Services/Time/"], "dependencies": [] },
+    { "id": "e2e", "title": "双端实机与状态对比", "accepted": ["三轮原生双进程验收日志"], "next": "为下一项独立功能建立前后世界状态对比", "scope": ["doc/automated-testing/", "source/E2E.Tests/"], "dependencies": ["authority", "checkpoint", "ai", "pause"] },
+    { "id": "fault", "title": "故障与竞争测试", "accepted": ["缺失最终 ACK 时不提升替代权威"], "next": "按断线、重复消息和延迟 ACK 分别建立故障证据", "scope": ["source/Coop.Tests/Server/Services/Session/", "source/Coop.Tests/Client/Services/Session/"], "dependencies": [] },
+    { "id": "review", "title": "独立代码审查", "accepted": [], "next": "逐项复核子代理提交及证据后允许集成", "scope": [], "dependencies": ["authority", "checkpoint", "ai", "pause", "e2e", "fault"] }
+  ]
+}
