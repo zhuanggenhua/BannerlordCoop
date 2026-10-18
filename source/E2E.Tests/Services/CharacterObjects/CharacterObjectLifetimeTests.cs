@@ -37,6 +37,7 @@ namespace E2E.Tests.Services.CharacterObjects
 
             foreach (var client in TestEnvironment.Clients)
             {
+                client.PumpGameThread();
                 Assert.True(client.ObjectManager.TryGetObject<CharacterObject>(characterId, out var _));
             }
         }

@@ -74,8 +74,9 @@ public class CoopServer : CoopNetworkBase, ICoopServer
         ICommonSerializer serializer,
         IReliableMessageBatcher<NetPeer> reliableMessageBatcher,
         CancellationTokenSource sessionCancellation,
-        ICampaignAuthorityContext campaignAuthorityContext = null)
-        : base(configuration, serializer, reliableMessageBatcher, sessionCancellation, campaignAuthorityContext)
+        ICampaignAuthorityContext campaignAuthorityContext = null,
+        ICampaignAuthorityMessageSender authorityMessageSender = null)
+        : base(configuration, serializer, reliableMessageBatcher, sessionCancellation, campaignAuthorityContext, authorityMessageSender)
     {
         // Dependancy assignment
         this.messageBroker = messageBroker;

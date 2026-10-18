@@ -18,6 +18,7 @@ public class StanceLinkLifetimeTests : IDisposable
     public StanceLinkLifetimeTests(ITestOutputHelper output)
     {
         TestEnvironment = new E2ETestEnvironment(output);
+        Server.Resolve<TestNetworkRouter>().ReceiveContext = TestNetworkReceiveContext.PollerThread;
 
         disabledMethods = new List<MethodBase>
         {
@@ -48,6 +49,7 @@ public class StanceLinkLifetimeTests : IDisposable
 
         foreach (var client in TestEnvironment.Clients)
         {
+            client.PumpGameThread();
             Assert.True(client.ObjectManager.TryGetObject<StanceLink>(stanceLinkId, out var _));
         }
     }
@@ -76,6 +78,7 @@ public class StanceLinkLifetimeTests : IDisposable
 
         foreach (var client in TestEnvironment.Clients)
         {
+            client.PumpGameThread();
             Assert.True(client.ObjectManager.TryGetObject<IFaction>(faction1Id, out var _));
             Assert.True(client.ObjectManager.TryGetObject<IFaction>(faction2Id, out var _));
         }
@@ -97,6 +100,8 @@ public class StanceLinkLifetimeTests : IDisposable
             Assert.Equal(faction2StringId, clientStanceLink.Faction2.StringId);
         });
 
+        Server.PumpGameThread();
+        foreach (var client in Clients) client.PumpGameThread();
         firstClient.Call(() =>
             Assert.True(firstClient.ObjectManager.TryGetId(clientStanceLink!, out clientStanceLinkId)));
 

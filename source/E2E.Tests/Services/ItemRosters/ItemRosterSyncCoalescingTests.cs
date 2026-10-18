@@ -26,6 +26,7 @@ namespace E2E.Tests.Services.ItemRosters
 
         public ItemRosterSyncCoalescingTests(ITestOutputHelper output) : base(output)
         {
+            Server.Resolve<TestNetworkRouter>().ReceiveContext = TestNetworkReceiveContext.PollerThread;
             ItemRosterId = "item_roster_sync_coalescing";
             Server.CreateRegisteredObject<ItemRoster>(ItemRosterId);
             foreach (var client in Clients)
@@ -161,7 +162,7 @@ namespace E2E.Tests.Services.ItemRosters
         // Drains the server's per-tick coalescer the way CoopServer.Update does, inside the server scope.
         private void FlushCoalescer()
         {
-            Server.Call(() => Server.Resolve<ISendCoalescer>().Flush(Server.Resolve<INetwork>()));
+            TestEnvironment.FlushCoalescer();
         }
 
         private void Resolve(EnvironmentInstance instance, out ItemRoster roster, out ItemObject item)

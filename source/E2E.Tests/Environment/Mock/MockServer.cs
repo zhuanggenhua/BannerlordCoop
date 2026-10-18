@@ -2,6 +2,7 @@
 using Common.PacketHandlers;
 using Common.Serialization;
 using Coop.Core.Server;
+using Coop.Core.Common.Network;
 using LiteNetLib;
 using System.Net;
 using System.Net.Sockets;
@@ -14,8 +15,9 @@ public class MockServer : MockNetworkBase, ICoopServer
         TestNetworkRouter networkOrchestrator,
         IPacketManager packetManager,
         ICommonSerializer serializer,
-        IReliableMessageBatcher<NetPeer> reliableMessageBatcher) :
-        base(networkOrchestrator, packetManager, serializer, reliableMessageBatcher)
+        IReliableMessageBatcher<NetPeer> reliableMessageBatcher,
+        ICampaignAuthorityMessageSender authorityMessageSender) :
+        base(networkOrchestrator, packetManager, serializer, reliableMessageBatcher, authorityMessageSender)
     {
     }
 

@@ -9,6 +9,7 @@ using Coop.Core.Server.Connections;
 using Coop.Core.Server.Connections.Messages;
 using Coop.Core.Server.Connections.States;
 using Coop.Core.Server.Services.Time.Handlers;
+using Coop.Core.Client.Services.Time.Handlers;
 using E2E.Tests.Environment.Instance;
 using E2E.Tests.Util;
 using GameInterface;
@@ -76,6 +77,11 @@ public class E2ETestEnvironment : IDisposable
 
         IntegrationEnvironment = new TestEnvironment(output, numClients, registerGameInterface: true);
 
+        var identity = Server.Resolve<ISessionIdentity>();
+        Assert.True(identity.TryConfirmCurrentLease());
+        foreach (var client in Clients)
+            Assert.True(client.Resolve<ISessionIdentity>().TryApply(identity.CurrentLease));
+
         StopCampaignTimeHeartbeat();
 
         SetupMainHero();
@@ -93,13 +99,18 @@ public class E2ETestEnvironment : IDisposable
                 Server.ObjectManager.AddExisting(settlement.StringId, settlement);
             }
         });
+        PumpGameThreads();
     }
 
     /// <summary>
     /// Stops the server's authoritative campaign-time heartbeat for the lifetime of this environment.
     /// </summary>
     private void StopCampaignTimeHeartbeat()
-        => Server.Resolve<CampaignTimeSyncHandler>().Dispose();
+    {
+        Server.Resolve<CampaignTimeSyncHandler>().Dispose();
+        foreach (var client in Clients)
+            client.Resolve<CampaignAuthorityTimePublisher>().Dispose();
+    }
 
     /// <summary>
     /// Battle-mode gating lives in process-wide statics keyed by object-manager ids, and every
@@ -347,6 +358,7 @@ public class E2ETestEnvironment : IDisposable
             throw new Exception($"Failed to create {typeof(T).Name} on Server");
         }
 
+        PumpGameThreads();
         AddToStringIdLists<T>(id);
         return id;
     }
@@ -488,6 +500,20 @@ public class E2ETestEnvironment : IDisposable
     public void FlushCoalescer()
     {
         Server.Call(() => Server.Resolve<ISendCoalescer>().Flush(Server.Resolve<INetwork>()));
+        PumpGameThreads();
+    }
+
+    public void PumpGameThreads()
+    {
+        for (int pass = 0; pass < 100; pass++)
+        {
+            Server.PumpGameThread();
+            foreach (var client in Clients) client.PumpGameThread();
+            if (Server.PendingGameThreadActionCount == 0 && Clients.All(client => client.PendingGameThreadActionCount == 0))
+                return;
+        }
+
+        throw new InvalidOperationException("Campaign replica apply queues did not drain within 100 passes.");
     }
 
     /// <summary>

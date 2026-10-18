@@ -55,6 +55,7 @@ namespace E2E.Tests.Services.Buildings
 
             foreach (var client in TestEnvironment.Clients)
             {
+                client.PumpGameThread();
                 Assert.True(client.ObjectManager.TryGetObject<Building>(buildingId, out var _));
             }
         }

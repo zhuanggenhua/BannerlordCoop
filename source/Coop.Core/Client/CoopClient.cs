@@ -52,8 +52,9 @@ public class CoopClient : CoopNetworkBase, ICoopClient
         ICommonSerializer serializer,
         IReliableMessageBatcher<NetPeer> reliableMessageBatcher,
         CancellationTokenSource sessionCancellation,
-        ICampaignAuthorityContext campaignAuthorityContext = null)
-        : base(config, serializer, reliableMessageBatcher, sessionCancellation, campaignAuthorityContext)
+        ICampaignAuthorityContext campaignAuthorityContext = null,
+        ICampaignAuthorityMessageSender authorityMessageSender = null)
+        : base(config, serializer, reliableMessageBatcher, sessionCancellation, campaignAuthorityContext, authorityMessageSender)
     {
         this.messageBroker = messageBroker;
         this.packetManager = packetManager;

@@ -3,6 +3,7 @@ using Common.Network;
 using Common.PacketHandlers;
 using Common.Serialization;
 using Common.Tests.Utils;
+using Coop.Core.Common.Network;
 using E2E.Tests.Environment.Extensions;
 using LiteNetLib;
 
@@ -14,18 +15,21 @@ public abstract class MockNetworkBase : INetwork
     private readonly IPacketManager packetManager;
     private readonly ICommonSerializer serializer;
     private readonly IReliableMessageBatcher<NetPeer> reliableMessageBatcher;
+    private readonly ICampaignAuthorityMessageSender authorityMessageSender;
     public static int InstanceCount = 0;
 
     public MockNetworkBase(
         TestNetworkRouter networkOrchestrator,
         IPacketManager packetManager,
         ICommonSerializer serializer,
-        IReliableMessageBatcher<NetPeer> reliableMessageBatcher)
+        IReliableMessageBatcher<NetPeer> reliableMessageBatcher,
+        ICampaignAuthorityMessageSender authorityMessageSender)
     {
         this.networkOrchestrator = networkOrchestrator;
         this.packetManager = packetManager;
         this.serializer = serializer;
         this.reliableMessageBatcher = reliableMessageBatcher;
+        this.authorityMessageSender = authorityMessageSender;
         this.reliableMessageBatcher.AggregateSent += OnAggregateSent;
         this.networkOrchestrator.PeerConnectionGenerationChanged += OnPeerConnectionGenerationChanged;
         InstanceCount = Interlocked.Increment(ref InstanceCount);
@@ -91,10 +95,11 @@ public abstract class MockNetworkBase : INetwork
     public void SendAll(IMessage message)
     {
         NetworkSentMessages.Add(message);
-        foreach (NetPeer recipient in networkOrchestrator.GetRecipients(NetPeer))
+        authorityMessageSender.Send(message, packet =>
         {
-            SendMessage(recipient, message, immediate: false);
-        }
+            foreach (NetPeer recipient in networkOrchestrator.GetRecipients(NetPeer))
+                SendFramedMessage(recipient, packet, immediate: false);
+        });
     }
 
     public void SendAllBut(NetPeer excludedPeer, IPacket packet)
@@ -109,10 +114,11 @@ public abstract class MockNetworkBase : INetwork
     public void SendAllBut(NetPeer excludedPeer, IMessage message)
     {
         NetworkSentMessages.Add(message);
-        foreach (NetPeer recipient in networkOrchestrator.GetRecipients(NetPeer, excludedPeer))
+        authorityMessageSender.Send(message, packet =>
         {
-            SendMessage(recipient, message, immediate: false);
-        }
+            foreach (NetPeer recipient in networkOrchestrator.GetRecipients(NetPeer, excludedPeer))
+                SendFramedMessage(recipient, packet, immediate: false);
+        });
     }
 
     public void FlushPendingMessages()
@@ -145,7 +151,11 @@ public abstract class MockNetworkBase : INetwork
 
     private void SendMessage(NetPeer recipient, IMessage message, bool immediate)
     {
-        MessagePacket packet = MessagePacket.Create(message, serializer);
+        authorityMessageSender.Send(message, packet => SendFramedMessage(recipient, packet, immediate));
+    }
+
+    private void SendFramedMessage(NetPeer recipient, MessagePacket packet, bool immediate)
+    {
         if (immediate)
         {
             reliableMessageBatcher.SendImmediate(recipient, packet.Data, SendReliablePayload);

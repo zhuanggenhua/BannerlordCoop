@@ -8,6 +8,7 @@ using Common.Serialization;
 using Common.Util;
 using Common.Voice;
 using Coop.Core.Common.Configuration;
+using Coop.Core.Common.Network;
 using Coop.Core.Common.Session;
 using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Entity;
@@ -26,6 +27,9 @@ public abstract class CommonModule : Module
     {
         builder.RegisterType<SessionIdentity>().As<ISessionIdentity>().InstancePerLifetimeScope();
         builder.RegisterType<CampaignAuthorityContext>().As<ICampaignAuthorityContext>().InstancePerLifetimeScope();
+        builder.RegisterType<CampaignAuthorityMessageSender>()
+            .As<ICampaignAuthorityMessageSender>()
+            .InstancePerLifetimeScope();
         builder.RegisterType<CampaignAuthorityCandidateSelector>()
             .As<ICampaignAuthorityCandidateSelector>()
             .InstancePerLifetimeScope();

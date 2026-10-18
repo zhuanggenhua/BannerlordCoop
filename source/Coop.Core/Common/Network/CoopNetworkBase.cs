@@ -33,12 +33,7 @@ public abstract class CoopNetworkBase : INetwork, IBufferedNetwork, INetEventLis
     // Profiles outbound packets; dumps per-type counts and byte totals every 10 seconds (server only).
     private readonly PacketProfiler packetProfiler = new PacketProfiler(TimeSpan.FromSeconds(10));
     private readonly IReliableMessageBatcher<NetPeer> reliableMessageBatcher;
-    private readonly ICampaignAuthorityContext campaignAuthorityContext;
-    private readonly object authoritySequenceGate = new object();
-    private string sequenceRoomId = string.Empty;
-    private string sequenceAuthorityId = string.Empty;
-    private long sequenceEpoch;
-    private long nextAuthoritySequence;
+    private readonly ICampaignAuthorityMessageSender authorityMessageSender;
 
     // Guard against repeated container and explicit disposal.
     private int disposed;
@@ -50,7 +45,8 @@ public abstract class CoopNetworkBase : INetwork, IBufferedNetwork, INetEventLis
         ICommonSerializer serializer,
         IReliableMessageBatcher<NetPeer> reliableMessageBatcher,
         CancellationTokenSource sessionCancellation,
-        ICampaignAuthorityContext campaignAuthorityContext = null)
+        ICampaignAuthorityContext campaignAuthorityContext = null,
+        ICampaignAuthorityMessageSender authorityMessageSender = null)
     {
         if (reliableMessageBatcher == null)
             throw new ArgumentNullException(nameof(reliableMessageBatcher));
@@ -59,7 +55,8 @@ public abstract class CoopNetworkBase : INetwork, IBufferedNetwork, INetEventLis
         this.serializer = serializer;
         this.sessionCancellation = sessionCancellation;
         this.reliableMessageBatcher = reliableMessageBatcher;
-        this.campaignAuthorityContext = campaignAuthorityContext;
+        this.authorityMessageSender = authorityMessageSender ??
+            new CampaignAuthorityMessageSender(serializer, campaignAuthorityContext);
         this.reliableMessageBatcher.AggregateSent += RecordAggregateSent;
 
         netManager = new NetManager(this)
@@ -283,38 +280,7 @@ public abstract class CoopNetworkBase : INetwork, IBufferedNetwork, INetEventLis
 
     private void SendMessage(IMessage message, Action<IPacket> sendPacket)
     {
-        if (message is not ICampaignAuthorityScopedMessage || campaignAuthorityContext == null ||
-            !campaignAuthorityContext.TryGetLocalAuthorityLease(out var lease))
-        {
-            sendPacket(MessagePacket.Create(message, serializer));
-            return;
-        }
-
-        lock (authoritySequenceGate)
-        {
-            if (!string.Equals(sequenceRoomId, lease.RoomId, StringComparison.Ordinal) ||
-                sequenceEpoch != lease.Epoch ||
-                !string.Equals(sequenceAuthorityId, lease.AuthorityId, StringComparison.Ordinal))
-            {
-                sequenceRoomId = lease.RoomId;
-                sequenceAuthorityId = lease.AuthorityId;
-                sequenceEpoch = lease.Epoch;
-                nextAuthoritySequence = 0;
-            }
-
-            if (nextAuthoritySequence == long.MaxValue)
-                throw new System.InvalidOperationException("Campaign authority sync sequence space is exhausted.");
-
-            long sequence = ++nextAuthoritySequence;
-            var envelope = new NetworkCampaignAuthoritySyncEnvelope(
-                lease.RoomId,
-                lease.AuthorityId,
-                lease.AuthorityControllerId,
-                lease.Epoch,
-                sequence,
-                serializer.Serialize(message));
-            sendPacket(MessagePacket.Create(envelope, serializer));
-        }
+        authorityMessageSender.Send(message, packet => sendPacket(packet));
     }
 
     public abstract void Start();
