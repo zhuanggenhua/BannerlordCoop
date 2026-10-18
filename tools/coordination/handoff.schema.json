@@ -18,12 +18,12 @@
         "properties": {
           "command": { "type": "string" },
           "exitCode": { "type": "integer" },
-          "log": { "type": "string" },
+          "log": { "type": "string", "description": "Path to the actual test log file." },
           "sha256": { "type": "string", "pattern": "^[0-9a-fA-F]{64}$" }
         }
       }
     },
-    "evidence": { "type": "array", "items": { "type": "string" } },
+    "evidence": { "type": "array", "description": "Paths to existing evidence files. Prose and directories belong in risks or the summary.", "items": { "type": "string" } },
     "risks": { "type": "array", "items": { "type": "string" } }
   }
 }
