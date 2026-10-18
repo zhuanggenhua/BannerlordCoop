@@ -16,6 +16,8 @@ Starts A, then B; submits four native recruitment carts once each; exercises
 A -> B -> A, native NPC daily training, critical world hashes and unique Tick.
 Selects an observed tavern town with existing shared stock and a four-purchase
 budget; never replenishes volunteers or gold.
+Town preparation uses trusted QA native lifecycle commands while that player is
+the confirmed writer; it does not accept ordinary observer travel/entry.
 Writes JSONL, per-feature summary JSON and BMP screenshot references. Always
 requests stop_run and requires both owned process trees to be gone.
 No deployment, private IPC, XP setters, or retry of uncertain mutations.
@@ -180,6 +182,23 @@ function assertStopped(response, expectedCount) {
     assert.ok(response.instances.every(value => value.cleanupComplete === true &&
         value.processAlive === false && value.processTreeAlive === false));
 }
+function assertNativeMap(view, instance) {
+    const status = view.instances?.find(value => value.name === instance)?.status;
+    assert.ok(status, `Missing native state for ${instance}`);
+    assert.equal(status.missionActive, false, `${instance} still has a native Mission`);
+    assert.equal(status.activeState, 'TaleWorlds.CampaignSystem.GameState.MapState',
+        `${instance} has not returned to native MapState`);
+    return status;
+}
+function assertSettlementReplicas(inspections, controller, settlement) {
+    return inspections.map((value, index) => {
+        const player = value.players.find(player => player.controller === controller);
+        assert.ok(player, `${INSTANCES[index]} is missing player ${controller}`);
+        assert.equal(player.currentSettlement, settlement,
+            `${INSTANCES[index]} has not applied ${controller} settlement ${settlement}`);
+        return player;
+    });
+}
 function assertActors(states, initial) {
     for (let i = 0; i < states.length; i++) {
         assert.equal(states[i].mainHero, initial[i].mainHero, `${INSTANCES[i]} native MainHero changed`);
@@ -216,7 +235,7 @@ async function run(config) {
         codeHead: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: config.repo, encoding: 'utf8', windowsHide: true }).trim(),
         config, runId: null, features: [], screenshots: [], probes: [], npcAttempts: [],
         failed: null, cleanupConfirmed: false, passed: false,
-        scope: 'Native RecruitmentVM and one native NPC daily callback; not a full natural daily cycle, battle, or cold-save acceptance.' };
+        scope: 'Trusted QA native town preparation under the confirmed writer, native RecruitmentVM and one native NPC daily callback; not ordinary observer travel/entry, a full natural daily cycle, battle, or cold-save acceptance.' };
     let runId, callId = 0, initial, readDeadline, recruitmentTown;
     const client = new Client({ name: 'codex-p2p-recruit-training', version: '1.0.0' });
     const transport = new StdioClientTransport({ command: config.server, args: ['--config', config.config],
@@ -394,17 +413,35 @@ async function run(config) {
         const worlds = await pause();
         return { before, after, worlds };
     }
+    async function settlementReplicas(instance, settlement, label) {
+        const controller = initial[INSTANCES.indexOf(instance)].controller;
+        return poll(label, async () => {
+            const values = await Promise.all(INSTANCES.map(inspect));
+            assertSettlementReplicas(values, controller, settlement);
+            assert.equal(values[INSTANCES.indexOf(instance)].settlement, settlement);
+            await registrations();
+            return values;
+        });
+    }
+    async function leavePreviousSettlement(selected) {
+        await awaitWriter(initial[0].controller);
+        const current = await inspect('client1');
+        if (current.settlement === selected.id) {
+            return { alreadyInside: true, replicas: await settlementReplicas('client1', selected.id,
+                'B selected native settlement on both replicas') };
+        }
+        if (current.settlement)
+            await command('client1', 'coop.debug.siege.leave_settlement', [], true);
+        return { previousSettlement: current.settlement, replicas: await settlementReplicas('client1', null,
+            'B leaves its old native settlement on both replicas') };
+    }
     async function ensureSettlement(instance, selected) {
         const { id: townId, location } = selected;
+        await awaitWriter(initial[INSTANCES.indexOf(instance)].controller);
         const current = await inspect(instance);
-        if (current.settlement === townId) return { alreadyInside: true, townId };
-        if (current.settlement) {
-            assert.equal(instance, 'client1', 'A must start outside town; no host settlement rewrite is allowed');
-            await command(instance, 'coop.debug.siege.leave_settlement', [], true);
-            await poll('B leaves its old native settlement', async () => {
-                assert.equal((await inspect(instance)).settlement, null);
-            });
-        }
+        if (current.settlement === townId) return { alreadyInside: true, townId,
+            replicas: await settlementReplicas(instance, townId, 'existing native settlement ' + instance) };
+        assert.equal(current.settlement, null, 'Previous native settlement must be left before town preparation');
         const firstEntry = await command(instance, 'coop.debug.location.enter', [location], true);
         let view = await call('get_run', { run_id: runId });
         let mission = firstEntry.startsWith('Opening location') ||
@@ -419,11 +456,11 @@ async function run(config) {
         if (mission) {
             await waitState(instance, 'readyForMissionTests');
             await command(instance, 'coop.debug.location.leave', [], true);
-            await waitState(instance, 'readyForCampaignTests');
+            // Campaign readiness also remains true inside MissionState; observe native return explicitly.
+            await poll('native MapState after location leave ' + instance, async () =>
+                assertNativeMap(await call('get_run', { run_id: runId }), instance));
         }
-        return poll('native settlement ' + instance, async () => {
-            const value = await inspect(instance); assert.equal(value.settlement, townId); return value;
-        });
+        return { townId, replicas: await settlementReplicas(instance, townId, 'native settlement ' + instance) };
     }
     async function recruit(instance, label, localAuthority) {
         const before = await Promise.all(INSTANCES.map(inspect));
@@ -544,10 +581,17 @@ async function run(config) {
             const coverage = { scannedTownCount: catalog.scannedTownCount, eligibleTownCount: catalog.eligibleTownCount,
                 returnedTownCount: catalog.returnedTownCount, limited: catalog.limited };
             await emit({ phase: 'existing-stock-preflight', coverage, players: catalog.players, selected: recruitmentTown });
-            const prepared = [];
-            for (const instance of INSTANCES) prepared.push(await ensureSettlement(instance, recruitmentTown));
-            await awaitWriter(initial[0].controller); await pause();
-            return { selected: recruitmentTown, coverage, players: catalog.players, prepared };
+            const previousB = await leavePreviousSettlement(recruitmentTown);
+            const prepared = [await ensureSettlement('server', recruitmentTown)];
+            await command('server', 'coop.debug.authority.availability', ['yield'], true);
+            const bWriter = await awaitWriter(initial[1].controller);
+            await pause();
+            prepared.push(await ensureSettlement('client1', recruitmentTown));
+            await command('server', 'coop.debug.authority.availability', ['auto'], true);
+            const aWriter = await awaitWriter(initial[0].controller);
+            const worlds = await pause();
+            return { selected: recruitmentTown, coverage, players: catalog.players, previousB,
+                prepared, bWriter, aWriter, worlds, trustedQaLifecyclePreparation: true };
         });
         await feature('A-writer-native-recruit-1', () => recruit('server', 'A writer recruit', true));
         await feature('A-to-B-final-checkpoint', async () => {
@@ -694,16 +738,37 @@ async function selfTest(recordedPath) {
         processAlive: false, processTreeAlive: false, cleanupComplete: true })) };
     assertStopped(stopped, 2);
     assert.throws(() => assertStopped({ ...stopped, instances: [{ processAlive: true }] }));
+    const mapView = { instances: [{ name: 'client1', status: { readyForCampaignTests: true,
+        missionActive: false, activeState: 'TaleWorlds.CampaignSystem.GameState.MapState' } }] };
+    assertNativeMap(mapView, 'client1');
+    const missionView = { instances: [{ name: 'client1', status: { readyForCampaignTests: true,
+        missionActive: true, activeState: 'TaleWorlds.MountAndBlade.MissionState' } }] };
+    assert.throws(() => assertNativeMap(missionView, 'client1'));
+    assert.throws(() => assertNativeMap({ instances: [] }, 'client1'));
+    const leftTown = { players: [{ controller: 'B', currentSettlement: null }] };
+    assertSettlementReplicas([leftTown, leftTown], 'B', null);
+    assert.throws(() => assertSettlementReplicas([
+        { players: [{ controller: 'B', currentSettlement: 'old_town' }] }, leftTown], 'B', null));
     assert.equal(logChunk({ text: 'log', cursor: 'opaque', reset: false, hasMore: false, length: 3 }).text, 'log');
     assert.throws(() => logChunk({ text: 'log', hasMore: false }));
     if (recordedPath) {
-        const replayed = { start_client: 0, stop_run: 0, read_logs: 0, recruitmentInspect: 0, nativeRecruitmentCart: 0 };
+        const replayed = { start_client: 0, stop_run: 0, read_logs: 0, recruitmentInspect: 0,
+            nativeRecruitmentCart: 0, nativeMap: 0, campaignReadyWhileMission: 0 };
         for (const line of (await readFile(resolve(recordedPath), 'utf8')).split(/\r?\n/).filter(Boolean)) {
             const entry = JSON.parse(line);
             if (!entry.data) continue;
             if (entry.name === 'start_client') { assertClientLaunched(entry.data); replayed.start_client++; }
             if (entry.name === 'stop_run') { assertStopped(entry.data); replayed.stop_run++; }
             if (entry.name === 'read_logs') { logChunk(entry.data); replayed.read_logs++; }
+            if (entry.name === 'get_run') for (const instance of entry.data.instances ?? []) {
+                if (instance.status?.activeState === 'TaleWorlds.CampaignSystem.GameState.MapState' &&
+                    instance.status.missionActive === false) {
+                    assertNativeMap(entry.data, instance.name); replayed.nativeMap++;
+                }
+                if (instance.status?.readyForCampaignTests === true && instance.status.missionActive === true) {
+                    assert.throws(() => assertNativeMap(entry.data, instance.name)); replayed.campaignReadyWhileMission++;
+                }
+            }
             if (entry.name === 'execute_command' && entry.data.result?.succeeded &&
                 entry.args?.name === 'coop.debug.recruitment.inspect') {
                 const inspected = jsonOutput(entry.data.result.output);
