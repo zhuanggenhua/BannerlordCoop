@@ -1,6 +1,7 @@
-using Common;
+﻿using Common;
 using Common.Messaging;
 using GameInterface.Policies;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Registry.Auto;
 using GameInterface.Services.TroopRosters.Messages;
 using HarmonyLib;
@@ -27,12 +28,11 @@ namespace GameInterface.Services.TroopRosters.Patches;
 internal class TroopRosterOwnerPartyRegistrationPatch
 {
     [HarmonyPostfix]
-    private static void Postfix(TroopRoster __instance)
+    internal static void Postfix(TroopRoster __instance)
     {
-        // Skip replays (AllowedThread) and client-side construction; clients receive both the roster
-        // creation and the owner assignment from the server.
+        // Observers receive both the roster creation and owner assignment from the current writer.
         if (CallOriginalPolicy.IsOriginalAllowed()) return;
-        if (ModInformation.IsClient) return;
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return;
 
         // Register the roster first (publishes InstanceCreated -> NetworkCreateInstance) so its id
         // exists before the owner-set message is resolved. CreatePrefix only reads __instance.

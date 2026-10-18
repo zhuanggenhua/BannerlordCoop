@@ -9,6 +9,9 @@ using System;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Collections.Generic;
+using GameInterface.Registry.Auto;
+using TaleWorlds.CampaignSystem.Roster;
 using GameInterface.Services.ObjectManager;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.GameState;
@@ -127,6 +130,8 @@ public static class CampaignAuthorityDebugCommands
                     troops = (hero.VolunteerTypes ?? Array.Empty<CharacterObject>()).Select(troop => troop?.StringId).ToArray() })),
                 heroGoldHash = Hash(heroes.Select(hero => new { id = hero.StringId, hero.Gold })),
                 nextHandle = allocation.NextHandle,
+                allocationCounters = allocation.TypeCounters.OrderBy(pair => pair.Key, StringComparer.Ordinal)
+                    .ToDictionary(pair => pair.Key, pair => pair.Value),
                 allocationCounterHash = Hash(allocation.TypeCounters.OrderBy(pair => pair.Key, StringComparer.Ordinal)),
                 npcSample = parties.Where(party => party.active && party.movingNpc).Take(24).ToArray(),
             }));
@@ -136,6 +141,52 @@ public static class CampaignAuthorityDebugCommands
         {
             using var sha = SHA256.Create();
             return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(value)))).Replace("-", "");
+        }
+    }
+
+    public sealed class AllocationProbeCommand : ICoopCommand
+    {
+        private static readonly HashSet<string> probes = new(StringComparer.Ordinal);
+        private readonly IObjectManager objects;
+        private readonly ICampaignAuthorityContext context;
+        public AllocationProbeCommand(IObjectManager objects, ICampaignAuthorityContext context)
+        { this.objects = objects; this.context = context; }
+        public string Prefix => "coop.debug.authority";
+        public string Name => "allocation_probe";
+        public string Description => "Creates, inspects or retires a scoped empty native roster to verify allocation across handoffs.";
+        public CoopCommandSide Side => CoopCommandSide.Both;
+        public IExpectedArgs[] ExpectedArgs { get; } =
+        { new ExpectedArgs("operation", "create, inspect or retire"), new ExpectedArgs("id", "Probe registry id", false) };
+        public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
+        {
+            if (args.Count < 1) return new(false, "Expected create, inspect or retire");
+            TroopRoster roster;
+            string id;
+            if (args[0] == "create" && args.Count == 1)
+            {
+                if (!context.TryGetLocalAuthorityLease(out _)) return new(false, "An unfrozen writer is required");
+                roster = TroopRoster.CreateDummyTroopRoster();
+                if (!objects.TryGetId(roster, out id)) return new(false, "Native roster creation did not register an identity");
+                probes.Add(id);
+            }
+            else if (args.Count == 2 && (args[0] == "inspect" || args[0] == "retire"))
+            {
+                id = args[1];
+                if (!objects.TryGetObject(id, out roster)) return new(false, "Probe identity is absent");
+            }
+            else return new(false, "Expected create, inspect <id> or retire <id>");
+            if (!objects.TryGetHandle(roster, out var handle)) return new(false, "Probe handle is absent");
+            if (args[0] == "retire")
+            {
+                if (!context.TryGetLocalAuthorityLease(out _) || !probes.Contains(id) || roster.OwnerParty != null || roster.Count != 0)
+                    return new(false, "Only a local empty probe can be retired by its writer");
+                LifetimePatches<TroopRoster>.DestroyPostfix(ref roster, true);
+                if (objects.TryGetObject<TroopRoster>(id, out _)) return new(false, "Probe retirement did not remove its identity");
+                probes.Remove(id);
+            }
+            var allocation = objects.CaptureAllocationCheckpoint();
+            return new(true, JsonConvert.SerializeObject(new
+            { id, handle, retired = args[0] == "retire", nextHandle = allocation.NextHandle }));
         }
     }
 

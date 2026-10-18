@@ -1,0 +1,40 @@
+{
+  "baselineCommit": "84ddab7b6",
+  "currentCommit": "133cbe929",
+  "filter": "Services.TroopRosters or MobilePartyMovementTests",
+  "baseline": {
+    "failureNames": [
+      "E2E.Tests.Services.TroopRosters.JoinRosterReplayTests.RetainedReplay_MatchesOriginalAtEveryConsumerAndAfterClearRepopulate",
+      "E2E.Tests.Services.TroopRosters.TroopRosterDeltaHandlerTests.Server_HeroServingInRoster_SyncsToClients",
+      "E2E.Tests.Services.TroopRosters.TroopRosterDeltaHandlerTests.Server_RemoveZeroCountHero_RecalculatesTotalsOnAllInstances",
+      "E2E.Tests.Services.TroopRosters.TroopRosterHeroDeltaTransferTests.AlreadyRemovedHero_NegativeDelta_IsRejectedWithoutChangingRoster",
+      "E2E.Tests.Services.TroopRosters.TroopRosterHeroDeltaTransferTests.AlreadyRemovedHero_RemovalIsPreservedInPackedDelta",
+      "E2E.Tests.Services.TroopRosters.TroopRosterHeroDeltaTransferTests.AlreadyRemovedHero_StaleTransfer_IsRejectedAtomically",
+      "E2E.Tests.Services.TroopRosters.TroopRosterHeroDeltaTransferTests.CompanionTransfer_MainToOtherParty_ViaDelta_SyncsRostersAndPartyBelongedTo",
+      "E2E.Tests.Services.TroopRosters.TroopRosterHeroDeltaTransferTests.PrisonerTransfer_MainToOtherParty_ViaDelta_SyncsRostersAndPartyBelongedToAsPrisoner",
+      "E2E.Tests.Services.TroopRosters.TroopRosterSyncTests.Server_TroopRoster_Properties",
+      "E2E.Tests.Services.TroopRosters.TroopRosterZeroCountXpDeltaTests.UnownedRoster_EmptyingStackWithSurplusXp_IsRejected"
+    ],
+    "passed": 60,
+    "failed": 10,
+    "total": 70
+  },
+  "current": {
+    "failureNames": [
+      "E2E.Tests.Services.TroopRosters.JoinRosterReplayTests.RetainedReplay_MatchesOriginalAtEveryConsumerAndAfterClearRepopulate",
+      "E2E.Tests.Services.TroopRosters.TroopRosterDeltaHandlerTests.Server_HeroServingInRoster_SyncsToClients",
+      "E2E.Tests.Services.TroopRosters.TroopRosterDeltaHandlerTests.Server_RemoveZeroCountHero_RecalculatesTotalsOnAllInstances",
+      "E2E.Tests.Services.TroopRosters.TroopRosterHeroDeltaTransferTests.AlreadyRemovedHero_NegativeDelta_IsRejectedWithoutChangingRoster",
+      "E2E.Tests.Services.TroopRosters.TroopRosterHeroDeltaTransferTests.AlreadyRemovedHero_RemovalIsPreservedInPackedDelta",
+      "E2E.Tests.Services.TroopRosters.TroopRosterHeroDeltaTransferTests.AlreadyRemovedHero_StaleTransfer_IsRejectedAtomically",
+      "E2E.Tests.Services.TroopRosters.TroopRosterHeroDeltaTransferTests.CompanionTransfer_MainToOtherParty_ViaDelta_SyncsRostersAndPartyBelongedTo",
+      "E2E.Tests.Services.TroopRosters.TroopRosterHeroDeltaTransferTests.PrisonerTransfer_MainToOtherParty_ViaDelta_SyncsRostersAndPartyBelongedToAsPrisoner",
+      "E2E.Tests.Services.TroopRosters.TroopRosterSyncTests.Server_TroopRoster_Properties",
+      "E2E.Tests.Services.TroopRosters.TroopRosterZeroCountXpDeltaTests.UnownedRoster_EmptyingStackWithSurplusXp_IsRejected"
+    ],
+    "passed": 60,
+    "failed": 10,
+    "total": 70
+  },
+  "difference": []
+}

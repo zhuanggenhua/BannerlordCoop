@@ -1,7 +1,8 @@
-using Common;
+﻿using Common;
 using Common.Messaging;
 using Common.Util;
 using GameInterface.Policies;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Registry.Auto;
 using HarmonyLib;
 using System;
@@ -17,15 +18,15 @@ internal class TroopRosterCreateDummyPatch
 
     [HarmonyPatch(nameof(TroopRoster.CreateDummyTroopRoster))]
     [HarmonyPrefix]
-    private static bool Prefix_CreateDummyTroopRoster(ref TroopRoster __result)
+    internal static bool Prefix_CreateDummyTroopRoster(ref TroopRoster __result)
     {
         if (CallOriginalPolicy.IsOriginalAllowed())
             return true;
 
-        if (ModInformation.IsClient)
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation())
         {
             // Party, tooltip, battle-tally, and other presentation flows create local scratch rosters on
-            // clients. They deliberately have no network identity; server-created managed rosters arrive
+            // observers. They deliberately have no network identity; authority-created managed rosters arrive
             // through the object registry instead of this factory.
             return true;
         }
