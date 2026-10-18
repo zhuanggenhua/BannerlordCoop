@@ -1,4 +1,5 @@
 ﻿using Common;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.MobileParties.Extensions;
 using HarmonyLib;
 using System.Collections.Generic;
@@ -14,16 +15,27 @@ namespace GameInterface.Services.MobileParties.Patches.Disable;
 internal class DisablePartyUpgraderCampaignBehavior
 {
     [HarmonyPatch(nameof(PartyUpgraderCampaignBehavior.RegisterEvents))]
-    static bool Prefix() => ModInformation.IsServer;
+    internal static bool Prefix() => true;
 }
 
 [HarmonyPatch(typeof(PartyUpgraderCampaignBehavior))]
 internal class PartyUpgraderCampaignBehaviorPatches
 {
+    [HarmonyPatch(nameof(PartyUpgraderCampaignBehavior.DailyTickParty))]
+    [HarmonyPrefix]
+    internal static bool DailyTickPartyAuthorityPrefix()
+        => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
+
+    [HarmonyPatch(nameof(PartyUpgraderCampaignBehavior.MapEventEnded))]
+    [HarmonyPrefix]
+    internal static bool MapEventEndedAuthorityPrefix()
+        => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
+
     [HarmonyPatch(nameof(PartyUpgraderCampaignBehavior.UpgradeReadyTroops))]
     [HarmonyPrefix]
     public static bool UpgradeReadyTroopsPrefix(PartyUpgraderCampaignBehavior __instance, PartyBase party)
     {
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
         // Replace MainParty check
         if ((party.IsMobile && party.MobileParty.IsPlayerParty()) || !party.IsActive) return false;
 

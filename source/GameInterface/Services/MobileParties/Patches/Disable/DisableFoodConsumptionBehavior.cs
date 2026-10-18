@@ -1,5 +1,6 @@
 ﻿using Common;
 using GameInterface.Configuration;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.MapEvents.Patches;
 using GameInterface.Services.MobileParties.Extensions;
 using GameInterface.Services.MobileParties.Interfaces;
@@ -18,16 +19,22 @@ namespace GameInterface.Services.MobileParties.Patches.Disable;
 internal class DisableFoodConsumptionBehavior
 {
     [HarmonyPatch(nameof(FoodConsumptionBehavior.RegisterEvents))]
-    static bool Prefix() => ModInformation.IsServer;
+    internal static bool Prefix() => true;
 }
 
 [HarmonyPatch(typeof(FoodConsumptionBehavior))]
 internal class FoodConsumptionBehaviorPatches
 {
+    [HarmonyPatch(nameof(FoodConsumptionBehavior.OnNewGameCreatedPartialFollowUpEnd))]
+    [HarmonyPrefix]
+    internal static bool OnNewGameCreatedPartialFollowUpEndPrefix()
+        => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
+
     [HarmonyPatch(nameof(FoodConsumptionBehavior.OnPartyAttachedParty))]
     [HarmonyPrefix]
     public static bool OnPartyAttachedPartyPrefix(FoodConsumptionBehavior __instance, MobileParty mobileParty)
     {
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
         if (!ContainerProvider.TryResolve<IFoodConsumptionBehaviorInterface>(out var foodConsumptionBehaviorInterface)) return false;
 
         // Custom implementation to to work for all armies with player parties
@@ -40,6 +47,7 @@ internal class FoodConsumptionBehaviorPatches
     [HarmonyPrefix]
     public static bool DailyTickPartyPrefix(FoodConsumptionBehavior __instance, MobileParty party)
     {
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
         if (party == null || !party.IsPlayerParty()) return true;
 
         ContainerProvider.TryResolve<IPlayerManager>(out var playerManager);
@@ -59,6 +67,7 @@ internal class FoodConsumptionBehaviorPatches
     [HarmonyPrefix]
     public static bool OnTickPrefix(FoodConsumptionBehavior __instance, float dt)
     {
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
         if (!ContainerProvider.TryResolve<IPlayerManager>(out var playerManager)) return false;
         if (!ContainerProvider.TryResolve<IObjectManager>(out var objectManager)) return false;
 
@@ -96,6 +105,7 @@ internal class FoodConsumptionBehaviorPatches
     [HarmonyPrefix]
     public static bool PartyConsumeFoodPrefix(FoodConsumptionBehavior __instance, MobileParty mobileParty, bool starvingCheck = false)
     {
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
         if (!ContainerProvider.TryResolve<IFoodConsumptionBehaviorInterface>(out var foodConsumptionBehaviorInterface)) return false;
 
         // Custom implementation to handle IsMainParty -> IsPlayerParty replacements and client notifications
@@ -108,6 +118,7 @@ internal class FoodConsumptionBehaviorPatches
     [HarmonyPrefix]
     public static bool CheckAnimalBreedingPrefix(FoodConsumptionBehavior __instance, MobileParty party)
     {
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
         if (!ContainerProvider.TryResolve<IFoodConsumptionBehaviorInterface>(out var foodConsumptionBehaviorInterface)) return false;
 
         // Custom implementation to handle IsMainParty -> IsPlayerParty replacement and client notification
@@ -119,7 +130,7 @@ internal class FoodConsumptionBehaviorPatches
     private static bool ShouldTickFoodChange(IPlayerManager playerManager, MobileParty playerParty)
     {
         // Don't tick food change for disconnected players based on config
-        if (ModInformation.IsServer
+        if (CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()
             && !ModConfigProvider.ModOptions.GoldFoodInfluenceChangeForDisconnectedPlayers
             && playerManager.IsOwnerOfPartyDisconnected(playerParty)) return false;
 
