@@ -11,6 +11,10 @@ const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].s
 const writing = task => !task.readOnly && !task.integration && ['created', 'assigned', 'needs_fix', 'interrupt_requested'].includes(task.status);
 const occupiesSlot = task => task.agentId && ['assigned', 'interrupt_requested'].includes(task.status);
 const canonical = value => fs.realpathSync.native(path.resolve(value));
+const present = value => {
+  try { fs.lstatSync(value); return true; }
+  catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+};
 const within = (root, value) => {
   const relative = path.relative(root, value);
   return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
@@ -167,7 +171,12 @@ export class Coordinator {
         for (const relative of ['mb2', 'source/packages']) {
           const source = path.join(state.coordinatorRoot, relative);
           const target = path.join(worktree, relative);
-          if (process.platform === 'win32' && fs.existsSync(source) && !fs.existsSync(target)) fs.symlinkSync(canonical(source), target, 'junction');
+          if (process.platform === 'win32' && fs.existsSync(source) && !fs.existsSync(target)) {
+            const reference = canonical(source);
+            fs.symlinkSync(reference, target, 'junction');
+            task.junctionTargets ??= {};
+            task.junctionTargets[relative] = reference;
+          }
         }
       } catch (error) { task.setupWarning = error.message; }
       state.tasks[id] = task;
@@ -399,21 +408,87 @@ export class Coordinator {
     });
   }
 
+  cleanupLinks(state, task, residueOnly) {
+    const links = [];
+    const visit = (directory, prefix = '') => {
+      for (const name of fs.readdirSync(directory)) {
+        const relative = prefix ? `${prefix}/${name}` : name;
+        const file = path.join(directory, name);
+        const attributes = fs.lstatSync(file);
+        if (attributes.isSymbolicLink()) {
+          if (!['mb2', 'source/packages'].includes(relative)) throw new Error(`unknown cleanup link: ${relative}`);
+          const parent = path.dirname(file);
+          if (canonical(parent) !== parent || (parent !== task.worktree && !within(task.worktree, parent))) throw new Error('junction parent leaves managed worktree');
+          const reference = path.join(state.coordinatorRoot, relative);
+          if (canonical(path.dirname(reference)) !== path.dirname(reference)) throw new Error('coordinator reference parent changed');
+          const expected = canonical(reference);
+          if (canonical(file) !== expected || (task.junctionTargets?.[relative] && task.junctionTargets[relative] !== expected)) throw new Error(`junction target changed: ${relative}`);
+          links.push(file);
+        } else {
+          if (['mb2', 'source/packages'].includes(relative)) throw new Error(`expected a junction: ${relative}`);
+          if (residueOnly && (!attributes.isDirectory() || relative !== 'source')) throw new Error(`unknown cleanup residue: ${relative}`);
+          if (attributes.isDirectory()) {
+            if (canonical(file) !== file || !within(task.worktree, file)) throw new Error('cleanup directory leaves managed worktree');
+            visit(file, relative);
+          }
+        }
+      }
+    };
+    visit(task.worktree);
+    return links;
+  }
+
   cleanup(id) {
-    return this.transaction(state => {
+    const result = this.transaction(state => {
       const task = this.task(state, id);
       if (task.status !== 'closed' || !task.integration || task.verification?.exitCode !== 0 || task.registeredBy !== 'codex-coordination') throw new Error('cleanup requires a registered, integrated, verified and closed task');
-      if (task.cleanedAt) return { value: task };
-      const expected = path.join(state.managedRoot, task.id);
-      if (task.worktree !== expected || !within(state.managedRoot, expected) || canonical(expected) !== expected || canonical(state.managedRoot) !== state.managedRoot) throw new Error('unsafe managed worktree path');
-      this.clean(task.worktree);
-      if (this.git(['branch', '--show-current'], task.worktree) !== task.branch || this.git(['rev-parse', 'HEAD'], task.worktree) !== task.handoff.commit || this.git(['rev-parse', task.branch]) !== task.handoff.commit) throw new Error('worker branch changed after handoff');
-      this.git(['merge-base', '--is-ancestor', task.verification.head, this.git(['rev-parse', 'HEAD'])]);
-      this.git(['worktree', 'remove', expected]);
-      this.git(['branch', '-D', task.branch]);
-      task.cleanedAt = new Date().toISOString();
-      return { state, value: task };
+      try {
+        const expected = path.join(state.managedRoot, task.id);
+        if (task.worktree !== expected || !within(state.managedRoot, expected) || canonical(state.managedRoot) !== state.managedRoot) throw new Error('unsafe managed worktree path');
+        if (present(expected) && (fs.lstatSync(expected).isSymbolicLink() || canonical(expected) !== expected)) throw new Error('unsafe managed worktree path');
+        if (present(expected) && task.cleanedAt) { task.previousCleanedAt = task.cleanedAt; delete task.cleanedAt; }
+        const registration = this.git(['worktree', 'list', '--porcelain']).split('\n\n').find(block => block.split('\n').some(line => line.startsWith('worktree ') && path.resolve(line.slice(9)) === expected));
+        const branchExists = Boolean(this.git(['branch', '--list', task.branch]));
+        if (branchExists && this.git(['rev-parse', task.branch]) !== task.handoff.commit) throw new Error('worker branch changed after handoff');
+        if (registration) {
+          if (!registration.split('\n').includes(`branch refs/heads/${task.branch}`)) throw new Error('worker registration branch changed');
+          if (present(expected)) {
+            this.clean(expected);
+            if (this.git(['rev-parse', 'HEAD'], expected) !== task.handoff.commit) throw new Error('worker HEAD changed after handoff');
+          }
+        }
+        this.git(['merge-base', '--is-ancestor', task.verification.head, this.git(['rev-parse', 'HEAD'])]);
+        const unlink = links => {
+          for (const junction of links) {
+            fs.unlinkSync(junction);
+            if (present(junction)) throw new Error('junction unlink did not remove the link');
+          }
+        };
+        if (present(expected)) unlink(this.cleanupLinks(state, task, !registration));
+        if (registration) this.git(['worktree', 'remove', expected]);
+        if (present(expected)) {
+          unlink(this.cleanupLinks(state, task, true));
+          const source = path.join(expected, 'source');
+          if (present(source)) fs.rmdirSync(source);
+          fs.rmdirSync(expected);
+        }
+        if (present(expected)) throw new Error('managed worktree directory still exists');
+        if (branchExists) this.git(['branch', '-D', task.branch]);
+        task.cleanedAt ??= new Date().toISOString();
+        task.cleanupStatus = 'cleaned';
+        delete task.cleanupError;
+        return { state, value: { task } };
+      } catch (error) {
+        if (task.cleanedAt) { task.previousCleanedAt = task.cleanedAt; delete task.cleanedAt; }
+        task.cleanupStatus = 'cleanup_required';
+        task.cleanupError = error.message;
+        task.owner = 'coordinator';
+        task.nextAction = 'Inspect retained worktree residue or changed junction targets; cleanup is incomplete.';
+        return { state, value: { task, error: error.message } };
+      }
     });
+    if (result.error) throw new Error(result.error);
+    return result.task;
   }
 }
 

@@ -13,7 +13,7 @@ function git(cwd, ...args) {
   assert.equal(result.status, 0, result.stderr);
   return result.stdout.trim();
 }
-function fixture(t) {
+function fixture(t, { junctions = false } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coop-board-'));
   const repo = path.join(directory, 'repo');
   fs.mkdirSync(repo);
@@ -25,6 +25,17 @@ function fixture(t) {
   fs.writeFileSync(path.join(repo, 'accepted.txt'), 'accepted\n');
   fs.mkdirSync(path.join(repo, 'source'));
   fs.writeFileSync(path.join(repo, 'source', 'base.txt'), 'base\n');
+  const targets = {};
+  if (junctions) {
+    fs.writeFileSync(path.join(repo, '.gitignore'), '/mb2\n/source/packages\n');
+    for (const relative of ['mb2', 'source/packages']) {
+      const target = path.join(directory, relative === 'mb2' ? 'game-cache' : 'package-cache');
+      fs.mkdirSync(target);
+      fs.writeFileSync(path.join(target, 'sentinel.txt'), `Preserve ${relative}\n`);
+      fs.symlinkSync(target, path.join(repo, relative), 'junction');
+      targets[relative] = target;
+    }
+  }
   git(repo, 'add', '.');
   git(repo, 'commit', '-m', 'Accepted baseline');
   const baseline = git(repo, 'rev-parse', 'HEAD');
@@ -36,8 +47,22 @@ function fixture(t) {
   git(repo, 'commit', '-m', 'Configure task board');
   const board = new Coordinator(repo);
   board.init();
-  return { repo, board, directory };
+  return { repo, board, directory, targets };
 }
+
+test('Node unlink removes a real Windows junction without deleting its nonempty target', { skip: process.platform !== 'win32' }, t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coop-junction-unlink-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const target = path.join(directory, 'target');
+  const junction = path.join(directory, 'junction');
+  fs.mkdirSync(target);
+  fs.writeFileSync(path.join(target, 'sentinel.txt'), 'preserved sentinel\n');
+  fs.symlinkSync(target, junction, 'junction');
+  assert.equal(fs.lstatSync(junction).isSymbolicLink(), true);
+  fs.unlinkSync(junction);
+  assert.equal(fs.existsSync(junction), false);
+  assert.equal(fs.readFileSync(path.join(target, 'sentinel.txt'), 'utf8'), 'preserved sentinel\n');
+});
 
 function workerResult(board, directory, id = 'implementation') {
   const task = board.create({ id, stream: 'authority' });
@@ -54,6 +79,36 @@ function workerResult(board, directory, id = 'implementation') {
   fs.writeFileSync(log, result.stdout + result.stderr);
   const handoff = { taskId: id, baseCommit: task.baseCommit, commit: git(task.worktree, 'rev-parse', 'HEAD'), summary: 'Verified file change', changedFiles: [file], tests: [{ command: JSON.stringify(command), exitCode: result.status, log, sha256: createHash('sha256').update(fs.readFileSync(log)).digest('hex') }], evidence: [log], risks: [] };
   return { task, handoff, command };
+}
+
+function closedJunctionTask(t) {
+  const data = fixture(t, { junctions: true });
+  const { task, handoff, command } = workerResult(data.board, data.directory);
+  data.board.submit(task.id, handoff);
+  approve(data.board, task.id);
+  data.board.integrate(task.id);
+  data.board.verify(task.id, { command });
+  data.board.close(task.id);
+  return { ...data, task, handoff };
+}
+
+function assertSentinels(targets) {
+  for (const [relative, target] of Object.entries(targets)) assert.equal(fs.readFileSync(path.join(target, 'sentinel.txt'), 'utf8'), `Preserve ${relative}\n`);
+}
+
+function legacyCleanupResidue(data) {
+  git(data.repo, 'worktree', 'remove', data.task.worktree);
+  git(data.repo, 'branch', '-D', data.task.branch);
+  for (const [relative, target] of Object.entries(data.targets)) {
+    const link = path.join(data.task.worktree, relative);
+    fs.mkdirSync(path.dirname(link), { recursive: true });
+    if (!fs.existsSync(link)) fs.symlinkSync(target, link, 'junction');
+  }
+  data.board.transaction(state => {
+    state.tasks[data.task.id].cleanedAt = '2026-10-18T00:00:00.000Z';
+    return { state, value: null };
+  });
+  assertSentinels(data.targets);
 }
 
 const approve = (board, id) => board.review(id, { reviewerId: '/root/independent-review', decision: 'pass', notes: 'Compared committed diff, scope and test receipt.' });
@@ -378,6 +433,59 @@ test('cleanup refuses dirty or changed managed worktrees and preserves foreign b
   assert.throws(() => board.cleanup(task.id), /not clean/);
   assert.ok(git(repo, 'branch', '--list', 'codex/old-experiment'));
   assert.equal(fs.existsSync(task.worktree), true);
+});
+
+test('Windows cleanup unlinks known junctions and removes the directory while preserving both targets', { skip: process.platform !== 'win32' }, t => {
+  const data = closedJunctionTask(t);
+  for (const relative of Object.keys(data.targets)) assert.equal(fs.lstatSync(path.join(data.task.worktree, relative)).isSymbolicLink(), true);
+  const cleaned = data.board.cleanup(data.task.id);
+  assert.equal(cleaned.cleanupStatus, 'cleaned');
+  assert.ok(cleaned.cleanedAt);
+  assert.equal(fs.existsSync(data.task.worktree), false);
+  assert.equal(git(data.repo, 'branch', '--list', data.task.branch), '');
+  assertSentinels(data.targets);
+});
+
+test('Windows cleanup repairs legacy cleanedAt junction residue after Git registration and branch removal', { skip: process.platform !== 'win32' }, t => {
+  const data = closedJunctionTask(t);
+  legacyCleanupResidue(data);
+  assert.equal(fs.existsSync(data.task.worktree), true);
+  const cleaned = data.board.cleanup(data.task.id);
+  assert.equal(cleaned.cleanupStatus, 'cleaned');
+  assert.ok(cleaned.previousCleanedAt);
+  assert.equal(fs.existsSync(data.task.worktree), false);
+  assertSentinels(data.targets);
+  assert.equal(data.board.cleanup(data.task.id).cleanedAt, cleaned.cleanedAt);
+});
+
+test('Windows cleanup retains changed junction targets and records cleanup_required', { skip: process.platform !== 'win32' }, t => {
+  const data = closedJunctionTask(t);
+  const replacement = path.join(data.directory, 'replacement-game-cache');
+  fs.mkdirSync(replacement);
+  fs.writeFileSync(path.join(replacement, 'keep.txt'), 'keep replacement target\n');
+  const link = path.join(data.task.worktree, 'mb2');
+  fs.unlinkSync(link);
+  fs.symlinkSync(replacement, link, 'junction');
+  assert.throws(() => data.board.cleanup(data.task.id), /junction target changed/);
+  const retained = data.board.status().tasks[data.task.id];
+  assert.equal(retained.cleanupStatus, 'cleanup_required');
+  assert.equal(retained.cleanedAt, undefined);
+  assert.equal(fs.existsSync(link), true);
+  assert.equal(fs.readFileSync(path.join(replacement, 'keep.txt'), 'utf8'), 'keep replacement target\n');
+  assertSentinels(data.targets);
+});
+
+test('Windows legacy cleanup preserves unknown residue and invalidates its old completion marker', { skip: process.platform !== 'win32' }, t => {
+  const data = closedJunctionTask(t);
+  legacyCleanupResidue(data);
+  const unknown = path.join(data.task.worktree, 'unknown.txt');
+  fs.writeFileSync(unknown, 'do not remove unknown residue\n');
+  assert.throws(() => data.board.cleanup(data.task.id), /unknown cleanup residue/);
+  const retained = data.board.status().tasks[data.task.id];
+  assert.equal(retained.cleanupStatus, 'cleanup_required');
+  assert.equal(retained.cleanedAt, undefined);
+  assert.equal(fs.readFileSync(unknown, 'utf8'), 'do not remove unknown residue\n');
+  assertSentinels(data.targets);
 });
 
 test('read-only review with no commit diff is verified and closed without empty commits', t => {
