@@ -27,9 +27,10 @@ public readonly struct NetworkCampaignAuthorityFreezeRequest : IServerToClientCo
         HandoffSequence = handoffSequence;
     }
 
-    public NetworkCampaignAuthorityFreezeAcknowledged ToAcknowledged(RegistryAllocationCheckpoint allocationCheckpoint = null) =>
+    public NetworkCampaignAuthorityFreezeAcknowledged ToAcknowledged(
+        RegistryAllocationCheckpoint allocationCheckpoint = null, CampaignRosterCheckpoint rosterCheckpoint = null) =>
         new NetworkCampaignAuthorityFreezeAcknowledged(
-            RoomId, AuthorityId, AuthorityControllerId, Epoch, CandidateControllerId, HandoffSequence, allocationCheckpoint);
+            RoomId, AuthorityId, AuthorityControllerId, Epoch, CandidateControllerId, HandoffSequence, allocationCheckpoint, rosterCheckpoint);
 
     public NetworkCampaignAuthorityFreezeCanceled ToCanceled() =>
         new NetworkCampaignAuthorityFreezeCanceled(
@@ -47,6 +48,7 @@ public readonly struct NetworkCampaignAuthorityFreezeAcknowledged : IMessage
     [ProtoMember(5)] public readonly string CandidateControllerId;
     [ProtoMember(6)] public readonly long HandoffSequence;
     [ProtoMember(7)] public readonly RegistryAllocationCheckpoint AllocationCheckpoint;
+    [ProtoMember(8)] public readonly CampaignRosterCheckpoint RosterCheckpoint;
 
     public NetworkCampaignAuthorityFreezeAcknowledged(
         string roomId,
@@ -55,7 +57,8 @@ public readonly struct NetworkCampaignAuthorityFreezeAcknowledged : IMessage
         long epoch,
         string candidateControllerId,
         long handoffSequence,
-        RegistryAllocationCheckpoint allocationCheckpoint = null)
+        RegistryAllocationCheckpoint allocationCheckpoint = null,
+        CampaignRosterCheckpoint rosterCheckpoint = null)
     {
         RoomId = roomId ?? string.Empty;
         AuthorityId = authorityId ?? string.Empty;
@@ -64,6 +67,7 @@ public readonly struct NetworkCampaignAuthorityFreezeAcknowledged : IMessage
         CandidateControllerId = candidateControllerId ?? string.Empty;
         HandoffSequence = handoffSequence;
         AllocationCheckpoint = allocationCheckpoint;
+        RosterCheckpoint = rosterCheckpoint;
     }
 }
 

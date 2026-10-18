@@ -9,6 +9,7 @@ using Common.Tests.Utils;
 using Coop.Core.Client.Messages;
 using Coop.Core.Client.Services.Session;
 using GameInterface.Services.Entity;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Time.Messages;
 using Moq;
 using Serilog;
@@ -52,8 +53,9 @@ public class CampaignAuthorityHandoffBarrierClientHandlerTests
     {
         var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
         var checkpoint = new RegistryAllocationCheckpoint(200, new Dictionary<string, int> { ["type"] = 90 });
+        var rosters = new CampaignRosterCheckpoint(new[] { new CampaignRosterState(25, new CampaignRosterElementState[0]) });
         var barrier = new NetworkCampaignAuthorityHandoffBarrier(
-            "room-a", "paused-authority", 7, "controller-b", 4, checkpoint);
+            "room-a", "paused-authority", 7, "controller-b", 4, checkpoint, rosters);
         var acknowledgement = barrier.ToApplied();
 
         var receivedBarrier = Assert.IsType<NetworkCampaignAuthorityHandoffBarrier>(
@@ -68,6 +70,7 @@ public class CampaignAuthorityHandoffBarrierClientHandlerTests
         Assert.Equal(barrier.BarrierSequence, receivedBarrier.BarrierSequence);
         Assert.Equal(200u, receivedBarrier.AllocationCheckpoint.NextHandle);
         Assert.Equal(90, receivedBarrier.AllocationCheckpoint.TypeCounters["type"]);
+        Assert.Equal(25u, Assert.Single(receivedBarrier.RosterCheckpoint.Rosters).RosterHandle);
         Assert.Equal(barrier.RoomId, receivedAcknowledgement.RoomId);
         Assert.Equal(barrier.PausedAuthorityId, receivedAcknowledgement.PausedAuthorityId);
         Assert.Equal(barrier.PausedEpoch, receivedAcknowledgement.PausedEpoch);
@@ -87,9 +90,12 @@ public class CampaignAuthorityHandoffBarrierClientHandlerTests
         var controllerIdProvider = new ControllerIdProvider();
         controllerIdProvider.SetControllerId("controller-b");
         var objectManager = new ObjectManagerService(Mock.Of<ILogger>());
+        var rosters = new CampaignRosterCheckpoint(new CampaignRosterState[0]);
+        var rosterService = new Mock<ICampaignRosterCheckpointService>();
+        rosterService.Setup(value => value.TryApply(rosters)).Returns(true);
         var barrier = new NetworkCampaignAuthorityHandoffBarrier(
             "room-a", "paused-authority", 7, "controller-b", 4,
-            new RegistryAllocationCheckpoint(200, new Dictionary<string, int>()));
+            new RegistryAllocationCheckpoint(200, new Dictionary<string, int>()), rosters);
         bool earlierApplyCompleted = false;
         NetworkCampaignAuthorityHandoffBarrierApplied? acknowledgement = null;
         network.Setup(value => value.SendAll(It.IsAny<IMessage>()))
@@ -101,7 +107,7 @@ public class CampaignAuthorityHandoffBarrierClientHandlerTests
             });
 
         using var handler = new CampaignAuthorityHandoffBarrierClientHandler(
-            messageBroker, network.Object, sessionIdentity, controllerIdProvider, objectManager);
+            messageBroker, network.Object, sessionIdentity, controllerIdProvider, objectManager, rosterService.Object);
         messageBroker.Publish(this, new ClientCampaignReady());
         messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
 
@@ -134,10 +140,12 @@ public class CampaignAuthorityHandoffBarrierClientHandlerTests
         var controller = new ControllerIdProvider();
         controller.SetControllerId("candidate");
         var manager = new ObjectManagerService(Mock.Of<ILogger>());
+        var rosterService = new Mock<ICampaignRosterCheckpointService>();
         var checkpoint = malformed
             ? new RegistryAllocationCheckpoint(300, new Dictionary<string, int> { ["type"] = -1 })
             : null;
-        using var handler = new CampaignAuthorityHandoffBarrierClientHandler(broker, network.Object, identity, controller, manager);
+        using var handler = new CampaignAuthorityHandoffBarrierClientHandler(broker, network.Object, identity, controller,
+            manager, rosterService.Object);
         broker.Publish(this, new ClientCampaignReady());
         broker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
         broker.Publish(this, new NetworkCampaignAuthorityHandoffBarrier("room", "paused", 2, "candidate", 1, checkpoint));
@@ -145,5 +153,30 @@ public class CampaignAuthorityHandoffBarrierClientHandlerTests
 
         network.Verify(value => value.SendAll(It.IsAny<IMessage>()), Times.Never);
         Assert.Equal(1u, manager.CaptureAllocationCheckpoint().NextHandle);
+        rosterService.Verify(value => value.TryApply(It.IsAny<CampaignRosterCheckpoint>()), Times.Never);
+    }
+
+    [Fact]
+    public void FailedRosterReconciliationCannotBeAcknowledged()
+    {
+        var broker = new TestMessageBroker();
+        var network = new Mock<INetwork>();
+        var identity = new SessionIdentity();
+        Assert.True(identity.TryApply(new AuthorityLease("room", "paused", "", 2, isPaused: true), "host"));
+        var controller = new ControllerIdProvider();
+        controller.SetControllerId("candidate");
+        var manager = new ObjectManagerService(Mock.Of<ILogger>());
+        var rosterService = new Mock<ICampaignRosterCheckpointService>();
+        rosterService.Setup(value => value.TryApply(It.IsAny<CampaignRosterCheckpoint>())).Returns(false);
+        using var handler = new CampaignAuthorityHandoffBarrierClientHandler(broker, network.Object, identity, controller,
+            manager, rosterService.Object);
+        broker.Publish(this, new ClientCampaignReady());
+        broker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
+        broker.Publish(this, new NetworkCampaignAuthorityHandoffBarrier("room", "paused", 2, "candidate", 1,
+            new RegistryAllocationCheckpoint(50, new Dictionary<string, int>()), new CampaignRosterCheckpoint(new CampaignRosterState[0])));
+        GameThread.Run(() => { }, blocking: true);
+
+        network.Verify(value => value.SendAll(It.IsAny<IMessage>()), Times.Never);
+        Assert.True(identity.CurrentLease.IsPaused);
     }
 }

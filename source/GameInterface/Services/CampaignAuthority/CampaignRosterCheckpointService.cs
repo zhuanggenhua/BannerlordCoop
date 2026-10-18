@@ -99,7 +99,7 @@ internal sealed class CampaignRosterCheckpointService : ICampaignRosterCheckpoin
         if (remaining.Count != 0) return false;
 
         // All identities, counts and wounds match before any roster changes. Restore XP and array
-        // order directly; SetElementXp would call PartyBase.OnXpChanged and recompute the result.
+        // order directly; SetElementXp would invoke PartyBase.OnXpChanged again.
         using (new AllowedThread())
         foreach (var entry in prepared)
         {

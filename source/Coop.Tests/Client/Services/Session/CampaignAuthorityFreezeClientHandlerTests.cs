@@ -9,6 +9,7 @@ using Common.Session;
 using Common.Tests.Utils;
 using Coop.Core.Client.Services.Session;
 using GameInterface.Services.Entity;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.ObjectManager;
 using Moq;
 using System.Collections.Generic;
@@ -37,6 +38,10 @@ public class CampaignAuthorityFreezeClientHandlerTests
             Assert.True(identity.TryExecuteWithLease(lease, () => operations.Add("coalescer")));
         });
         var checkpoint = new RegistryAllocationCheckpoint(444, new Dictionary<string, int>());
+        var rosters = new CampaignRosterCheckpoint(new CampaignRosterState[0]);
+        var rosterService = new Mock<ICampaignRosterCheckpointService>();
+        rosterService.Setup(value => value.TryCapture(out rosters))
+            .Callback(() => Assert.True(identity.IsLocallyFrozen(lease))).Returns(true);
         var objectManager = new Mock<IObjectManager>();
         objectManager.Setup(value => value.CaptureAllocationCheckpoint())
             .Callback(() => Assert.True(identity.IsLocallyFrozen(lease)))
@@ -55,7 +60,7 @@ public class CampaignAuthorityFreezeClientHandlerTests
 
         var request = new NetworkCampaignAuthorityFreezeRequest(lease, "controller-a", 44);
         using var handler = new CampaignAuthorityFreezeClientHandler(broker, network.Object, identity, controller,
-            objectManager.Object, coalescer.Object);
+            objectManager.Object, rosterService.Object, coalescer.Object);
         broker.Publish(this, request);
         GameThread.Run(() => { }, blocking: true);
 
@@ -65,12 +70,39 @@ public class CampaignAuthorityFreezeClientHandlerTests
         Assert.Equal(request.HandoffSequence, acknowledgement.Value.HandoffSequence);
         Assert.Equal(request.CandidateControllerId, acknowledgement.Value.CandidateControllerId);
         Assert.Same(checkpoint, acknowledgement.Value.AllocationCheckpoint);
+        Assert.Same(rosters, acknowledgement.Value.RosterCheckpoint);
 
         broker.Publish(this, request);
         GameThread.Run(() => { }, blocking: true);
         coalescer.Verify(value => value.Flush(network.Object), Times.Once);
         network.Verify(value => value.SendAll(It.IsAny<NetworkCampaignAuthorityFreezeAcknowledged>()), Times.Exactly(2));
 
+        broker.Publish(this, request.ToCanceled());
+        GameThread.Run(() => { }, blocking: true);
+        Assert.False(identity.IsLocallyFrozen(lease));
+    }
+
+    [Fact]
+    public void FailedRosterCaptureKeepsOldAuthorityFrozenWithoutAcknowledgement()
+    {
+        var broker = new TestMessageBroker();
+        var identity = new SessionIdentity();
+        var lease = new AuthorityLease("room", "authority", "writer", 2);
+        Assert.True(identity.TryApply(lease, "host"));
+        var controller = new ControllerIdProvider();
+        controller.SetControllerId("writer");
+        var network = new Mock<INetwork>();
+        var rosterService = new Mock<ICampaignRosterCheckpointService>();
+        CampaignRosterCheckpoint checkpoint = null;
+        rosterService.Setup(value => value.TryCapture(out checkpoint)).Returns(false);
+        using var handler = new CampaignAuthorityFreezeClientHandler(broker, network.Object, identity, controller,
+            Mock.Of<IObjectManager>(), rosterService.Object);
+        var request = new NetworkCampaignAuthorityFreezeRequest(lease, "host", 33);
+        broker.Publish(this, request);
+        GameThread.Run(() => { }, blocking: true);
+
+        Assert.True(identity.IsLocallyFrozen(lease));
+        network.Verify(value => value.SendAll(It.IsAny<IMessage>()), Times.Never);
         broker.Publish(this, request.ToCanceled());
         GameThread.Run(() => { }, blocking: true);
         Assert.False(identity.IsLocallyFrozen(lease));
@@ -101,13 +133,14 @@ public class CampaignAuthorityFreezeClientHandlerTests
     {
         var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
         var checkpoint = new RegistryAllocationCheckpoint(555, new Dictionary<string, int> { ["type"] = 800 });
+        var rosters = new CampaignRosterCheckpoint(new[] { new CampaignRosterState(88, new CampaignRosterElementState[0]) });
         var lease = new AuthorityLease("room-a", "authority-b", "controller-b", 3);
         var request = new NetworkCampaignAuthorityFreezeRequest(lease, "controller-a", 44);
 
         var receivedRequest = Assert.IsType<NetworkCampaignAuthorityFreezeRequest>(
             serializer.Deserialize<IMessage>(MessagePacket.Create(request, serializer).Data));
         var receivedAcknowledgement = Assert.IsType<NetworkCampaignAuthorityFreezeAcknowledged>(
-            serializer.Deserialize<IMessage>(MessagePacket.Create(request.ToAcknowledged(checkpoint), serializer).Data));
+            serializer.Deserialize<IMessage>(MessagePacket.Create(request.ToAcknowledged(checkpoint, rosters), serializer).Data));
         var receivedCancellation = Assert.IsType<NetworkCampaignAuthorityFreezeCanceled>(
             serializer.Deserialize<IMessage>(MessagePacket.Create(request.ToCanceled(), serializer).Data));
 
@@ -120,6 +153,7 @@ public class CampaignAuthorityFreezeClientHandlerTests
         Assert.Equal(request.HandoffSequence, receivedAcknowledgement.HandoffSequence);
         Assert.Equal(555u, receivedAcknowledgement.AllocationCheckpoint.NextHandle);
         Assert.Equal(800, receivedAcknowledgement.AllocationCheckpoint.TypeCounters["type"]);
+        Assert.Equal(88u, Assert.Single(receivedAcknowledgement.RosterCheckpoint.Rosters).RosterHandle);
         Assert.Equal(request.HandoffSequence, receivedCancellation.HandoffSequence);
     }
 }

@@ -12,6 +12,7 @@ using Common.Network;
 using Common.Network.Coalescing;
 using GameInterface.Services.Entity;
 using GameInterface.Services.ObjectManager;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.GameState.Messages;
 using GameInterface.Services.Players;
 using GameInterface.Services.Players.Data;
@@ -175,6 +176,9 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             var network = new Mock<INetwork>();
             NetworkCampaignAuthorityHandoffBarrier appliedBarrier = default;
             bool bufferedResultsFlushed = false;
+            var rosters = new CampaignRosterCheckpoint(new CampaignRosterState[0]);
+            var rosterService = new Mock<ICampaignRosterCheckpointService>();
+            rosterService.Setup(value => value.TryCapture(out rosters)).Returns(true);
             var coalescer = new Mock<ISendCoalescer>();
             coalescer.Setup(value => value.Flush(network.Object)).Callback(() =>
             {
@@ -205,7 +209,8 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                 network.Object,
                 identity,
                 objectManager.Object,
-                coalescer.Object);
+                coalescer.Object,
+                rosterService.Object);
 
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
             messageBroker.Publish(this, new CampaignReady());
@@ -230,6 +235,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                     barrier.BarrierSequence > 0)), Times.Once);
             Assert.True(appliedBarrier.BarrierSequence > 0);
             Assert.Equal(555u, appliedBarrier.AllocationCheckpoint.NextHandle);
+            Assert.Same(rosters, appliedBarrier.RosterCheckpoint);
 
             var applied = new NetworkCampaignAuthorityHandoffBarrierApplied(
                 appliedBarrier.RoomId, appliedBarrier.PausedAuthorityId, appliedBarrier.PausedEpoch,

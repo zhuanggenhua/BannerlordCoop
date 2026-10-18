@@ -6,6 +6,7 @@ using Common.Network.Session;
 using Common.Session;
 using Coop.Core.Client.Messages;
 using GameInterface.Services.Entity;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.ObjectManager;
 using GameInterface.Services.Time.Messages;
 using Serilog;
@@ -26,6 +27,7 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
     private readonly ISessionIdentity sessionIdentity;
     private readonly IControllerIdProvider controllerIdProvider;
     private readonly IObjectManager objectManager;
+    private readonly ICampaignRosterCheckpointService rosterCheckpointService;
     private bool campaignSynchronized;
     private bool mapReady;
 
@@ -34,13 +36,15 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         INetwork network,
         ISessionIdentity sessionIdentity,
         IControllerIdProvider controllerIdProvider,
-        IObjectManager objectManager)
+        IObjectManager objectManager,
+        ICampaignRosterCheckpointService rosterCheckpointService)
     {
         this.messageBroker = messageBroker;
         this.network = network;
         this.sessionIdentity = sessionIdentity;
         this.controllerIdProvider = controllerIdProvider;
         this.objectManager = objectManager;
+        this.rosterCheckpointService = rosterCheckpointService;
         messageBroker.Subscribe<ClientCampaignReady>(Handle_ClientCampaignReady);
         messageBroker.Subscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Subscribe<NetworkCampaignAuthorityHandoffBarrier>(Handle_HandoffBarrier);
@@ -87,6 +91,13 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         if (!objectManager.TryApplyAllocationCheckpoint(barrier.AllocationCheckpoint))
         {
             Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; registry allocation checkpoint is missing or invalid",
+                barrier.BarrierSequence);
+            return;
+        }
+
+        if (!rosterCheckpointService.TryApply(barrier.RosterCheckpoint))
+        {
+            Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; world rosters did not match the checkpoint",
                 barrier.BarrierSequence);
             return;
         }
