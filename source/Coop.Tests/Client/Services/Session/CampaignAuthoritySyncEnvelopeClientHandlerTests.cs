@@ -1,4 +1,4 @@
-using Common;
+﻿using Common;
 using Common.Messaging;
 using Common.Network.Session;
 using Common.Serialization;
@@ -15,6 +15,45 @@ namespace Coop.Tests.Client.Services.Session;
 
 public class CampaignAuthoritySyncEnvelopeClientHandlerTests
 {
+    [Fact]
+    public void LeaseTransitionsPreserveFinalOldEpochDeltaAndFirstNewEpochDeltaInApplyOrder()
+    {
+        var broker = new TestMessageBroker();
+        var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
+        var identity = new SessionIdentity();
+        Assert.True(identity.TryApply(new AuthorityLease("room-a", "authority-a", "host", 4), "host"));
+        var applied = new System.Collections.Generic.List<int>();
+        broker.Subscribe<CoopNetworkBaseTests.AuthorityProbeMessage>(payload => applied.Add(payload.What.Value));
+        using var envelopes = new CampaignAuthoritySyncEnvelopeClientHandler(broker, identity, serializer);
+        using var snapshots = new AuthorityLeaseSnapshotHandler(broker, identity);
+        using var entered = new System.Threading.ManualResetEventSlim();
+        using var release = new System.Threading.ManualResetEventSlim();
+
+        GameThread.EnqueueSafe(() =>
+        {
+            entered.Set();
+            Assert.True(release.Wait(System.TimeSpan.FromSeconds(5)));
+        });
+        try
+        {
+            Assert.True(entered.Wait(System.TimeSpan.FromSeconds(5)));
+            broker.Publish(this, CreateEnvelope(serializer, "authority-a", 4, 1, 41));
+            broker.Publish(this, new NetworkAuthorityLeaseSnapshot(
+                new AuthorityLease("room-a", "authority-paused", string.Empty, 5, isPaused: true), "host"));
+            broker.Publish(this, new NetworkAuthorityLeaseSnapshot(
+                new AuthorityLease("room-a", "authority-b", "host", 6), "host"));
+            broker.Publish(this, CreateEnvelope(serializer, "authority-b", 6, 1, 61));
+        }
+        finally
+        {
+            release.Set();
+        }
+        GameThread.Run(() => { }, blocking: true);
+
+        Assert.Equal(new[] { 41, 61 }, applied);
+        Assert.Equal(6, identity.Epoch);
+    }
+
     [Fact]
     public void AppliesRemoteAuthorityPartyBehaviorDeltaUnderConfirmedLease()
     {

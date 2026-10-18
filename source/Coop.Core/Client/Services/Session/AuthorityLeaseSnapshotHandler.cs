@@ -28,13 +28,19 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
 
     private void Handle_AuthorityLeaseSnapshot(MessagePayload<NetworkAuthorityLeaseSnapshot> payload)
     {
-        var lease = payload.What.ToLease();
-        if (!sessionIdentity.TryApply(lease, payload.What.RoomHostControllerId))
+        var snapshot = payload.What;
+        GameThread.EnqueueSafe(() => ApplySnapshotOnGameThread(snapshot), context: nameof(AuthorityLeaseSnapshotHandler));
+    }
+
+    private void ApplySnapshotOnGameThread(NetworkAuthorityLeaseSnapshot snapshot)
+    {
+        var lease = snapshot.ToLease();
+        if (!sessionIdentity.TryApply(lease, snapshot.RoomHostControllerId))
         {
             Logger.Warning("Rejected campaign authority lease snapshot for room {RoomId} at epoch {Epoch} " +
                 "with room host {RoomHostControllerId}; current room is {CurrentRoomId} at epoch {CurrentEpoch} " +
                 "with room host {CurrentRoomHostControllerId}",
-                lease.RoomId, lease.Epoch, payload.What.RoomHostControllerId,
+                lease.RoomId, lease.Epoch, snapshot.RoomHostControllerId,
                 sessionIdentity.RoomId, sessionIdentity.Epoch, sessionIdentity.RoomHostControllerId);
             return;
         }

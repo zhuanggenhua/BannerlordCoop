@@ -61,6 +61,7 @@ public class AuthorityLeaseDistributionHandlerTests
         messageBroker.Publish(new object(), snapshot);
         messageBroker.Publish(new object(), new NetworkAuthorityLeaseSnapshot(
             new AuthorityLease("room-a", "authority-stale", "controller-stale", 0)));
+        GameThread.Run(() => { }, blocking: true);
 
         Assert.Equal("room-a", identity.RoomId);
         Assert.Equal("authority-a", identity.AuthorityId);
@@ -81,6 +82,7 @@ public class AuthorityLeaseDistributionHandlerTests
         messageBroker.Publish(this, new NetworkAuthorityLeaseSnapshot(pausedLease, "controller-a"));
         messageBroker.Publish(this, new NetworkAuthorityLeaseSnapshot(activeLease, "controller-a"));
 
+        GameThread.Run(() => { }, blocking: true);
         Assert.Equal(pausedLease, identity.CurrentLease);
         Assert.True(identity.CurrentLease.IsPaused);
         Assert.Equal(2, identity.Epoch);

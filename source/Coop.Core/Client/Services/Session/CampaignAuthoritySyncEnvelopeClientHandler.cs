@@ -1,4 +1,4 @@
-using Common;
+﻿using Common;
 using Common.Logging;
 using Common.Messaging;
 using Common.Network.Session;
@@ -39,6 +39,11 @@ public sealed class CampaignAuthoritySyncEnvelopeClientHandler : IHandler
 
     private void Handle_AuthoritySyncEnvelope(MessagePayload<NetworkCampaignAuthoritySyncEnvelope> payload)
     {
+        GameThread.EnqueueSafe(() => ApplyEnvelopeOnGameThread(payload), context: nameof(CampaignAuthoritySyncEnvelopeClientHandler));
+    }
+
+    private void ApplyEnvelopeOnGameThread(MessagePayload<NetworkCampaignAuthoritySyncEnvelope> payload)
+    {
         var envelope = payload.What;
         if (!envelope.IsValid || !sessionIdentity.TryGetConfirmedLease(out var lease) || lease.IsPaused ||
             !MatchesCurrentAuthority(envelope, lease))
@@ -73,15 +78,8 @@ public sealed class CampaignAuthoritySyncEnvelopeClientHandler : IHandler
             return;
         }
 
-        // Keep envelope application ordered with other network-originated state on the game thread.
-        GameThread.EnqueueSafe(() =>
-        {
-            if (!sessionIdentity.TryGetConfirmedLease(out var currentLease) || currentLease.IsPaused ||
-                !MatchesCurrentAuthority(envelope, currentLease))
-                return;
-
-            messageBroker.Publish(payload.Who, innerMessage);
-        }, context: nameof(CampaignAuthoritySyncEnvelopeClientHandler));
+        // Lease snapshots and envelopes share this queue, so the preceding epoch finishes first.
+        messageBroker.Publish(payload.Who, innerMessage);
     }
 
     private bool TryAdvanceWatermark(NetworkCampaignAuthoritySyncEnvelope envelope)
