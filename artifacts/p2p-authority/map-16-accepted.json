@@ -1,0 +1,2467 @@
+{
+  "runId": "f2b18040c3b34e7ab8745c512b788857",
+  "sourceCommit": "230af3ce4",
+  "scope": "Two-player map A-to-B-to-A; native point orders, exact paused critical world hashes, XP transfer and retired allocation continuity",
+  "status": "passed",
+  "missionAccepted": false,
+  "processes": [
+    {
+      "name": "server",
+      "pid": 24984,
+      "role": "server",
+      "build": "0.1.7+230af3ce454f68b10454e673944e6436518b391a",
+      "campaign": "RVLgBrkkFApz"
+    },
+    {
+      "name": "client1",
+      "pid": 29976,
+      "role": "client",
+      "build": "0.1.7+230af3ce454f68b10454e673944e6436518b391a",
+      "campaign": "RVLgBrkkFApz"
+    }
+  ],
+  "states": [
+    {
+      "utc": "2026-10-18T06:11:49.049Z",
+      "side": "server",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "0f7ab0eb48884bbbbc4baea4afca7d7c",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 3,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 6069,
+      "localAuthority": true,
+      "mainHero": "main_hero",
+      "mainParty": "player_party"
+    },
+    {
+      "utc": "2026-10-18T06:11:49.233Z",
+      "side": "client1",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "0f7ab0eb48884bbbbc4baea4afca7d7c",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 3,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 0,
+      "localAuthority": false,
+      "mainHero": "Player",
+      "mainParty": "Player"
+    },
+    {
+      "utc": "2026-10-18T06:11:49.246Z",
+      "side": "server",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "0f7ab0eb48884bbbbc4baea4afca7d7c",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 3,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 6088,
+      "localAuthority": true,
+      "mainHero": "main_hero",
+      "mainParty": "player_party"
+    },
+    {
+      "utc": "2026-10-18T06:11:49.499Z",
+      "side": "client1",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "0f7ab0eb48884bbbbc4baea4afca7d7c",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 3,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 0,
+      "localAuthority": false,
+      "mainHero": "Player",
+      "mainParty": "Player"
+    },
+    {
+      "utc": "2026-10-18T06:11:54.918Z",
+      "side": "server",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "0f7ab0eb48884bbbbc4baea4afca7d7c",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 3,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 6408,
+      "localAuthority": true,
+      "mainHero": "main_hero",
+      "mainParty": "player_party"
+    },
+    {
+      "utc": "2026-10-18T06:11:54.937Z",
+      "side": "client1",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "0f7ab0eb48884bbbbc4baea4afca7d7c",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 3,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 0,
+      "localAuthority": false,
+      "mainHero": "Player",
+      "mainParty": "Player"
+    },
+    {
+      "utc": "2026-10-18T06:12:00.076Z",
+      "side": "server",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "0f7ab0eb48884bbbbc4baea4afca7d7c",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 3,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 6585,
+      "localAuthority": true,
+      "mainHero": "main_hero",
+      "mainParty": "player_party"
+    },
+    {
+      "utc": "2026-10-18T06:12:00.085Z",
+      "side": "client1",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "0f7ab0eb48884bbbbc4baea4afca7d7c",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 3,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 0,
+      "localAuthority": false,
+      "mainHero": "Player",
+      "mainParty": "Player"
+    },
+    {
+      "utc": "2026-10-18T06:12:02.508Z",
+      "side": "server",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "4239849741234d8c9a54e3e25450e36f",
+        "AuthorityControllerId": "",
+        "Epoch": 4,
+        "IsPaused": true,
+        "IsValid": true
+      },
+      "worldTicks": 6690,
+      "localAuthority": false,
+      "mainHero": "main_hero",
+      "mainParty": "player_party"
+    },
+    {
+      "utc": "2026-10-18T06:12:02.521Z",
+      "side": "client1",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "4239849741234d8c9a54e3e25450e36f",
+        "AuthorityControllerId": "",
+        "Epoch": 4,
+        "IsPaused": true,
+        "IsValid": true
+      },
+      "worldTicks": 0,
+      "localAuthority": false,
+      "mainHero": "Player",
+      "mainParty": "Player"
+    },
+    {
+      "utc": "2026-10-18T06:12:03.527Z",
+      "side": "server",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "b6728c43b18d418e9b2e3404115d7528",
+        "AuthorityControllerId": "testclient1",
+        "Epoch": 5,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 6690,
+      "localAuthority": false,
+      "mainHero": "main_hero",
+      "mainParty": "player_party"
+    },
+    {
+      "utc": "2026-10-18T06:12:03.543Z",
+      "side": "client1",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "b6728c43b18d418e9b2e3404115d7528",
+        "AuthorityControllerId": "testclient1",
+        "Epoch": 5,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 6707,
+      "localAuthority": true,
+      "mainHero": "Player",
+      "mainParty": "Player"
+    },
+    {
+      "utc": "2026-10-18T06:12:08.55Z",
+      "side": "client1",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "b6728c43b18d418e9b2e3404115d7528",
+        "AuthorityControllerId": "testclient1",
+        "Epoch": 5,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 6912,
+      "localAuthority": true,
+      "mainHero": "Player",
+      "mainParty": "Player"
+    },
+    {
+      "utc": "2026-10-18T06:12:08.561Z",
+      "side": "server",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "b6728c43b18d418e9b2e3404115d7528",
+        "AuthorityControllerId": "testclient1",
+        "Epoch": 5,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 6690,
+      "localAuthority": false,
+      "mainHero": "main_hero",
+      "mainParty": "player_party"
+    },
+    {
+      "utc": "2026-10-18T06:12:22.946Z",
+      "side": "server",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "b6728c43b18d418e9b2e3404115d7528",
+        "AuthorityControllerId": "testclient1",
+        "Epoch": 5,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 6690,
+      "localAuthority": false,
+      "mainHero": "main_hero",
+      "mainParty": "player_party"
+    },
+    {
+      "utc": "2026-10-18T06:12:22.971Z",
+      "side": "client1",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "b6728c43b18d418e9b2e3404115d7528",
+        "AuthorityControllerId": "testclient1",
+        "Epoch": 5,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 7512,
+      "localAuthority": true,
+      "mainHero": "Player",
+      "mainParty": "Player"
+    },
+    {
+      "utc": "2026-10-18T06:12:23.996Z",
+      "side": "server",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "fb129bd5c6fa4e698cb75c2781eef33f",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 7,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 7552,
+      "localAuthority": true,
+      "mainHero": "main_hero",
+      "mainParty": "player_party"
+    },
+    {
+      "utc": "2026-10-18T06:12:24.007Z",
+      "side": "client1",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "fb129bd5c6fa4e698cb75c2781eef33f",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 7,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 7513,
+      "localAuthority": false,
+      "mainHero": "Player",
+      "mainParty": "Player"
+    },
+    {
+      "utc": "2026-10-18T06:12:31.059Z",
+      "side": "server",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "fb129bd5c6fa4e698cb75c2781eef33f",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 7,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 7881,
+      "localAuthority": true,
+      "mainHero": "main_hero",
+      "mainParty": "player_party"
+    },
+    {
+      "utc": "2026-10-18T06:12:31.112Z",
+      "side": "client1",
+      "lease": {
+        "RoomId": "4bf0c6cfdd0c44a398f384967684c890",
+        "AuthorityId": "fb129bd5c6fa4e698cb75c2781eef33f",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 7,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "worldTicks": 7513,
+      "localAuthority": false,
+      "mainHero": "Player",
+      "mainParty": "Player"
+    }
+  ],
+  "audits": [
+    {
+      "label": "B-authority",
+      "differences": [],
+      "aTicks": 78699173769313,
+      "bTicks": 78699173769313,
+      "parties": 1449,
+      "rosters": 3884
+    },
+    {
+      "label": "A-returned",
+      "differences": [],
+      "aTicks": 78699240275926,
+      "bTicks": 78699240275926,
+      "parties": 1449,
+      "rosters": 3884
+    }
+  ],
+  "worldStates": [
+    {
+      "side": "server",
+      "state": {
+        "campaign": "RVLgBrkkFApz",
+        "ticks": 78699173769313,
+        "parties": 1449,
+        "unregisteredParties": 0,
+        "partyIdentityHash": "918BCFB10EDC9FC93598F6007EB54DF3BA73F4E017D7DBE5FDFF2F1A49C74292",
+        "rosterCount": 3884,
+        "rosterCountsHash": "3825EA7B3A9DB2ACAF0659B57CAA29A8EABC1395CBC6D9FCEED67E35E126841A",
+        "rosterXpHash": "446C846E7CE9BF527AFCB541577FCA6CD5DDB89D55ABD3E31067AB2523AED7F5",
+        "volunteerHash": "AC67B9240F3948A3668764B276F9893C0E0F3E0505277E046784743F9A80A790",
+        "heroGoldHash": "7D28153CA7D7B75ECE6FCD18DB407BB75236E9EB32F990E8A345871FC08F8E9B",
+        "nextHandle": 45120,
+        "allocationCounters": {
+          "SandBox.GauntletUI.Map.GauntletMapEventVisual, SandBox.GauntletUI, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1124,
+          "SandBox.View.Map.Visuals.MobilePartyVisual, SandBox.View, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2905,
+          "TaleWorlds.CampaignSystem.Army, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 9,
+          "TaleWorlds.CampaignSystem.CharacterDevelopment.HeroDeveloper, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2940,
+          "TaleWorlds.CampaignSystem.CharacterDevelopment.PerkObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 374,
+          "TaleWorlds.CampaignSystem.CharacterDevelopment.TraitObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 25,
+          "TaleWorlds.CampaignSystem.CharacterObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 5366,
+          "TaleWorlds.CampaignSystem.Clan, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 99,
+          "TaleWorlds.CampaignSystem.CraftingSystem.CraftingOrder, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 319,
+          "TaleWorlds.CampaignSystem.CultureObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 16,
+          "TaleWorlds.CampaignSystem.Hero, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2945,
+          "TaleWorlds.CampaignSystem.Kingdom, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 8,
+          "TaleWorlds.CampaignSystem.MapEvents.FieldBattleEventComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1122,
+          "TaleWorlds.CampaignSystem.MapEvents.MapEvent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1124,
+          "TaleWorlds.CampaignSystem.MapEvents.MapEventParty, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 79,
+          "TaleWorlds.CampaignSystem.MapEvents.MapEventSide, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 36,
+          "TaleWorlds.CampaignSystem.MapEvents.RaidEventComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1112,
+          "TaleWorlds.CampaignSystem.Naval.Figurehead, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 16,
+          "TaleWorlds.CampaignSystem.Party.MobileParty, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2907,
+          "TaleWorlds.CampaignSystem.Party.MobilePartyAi, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2904,
+          "TaleWorlds.CampaignSystem.Party.PartyBase, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 3400,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.BanditPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2882,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.CaravanPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2899,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.GarrisonPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 122,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.LordPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2895,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.MilitiaPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2849,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.PatrolPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 313,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.VillagerPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2903,
+          "TaleWorlds.CampaignSystem.Party.PartyTemplateObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 91,
+          "TaleWorlds.CampaignSystem.PolicyObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 32,
+          "TaleWorlds.CampaignSystem.Roster.ItemRoster, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2445,
+          "TaleWorlds.CampaignSystem.Roster.TroopRoster, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 4178,
+          "TaleWorlds.CampaignSystem.Settlements.Alley, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 160,
+          "TaleWorlds.CampaignSystem.Settlements.Buildings.Building, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1853,
+          "TaleWorlds.CampaignSystem.Settlements.Hideout, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 116,
+          "TaleWorlds.CampaignSystem.Settlements.Locations.Location, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1051,
+          "TaleWorlds.CampaignSystem.Settlements.Settlement, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 502,
+          "TaleWorlds.CampaignSystem.Settlements.Town, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 120,
+          "TaleWorlds.CampaignSystem.Settlements.TownMarketData, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 120,
+          "TaleWorlds.CampaignSystem.Settlements.Village, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 275,
+          "TaleWorlds.CampaignSystem.Settlements.VillageType, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 22,
+          "TaleWorlds.CampaignSystem.Settlements.Workshops.Workshop, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 214,
+          "TaleWorlds.CampaignSystem.Settlements.Workshops.WorkshopType, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 12,
+          "TaleWorlds.CampaignSystem.Siege.BesiegerCamp, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2,
+          "TaleWorlds.CampaignSystem.Siege.SiegeEvent+SiegeEngineConstructionProgress, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 17,
+          "TaleWorlds.CampaignSystem.Siege.SiegeEvent+SiegeEnginesContainer, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 4,
+          "TaleWorlds.CampaignSystem.Siege.SiegeEvent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2,
+          "TaleWorlds.CampaignSystem.Siege.SiegeStrategy, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 7,
+          "TaleWorlds.CampaignSystem.StanceLink, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 4774,
+          "TaleWorlds.CampaignSystem.TroopUpgradeTracker, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1124,
+          "TaleWorlds.Core.CharacterAttribute, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 6,
+          "TaleWorlds.Core.CraftingPiece, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 833,
+          "TaleWorlds.Core.CraftingTemplate, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 12,
+          "TaleWorlds.Core.Equipment, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 7542,
+          "TaleWorlds.Core.ItemCategory, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 68,
+          "TaleWorlds.Core.ItemModifier, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 94,
+          "TaleWorlds.Core.ItemModifierGroup, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 20,
+          "TaleWorlds.Core.ItemObject, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1285,
+          "TaleWorlds.Core.MBBodyProperty, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1183,
+          "TaleWorlds.Core.MBCharacterSkills, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 716,
+          "TaleWorlds.Core.MBEquipmentRoster, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2917,
+          "TaleWorlds.Core.Monster, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 17,
+          "TaleWorlds.Core.SiegeEngineType, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 15,
+          "TaleWorlds.Core.SkillObject, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 18
+        },
+        "allocationCounterHash": "FA840AB57806E4FE783C025200B38ECC7AE85A24591F5C2E603F64FBA902DA32",
+        "npcSample": [
+          {
+            "handle": 7983,
+            "id": "player_party",
+            "x": 660.7773,
+            "y": 278.1635,
+            "troops": 1,
+            "wounded": 0,
+            "hero": "main_hero",
+            "clan": "player_faction",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 7991,
+            "id": "lord_2_4_1_party_1",
+            "x": 428.5062,
+            "y": 515.0888,
+            "troops": 111,
+            "wounded": 0,
+            "hero": "lord_2_4_1",
+            "clan": "clan_sturgia_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 7999,
+            "id": "lord_3_8_party_1",
+            "x": 620.9501,
+            "y": 178.120834,
+            "troops": 112,
+            "wounded": 1,
+            "hero": "lord_3_8",
+            "clan": "clan_aserai_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8007,
+            "id": "lord_6_1_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 221,
+            "wounded": 40,
+            "hero": "lord_6_1",
+            "clan": "clan_khuzait_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8008,
+            "id": "lord_6_2_party_1",
+            "x": 680.9754,
+            "y": 480.9313,
+            "troops": 110,
+            "wounded": 17,
+            "hero": "lord_6_2",
+            "clan": "clan_khuzait_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8009,
+            "id": "lord_6_10_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 107,
+            "wounded": 23,
+            "hero": "lord_6_10",
+            "clan": "clan_khuzait_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8017,
+            "id": "lord_6_4_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 107,
+            "wounded": 25,
+            "hero": "lord_6_4",
+            "clan": "clan_khuzait_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8018,
+            "id": "lord_6_81_party_1",
+            "x": 680.966,
+            "y": 481.89975,
+            "troops": 75,
+            "wounded": 8,
+            "hero": "lord_6_81",
+            "clan": "clan_khuzait_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8026,
+            "id": "lord_6_15_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 105,
+            "wounded": 21,
+            "hero": "lord_6_15",
+            "clan": "clan_khuzait_3",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8027,
+            "id": "lord_6_12_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 110,
+            "wounded": 19,
+            "hero": "lord_6_12",
+            "clan": "clan_khuzait_3",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8034,
+            "id": "lord_1_1_party_1",
+            "x": 680.9879,
+            "y": 481.41095,
+            "troops": 166,
+            "wounded": 46,
+            "hero": "lord_1_1",
+            "clan": "clan_empire_north_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8035,
+            "id": "lord_1_41_party_1",
+            "x": 463.2814,
+            "y": 471.1416,
+            "troops": 160,
+            "wounded": 0,
+            "hero": "lord_1_41",
+            "clan": "clan_empire_north_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8036,
+            "id": "lord_1_21_party_1",
+            "x": 468.724274,
+            "y": 454.494659,
+            "troops": 173,
+            "wounded": 0,
+            "hero": "lord_1_21",
+            "clan": "clan_empire_north_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8042,
+            "id": "lord_1_3_party_1",
+            "x": 680.914063,
+            "y": 482.353943,
+            "troops": 106,
+            "wounded": 41,
+            "hero": "lord_1_3",
+            "clan": "clan_empire_north_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8043,
+            "id": "lord_1_22_party_1",
+            "x": 680.01886,
+            "y": 481.279663,
+            "troops": 124,
+            "wounded": 40,
+            "hero": "lord_1_22",
+            "clan": "clan_empire_north_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8044,
+            "id": "lord_1_1_4_party_1",
+            "x": 680.36615,
+            "y": 481.093445,
+            "troops": 94,
+            "wounded": 33,
+            "hero": "lord_1_1_4",
+            "clan": "clan_empire_north_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8052,
+            "id": "lord_1_5_party_1",
+            "x": 680.2758,
+            "y": 481.129822,
+            "troops": 119,
+            "wounded": 50,
+            "hero": "lord_1_5",
+            "clan": "clan_empire_north_3",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8053,
+            "id": "lord_1_1_8_party_1",
+            "x": 681.3063,
+            "y": 482.000854,
+            "troops": 110,
+            "wounded": 46,
+            "hero": "lord_1_1_8",
+            "clan": "clan_empire_north_3",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8061,
+            "id": "lord_1_20_party_1",
+            "x": 679.9421,
+            "y": 480.575928,
+            "troops": 101,
+            "wounded": 34,
+            "hero": "lord_1_20",
+            "clan": "clan_empire_north_4",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8062,
+            "id": "lord_1_1_12_party_1",
+            "x": 680.4213,
+            "y": 481.525482,
+            "troops": 84,
+            "wounded": 32,
+            "hero": "lord_1_1_12",
+            "clan": "clan_empire_north_4",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8070,
+            "id": "lord_1_50_party_1",
+            "x": 681.2532,
+            "y": 480.803528,
+            "troops": 103,
+            "wounded": 40,
+            "hero": "lord_1_50",
+            "clan": "clan_empire_north_5",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8071,
+            "id": "lord_1_1_14_party_1",
+            "x": 680.5317,
+            "y": 482.354248,
+            "troops": 59,
+            "wounded": 17,
+            "hero": "lord_1_1_14",
+            "clan": "clan_empire_north_5",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8246,
+            "id": "lord_NE9_l_party_1",
+            "x": 447.8718,
+            "y": 438.2747,
+            "troops": 107,
+            "wounded": 0,
+            "hero": "lord_NE9_l",
+            "clan": "clan_empire_north_9",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8254,
+            "id": "lord_1_34_party_1",
+            "x": 401.418945,
+            "y": 331.0739,
+            "troops": 157,
+            "wounded": 0,
+            "hero": "lord_1_34",
+            "clan": "clan_empire_west_1",
+            "active": true,
+            "movingNpc": true
+          }
+        ]
+      }
+    },
+    {
+      "side": "client1",
+      "state": {
+        "campaign": "RVLgBrkkFApz",
+        "ticks": 78699173769313,
+        "parties": 1449,
+        "unregisteredParties": 0,
+        "partyIdentityHash": "918BCFB10EDC9FC93598F6007EB54DF3BA73F4E017D7DBE5FDFF2F1A49C74292",
+        "rosterCount": 3884,
+        "rosterCountsHash": "3825EA7B3A9DB2ACAF0659B57CAA29A8EABC1395CBC6D9FCEED67E35E126841A",
+        "rosterXpHash": "446C846E7CE9BF527AFCB541577FCA6CD5DDB89D55ABD3E31067AB2523AED7F5",
+        "volunteerHash": "AC67B9240F3948A3668764B276F9893C0E0F3E0505277E046784743F9A80A790",
+        "heroGoldHash": "7D28153CA7D7B75ECE6FCD18DB407BB75236E9EB32F990E8A345871FC08F8E9B",
+        "nextHandle": 45120,
+        "allocationCounters": {
+          "SandBox.GauntletUI.Map.GauntletMapEventVisual, SandBox.GauntletUI, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1124,
+          "SandBox.View.Map.Visuals.MobilePartyVisual, SandBox.View, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2905,
+          "TaleWorlds.CampaignSystem.Army, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 9,
+          "TaleWorlds.CampaignSystem.CharacterDevelopment.HeroDeveloper, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2940,
+          "TaleWorlds.CampaignSystem.CharacterDevelopment.PerkObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 374,
+          "TaleWorlds.CampaignSystem.CharacterDevelopment.TraitObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 25,
+          "TaleWorlds.CampaignSystem.CharacterObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 5366,
+          "TaleWorlds.CampaignSystem.Clan, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 99,
+          "TaleWorlds.CampaignSystem.CraftingSystem.CraftingOrder, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 319,
+          "TaleWorlds.CampaignSystem.CultureObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 16,
+          "TaleWorlds.CampaignSystem.Hero, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2945,
+          "TaleWorlds.CampaignSystem.Kingdom, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 8,
+          "TaleWorlds.CampaignSystem.MapEvents.FieldBattleEventComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1122,
+          "TaleWorlds.CampaignSystem.MapEvents.MapEvent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1124,
+          "TaleWorlds.CampaignSystem.MapEvents.MapEventParty, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 79,
+          "TaleWorlds.CampaignSystem.MapEvents.MapEventSide, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 36,
+          "TaleWorlds.CampaignSystem.MapEvents.RaidEventComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1112,
+          "TaleWorlds.CampaignSystem.Naval.Figurehead, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 16,
+          "TaleWorlds.CampaignSystem.Party.MobileParty, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2907,
+          "TaleWorlds.CampaignSystem.Party.MobilePartyAi, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2904,
+          "TaleWorlds.CampaignSystem.Party.PartyBase, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 3400,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.BanditPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2882,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.CaravanPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2899,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.GarrisonPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 122,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.LordPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2895,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.MilitiaPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2849,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.PatrolPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 313,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.VillagerPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2903,
+          "TaleWorlds.CampaignSystem.Party.PartyTemplateObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 91,
+          "TaleWorlds.CampaignSystem.PolicyObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 32,
+          "TaleWorlds.CampaignSystem.Roster.ItemRoster, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2688,
+          "TaleWorlds.CampaignSystem.Roster.TroopRoster, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 4179,
+          "TaleWorlds.CampaignSystem.Settlements.Alley, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 160,
+          "TaleWorlds.CampaignSystem.Settlements.Buildings.Building, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1853,
+          "TaleWorlds.CampaignSystem.Settlements.Hideout, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 116,
+          "TaleWorlds.CampaignSystem.Settlements.Locations.Location, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1051,
+          "TaleWorlds.CampaignSystem.Settlements.Settlement, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 502,
+          "TaleWorlds.CampaignSystem.Settlements.Town, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 120,
+          "TaleWorlds.CampaignSystem.Settlements.TownMarketData, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 120,
+          "TaleWorlds.CampaignSystem.Settlements.Village, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 275,
+          "TaleWorlds.CampaignSystem.Settlements.VillageType, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 22,
+          "TaleWorlds.CampaignSystem.Settlements.Workshops.Workshop, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 214,
+          "TaleWorlds.CampaignSystem.Settlements.Workshops.WorkshopType, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 12,
+          "TaleWorlds.CampaignSystem.Siege.BesiegerCamp, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2,
+          "TaleWorlds.CampaignSystem.Siege.SiegeEvent+SiegeEngineConstructionProgress, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 17,
+          "TaleWorlds.CampaignSystem.Siege.SiegeEvent+SiegeEnginesContainer, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 4,
+          "TaleWorlds.CampaignSystem.Siege.SiegeEvent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2,
+          "TaleWorlds.CampaignSystem.Siege.SiegeStrategy, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 7,
+          "TaleWorlds.CampaignSystem.StanceLink, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 4774,
+          "TaleWorlds.CampaignSystem.TroopUpgradeTracker, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1124,
+          "TaleWorlds.Core.CharacterAttribute, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 6,
+          "TaleWorlds.Core.CraftingPiece, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 833,
+          "TaleWorlds.Core.CraftingTemplate, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 12,
+          "TaleWorlds.Core.Equipment, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 7542,
+          "TaleWorlds.Core.ItemCategory, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 68,
+          "TaleWorlds.Core.ItemModifier, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 94,
+          "TaleWorlds.Core.ItemModifierGroup, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 20,
+          "TaleWorlds.Core.ItemObject, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1285,
+          "TaleWorlds.Core.MBBodyProperty, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1183,
+          "TaleWorlds.Core.MBCharacterSkills, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 716,
+          "TaleWorlds.Core.MBEquipmentRoster, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2917,
+          "TaleWorlds.Core.Monster, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 17,
+          "TaleWorlds.Core.SiegeEngineType, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 15,
+          "TaleWorlds.Core.SkillObject, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 18
+        },
+        "allocationCounterHash": "98FB80CF35FC12A960C528DCCD7284C4FE4BD4CEDF114261AB7EFDC0C0A688E9",
+        "npcSample": [
+          {
+            "handle": 7983,
+            "id": "player_party",
+            "x": 660.7773,
+            "y": 278.1635,
+            "troops": 1,
+            "wounded": 0,
+            "hero": "main_hero",
+            "clan": "player_faction",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 7991,
+            "id": "lord_2_4_1_party_1",
+            "x": 428.353333,
+            "y": 515.1163,
+            "troops": 111,
+            "wounded": 0,
+            "hero": "lord_2_4_1",
+            "clan": "clan_sturgia_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 7999,
+            "id": "lord_3_8_party_1",
+            "x": 621.1409,
+            "y": 177.8075,
+            "troops": 112,
+            "wounded": 1,
+            "hero": "lord_3_8",
+            "clan": "clan_aserai_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8007,
+            "id": "lord_6_1_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 221,
+            "wounded": 40,
+            "hero": "lord_6_1",
+            "clan": "clan_khuzait_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8008,
+            "id": "lord_6_2_party_1",
+            "x": 680.9754,
+            "y": 480.9313,
+            "troops": 110,
+            "wounded": 17,
+            "hero": "lord_6_2",
+            "clan": "clan_khuzait_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8009,
+            "id": "lord_6_10_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 107,
+            "wounded": 23,
+            "hero": "lord_6_10",
+            "clan": "clan_khuzait_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8017,
+            "id": "lord_6_4_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 107,
+            "wounded": 25,
+            "hero": "lord_6_4",
+            "clan": "clan_khuzait_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8018,
+            "id": "lord_6_81_party_1",
+            "x": 680.966,
+            "y": 481.89975,
+            "troops": 75,
+            "wounded": 8,
+            "hero": "lord_6_81",
+            "clan": "clan_khuzait_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8026,
+            "id": "lord_6_15_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 105,
+            "wounded": 21,
+            "hero": "lord_6_15",
+            "clan": "clan_khuzait_3",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8027,
+            "id": "lord_6_12_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 110,
+            "wounded": 19,
+            "hero": "lord_6_12",
+            "clan": "clan_khuzait_3",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8034,
+            "id": "lord_1_1_party_1",
+            "x": 680.9879,
+            "y": 481.41095,
+            "troops": 166,
+            "wounded": 46,
+            "hero": "lord_1_1",
+            "clan": "clan_empire_north_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8035,
+            "id": "lord_1_41_party_1",
+            "x": 463.2814,
+            "y": 471.1416,
+            "troops": 160,
+            "wounded": 0,
+            "hero": "lord_1_41",
+            "clan": "clan_empire_north_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8036,
+            "id": "lord_1_21_party_1",
+            "x": 468.6985,
+            "y": 454.5736,
+            "troops": 173,
+            "wounded": 0,
+            "hero": "lord_1_21",
+            "clan": "clan_empire_north_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8042,
+            "id": "lord_1_3_party_1",
+            "x": 680.914063,
+            "y": 482.353943,
+            "troops": 106,
+            "wounded": 41,
+            "hero": "lord_1_3",
+            "clan": "clan_empire_north_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8043,
+            "id": "lord_1_22_party_1",
+            "x": 680.01886,
+            "y": 481.279663,
+            "troops": 124,
+            "wounded": 40,
+            "hero": "lord_1_22",
+            "clan": "clan_empire_north_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8044,
+            "id": "lord_1_1_4_party_1",
+            "x": 680.36615,
+            "y": 481.093445,
+            "troops": 94,
+            "wounded": 33,
+            "hero": "lord_1_1_4",
+            "clan": "clan_empire_north_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8052,
+            "id": "lord_1_5_party_1",
+            "x": 680.2758,
+            "y": 481.129822,
+            "troops": 119,
+            "wounded": 50,
+            "hero": "lord_1_5",
+            "clan": "clan_empire_north_3",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8053,
+            "id": "lord_1_1_8_party_1",
+            "x": 681.3063,
+            "y": 482.000854,
+            "troops": 110,
+            "wounded": 46,
+            "hero": "lord_1_1_8",
+            "clan": "clan_empire_north_3",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8061,
+            "id": "lord_1_20_party_1",
+            "x": 679.9421,
+            "y": 480.575928,
+            "troops": 101,
+            "wounded": 34,
+            "hero": "lord_1_20",
+            "clan": "clan_empire_north_4",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8062,
+            "id": "lord_1_1_12_party_1",
+            "x": 680.4213,
+            "y": 481.525482,
+            "troops": 84,
+            "wounded": 32,
+            "hero": "lord_1_1_12",
+            "clan": "clan_empire_north_4",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8070,
+            "id": "lord_1_50_party_1",
+            "x": 681.2532,
+            "y": 480.803528,
+            "troops": 103,
+            "wounded": 40,
+            "hero": "lord_1_50",
+            "clan": "clan_empire_north_5",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8071,
+            "id": "lord_1_1_14_party_1",
+            "x": 680.5317,
+            "y": 482.354248,
+            "troops": 59,
+            "wounded": 17,
+            "hero": "lord_1_1_14",
+            "clan": "clan_empire_north_5",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8246,
+            "id": "lord_NE9_l_party_1",
+            "x": 447.8718,
+            "y": 438.2747,
+            "troops": 107,
+            "wounded": 0,
+            "hero": "lord_NE9_l",
+            "clan": "clan_empire_north_9",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8254,
+            "id": "lord_1_34_party_1",
+            "x": 401.503937,
+            "y": 330.960876,
+            "troops": 157,
+            "wounded": 0,
+            "hero": "lord_1_34",
+            "clan": "clan_empire_west_1",
+            "active": true,
+            "movingNpc": true
+          }
+        ]
+      }
+    },
+    {
+      "side": "server",
+      "state": {
+        "campaign": "RVLgBrkkFApz",
+        "ticks": 78699240275926,
+        "parties": 1449,
+        "unregisteredParties": 0,
+        "partyIdentityHash": "918BCFB10EDC9FC93598F6007EB54DF3BA73F4E017D7DBE5FDFF2F1A49C74292",
+        "rosterCount": 3884,
+        "rosterCountsHash": "F086511FC9157AF8CC80FFAA1FCB2C022B867EF4CB1DCFFBED532D13E44E18B6",
+        "rosterXpHash": "7A61465D6A908AF58887D19B653BC33F643AE99D30F40243866BCDD8761AE320",
+        "volunteerHash": "39A10AB84C7EAEBD15678EE2C218AB2DEAB01C322AB7AC7DE8F108A9AD55A768",
+        "heroGoldHash": "2FE7E287B899E50DDEBD1A60A283E587893B4DEEBA86A3B68EEFB6FA1A6393C5",
+        "nextHandle": 45121,
+        "allocationCounters": {
+          "SandBox.GauntletUI.Map.GauntletMapEventVisual, SandBox.GauntletUI, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1124,
+          "SandBox.View.Map.Visuals.MobilePartyVisual, SandBox.View, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2905,
+          "TaleWorlds.CampaignSystem.Army, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 9,
+          "TaleWorlds.CampaignSystem.CharacterDevelopment.HeroDeveloper, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2940,
+          "TaleWorlds.CampaignSystem.CharacterDevelopment.PerkObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 374,
+          "TaleWorlds.CampaignSystem.CharacterDevelopment.TraitObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 25,
+          "TaleWorlds.CampaignSystem.CharacterObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 5366,
+          "TaleWorlds.CampaignSystem.Clan, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 99,
+          "TaleWorlds.CampaignSystem.CraftingSystem.CraftingOrder, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 319,
+          "TaleWorlds.CampaignSystem.CultureObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 16,
+          "TaleWorlds.CampaignSystem.Hero, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2945,
+          "TaleWorlds.CampaignSystem.Kingdom, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 8,
+          "TaleWorlds.CampaignSystem.MapEvents.FieldBattleEventComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1122,
+          "TaleWorlds.CampaignSystem.MapEvents.MapEvent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1124,
+          "TaleWorlds.CampaignSystem.MapEvents.MapEventParty, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 79,
+          "TaleWorlds.CampaignSystem.MapEvents.MapEventSide, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 36,
+          "TaleWorlds.CampaignSystem.MapEvents.RaidEventComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1112,
+          "TaleWorlds.CampaignSystem.Naval.Figurehead, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 16,
+          "TaleWorlds.CampaignSystem.Party.MobileParty, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2907,
+          "TaleWorlds.CampaignSystem.Party.MobilePartyAi, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2904,
+          "TaleWorlds.CampaignSystem.Party.PartyBase, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 3400,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.BanditPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2882,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.CaravanPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2899,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.GarrisonPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 122,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.LordPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2895,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.MilitiaPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2849,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.PatrolPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 313,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.VillagerPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2903,
+          "TaleWorlds.CampaignSystem.Party.PartyTemplateObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 91,
+          "TaleWorlds.CampaignSystem.PolicyObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 32,
+          "TaleWorlds.CampaignSystem.Roster.ItemRoster, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2688,
+          "TaleWorlds.CampaignSystem.Roster.TroopRoster, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 4181,
+          "TaleWorlds.CampaignSystem.Settlements.Alley, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 160,
+          "TaleWorlds.CampaignSystem.Settlements.Buildings.Building, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1853,
+          "TaleWorlds.CampaignSystem.Settlements.Hideout, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 116,
+          "TaleWorlds.CampaignSystem.Settlements.Locations.Location, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1051,
+          "TaleWorlds.CampaignSystem.Settlements.Settlement, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 502,
+          "TaleWorlds.CampaignSystem.Settlements.Town, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 120,
+          "TaleWorlds.CampaignSystem.Settlements.TownMarketData, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 120,
+          "TaleWorlds.CampaignSystem.Settlements.Village, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 275,
+          "TaleWorlds.CampaignSystem.Settlements.VillageType, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 22,
+          "TaleWorlds.CampaignSystem.Settlements.Workshops.Workshop, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 214,
+          "TaleWorlds.CampaignSystem.Settlements.Workshops.WorkshopType, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 12,
+          "TaleWorlds.CampaignSystem.Siege.BesiegerCamp, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2,
+          "TaleWorlds.CampaignSystem.Siege.SiegeEvent+SiegeEngineConstructionProgress, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 17,
+          "TaleWorlds.CampaignSystem.Siege.SiegeEvent+SiegeEnginesContainer, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 4,
+          "TaleWorlds.CampaignSystem.Siege.SiegeEvent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2,
+          "TaleWorlds.CampaignSystem.Siege.SiegeStrategy, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 7,
+          "TaleWorlds.CampaignSystem.StanceLink, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 4774,
+          "TaleWorlds.CampaignSystem.TroopUpgradeTracker, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1124,
+          "TaleWorlds.Core.CharacterAttribute, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 6,
+          "TaleWorlds.Core.CraftingPiece, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 833,
+          "TaleWorlds.Core.CraftingTemplate, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 12,
+          "TaleWorlds.Core.Equipment, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 7542,
+          "TaleWorlds.Core.ItemCategory, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 68,
+          "TaleWorlds.Core.ItemModifier, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 94,
+          "TaleWorlds.Core.ItemModifierGroup, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 20,
+          "TaleWorlds.Core.ItemObject, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1285,
+          "TaleWorlds.Core.MBBodyProperty, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1183,
+          "TaleWorlds.Core.MBCharacterSkills, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 716,
+          "TaleWorlds.Core.MBEquipmentRoster, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2917,
+          "TaleWorlds.Core.Monster, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 17,
+          "TaleWorlds.Core.SiegeEngineType, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 15,
+          "TaleWorlds.Core.SkillObject, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 18
+        },
+        "allocationCounterHash": "3B5B7F1A26DF9DBE5A5BF8F49387957AD3AD8AD8EA6D190DD3421EA6CCF683ED",
+        "npcSample": [
+          {
+            "handle": 7983,
+            "id": "player_party",
+            "x": 658.7773,
+            "y": 278.1635,
+            "troops": 1,
+            "wounded": 0,
+            "hero": "main_hero",
+            "clan": "player_faction",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 7991,
+            "id": "lord_2_4_1_party_1",
+            "x": 423.953522,
+            "y": 515.877869,
+            "troops": 111,
+            "wounded": 0,
+            "hero": "lord_2_4_1",
+            "clan": "clan_sturgia_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 7999,
+            "id": "lord_3_8_party_1",
+            "x": 620.9501,
+            "y": 178.120834,
+            "troops": 112,
+            "wounded": 1,
+            "hero": "lord_3_8",
+            "clan": "clan_aserai_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8007,
+            "id": "lord_6_1_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 221,
+            "wounded": 40,
+            "hero": "lord_6_1",
+            "clan": "clan_khuzait_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8008,
+            "id": "lord_6_2_party_1",
+            "x": 680.9754,
+            "y": 480.9313,
+            "troops": 110,
+            "wounded": 17,
+            "hero": "lord_6_2",
+            "clan": "clan_khuzait_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8009,
+            "id": "lord_6_10_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 107,
+            "wounded": 23,
+            "hero": "lord_6_10",
+            "clan": "clan_khuzait_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8017,
+            "id": "lord_6_4_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 107,
+            "wounded": 25,
+            "hero": "lord_6_4",
+            "clan": "clan_khuzait_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8018,
+            "id": "lord_6_81_party_1",
+            "x": 680.966,
+            "y": 481.89975,
+            "troops": 75,
+            "wounded": 8,
+            "hero": "lord_6_81",
+            "clan": "clan_khuzait_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8026,
+            "id": "lord_6_15_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 105,
+            "wounded": 21,
+            "hero": "lord_6_15",
+            "clan": "clan_khuzait_3",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8027,
+            "id": "lord_6_12_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 110,
+            "wounded": 19,
+            "hero": "lord_6_12",
+            "clan": "clan_khuzait_3",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8034,
+            "id": "lord_1_1_party_1",
+            "x": 680.9879,
+            "y": 481.41095,
+            "troops": 166,
+            "wounded": 46,
+            "hero": "lord_1_1",
+            "clan": "clan_empire_north_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8035,
+            "id": "lord_1_41_party_1",
+            "x": 463.2814,
+            "y": 471.1416,
+            "troops": 163,
+            "wounded": 0,
+            "hero": "lord_1_41",
+            "clan": "clan_empire_north_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8036,
+            "id": "lord_1_21_party_1",
+            "x": 467.943665,
+            "y": 456.882843,
+            "troops": 173,
+            "wounded": 0,
+            "hero": "lord_1_21",
+            "clan": "clan_empire_north_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8042,
+            "id": "lord_1_3_party_1",
+            "x": 680.914063,
+            "y": 482.353943,
+            "troops": 106,
+            "wounded": 41,
+            "hero": "lord_1_3",
+            "clan": "clan_empire_north_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8043,
+            "id": "lord_1_22_party_1",
+            "x": 680.01886,
+            "y": 481.279663,
+            "troops": 124,
+            "wounded": 40,
+            "hero": "lord_1_22",
+            "clan": "clan_empire_north_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8044,
+            "id": "lord_1_1_4_party_1",
+            "x": 680.36615,
+            "y": 481.093445,
+            "troops": 94,
+            "wounded": 33,
+            "hero": "lord_1_1_4",
+            "clan": "clan_empire_north_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8052,
+            "id": "lord_1_5_party_1",
+            "x": 680.2758,
+            "y": 481.129822,
+            "troops": 119,
+            "wounded": 50,
+            "hero": "lord_1_5",
+            "clan": "clan_empire_north_3",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8053,
+            "id": "lord_1_1_8_party_1",
+            "x": 681.3063,
+            "y": 482.000854,
+            "troops": 110,
+            "wounded": 46,
+            "hero": "lord_1_1_8",
+            "clan": "clan_empire_north_3",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8061,
+            "id": "lord_1_20_party_1",
+            "x": 679.9421,
+            "y": 480.575928,
+            "troops": 101,
+            "wounded": 34,
+            "hero": "lord_1_20",
+            "clan": "clan_empire_north_4",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8062,
+            "id": "lord_1_1_12_party_1",
+            "x": 680.4213,
+            "y": 481.525482,
+            "troops": 84,
+            "wounded": 32,
+            "hero": "lord_1_1_12",
+            "clan": "clan_empire_north_4",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8070,
+            "id": "lord_1_50_party_1",
+            "x": 681.2532,
+            "y": 480.803528,
+            "troops": 103,
+            "wounded": 40,
+            "hero": "lord_1_50",
+            "clan": "clan_empire_north_5",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8071,
+            "id": "lord_1_1_14_party_1",
+            "x": 680.5317,
+            "y": 482.354248,
+            "troops": 59,
+            "wounded": 17,
+            "hero": "lord_1_1_14",
+            "clan": "clan_empire_north_5",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8246,
+            "id": "lord_NE9_l_party_1",
+            "x": 447.8718,
+            "y": 438.2747,
+            "troops": 107,
+            "wounded": 0,
+            "hero": "lord_NE9_l",
+            "clan": "clan_empire_north_9",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8254,
+            "id": "lord_1_34_party_1",
+            "x": 403.936279,
+            "y": 327.735046,
+            "troops": 157,
+            "wounded": 0,
+            "hero": "lord_1_34",
+            "clan": "clan_empire_west_1",
+            "active": true,
+            "movingNpc": true
+          }
+        ]
+      }
+    },
+    {
+      "side": "client1",
+      "state": {
+        "campaign": "RVLgBrkkFApz",
+        "ticks": 78699240275926,
+        "parties": 1449,
+        "unregisteredParties": 0,
+        "partyIdentityHash": "918BCFB10EDC9FC93598F6007EB54DF3BA73F4E017D7DBE5FDFF2F1A49C74292",
+        "rosterCount": 3884,
+        "rosterCountsHash": "F086511FC9157AF8CC80FFAA1FCB2C022B867EF4CB1DCFFBED532D13E44E18B6",
+        "rosterXpHash": "7A61465D6A908AF58887D19B653BC33F643AE99D30F40243866BCDD8761AE320",
+        "volunteerHash": "39A10AB84C7EAEBD15678EE2C218AB2DEAB01C322AB7AC7DE8F108A9AD55A768",
+        "heroGoldHash": "2FE7E287B899E50DDEBD1A60A283E587893B4DEEBA86A3B68EEFB6FA1A6393C5",
+        "nextHandle": 45121,
+        "allocationCounters": {
+          "SandBox.GauntletUI.Map.GauntletMapEventVisual, SandBox.GauntletUI, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1124,
+          "SandBox.View.Map.Visuals.MobilePartyVisual, SandBox.View, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2905,
+          "TaleWorlds.CampaignSystem.Army, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 9,
+          "TaleWorlds.CampaignSystem.CharacterDevelopment.HeroDeveloper, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2940,
+          "TaleWorlds.CampaignSystem.CharacterDevelopment.PerkObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 374,
+          "TaleWorlds.CampaignSystem.CharacterDevelopment.TraitObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 25,
+          "TaleWorlds.CampaignSystem.CharacterObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 5366,
+          "TaleWorlds.CampaignSystem.Clan, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 99,
+          "TaleWorlds.CampaignSystem.CraftingSystem.CraftingOrder, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 319,
+          "TaleWorlds.CampaignSystem.CultureObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 16,
+          "TaleWorlds.CampaignSystem.Hero, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2945,
+          "TaleWorlds.CampaignSystem.Kingdom, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 8,
+          "TaleWorlds.CampaignSystem.MapEvents.FieldBattleEventComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1122,
+          "TaleWorlds.CampaignSystem.MapEvents.MapEvent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1124,
+          "TaleWorlds.CampaignSystem.MapEvents.MapEventParty, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 79,
+          "TaleWorlds.CampaignSystem.MapEvents.MapEventSide, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 36,
+          "TaleWorlds.CampaignSystem.MapEvents.RaidEventComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1112,
+          "TaleWorlds.CampaignSystem.Naval.Figurehead, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 16,
+          "TaleWorlds.CampaignSystem.Party.MobileParty, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2907,
+          "TaleWorlds.CampaignSystem.Party.MobilePartyAi, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2904,
+          "TaleWorlds.CampaignSystem.Party.PartyBase, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 3400,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.BanditPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2882,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.CaravanPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2899,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.GarrisonPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 122,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.LordPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2895,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.MilitiaPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2849,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.PatrolPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 313,
+          "TaleWorlds.CampaignSystem.Party.PartyComponents.VillagerPartyComponent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2903,
+          "TaleWorlds.CampaignSystem.Party.PartyTemplateObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 91,
+          "TaleWorlds.CampaignSystem.PolicyObject, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 32,
+          "TaleWorlds.CampaignSystem.Roster.ItemRoster, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2688,
+          "TaleWorlds.CampaignSystem.Roster.TroopRoster, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 4180,
+          "TaleWorlds.CampaignSystem.Settlements.Alley, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 160,
+          "TaleWorlds.CampaignSystem.Settlements.Buildings.Building, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1853,
+          "TaleWorlds.CampaignSystem.Settlements.Hideout, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 116,
+          "TaleWorlds.CampaignSystem.Settlements.Locations.Location, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1051,
+          "TaleWorlds.CampaignSystem.Settlements.Settlement, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 502,
+          "TaleWorlds.CampaignSystem.Settlements.Town, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 120,
+          "TaleWorlds.CampaignSystem.Settlements.TownMarketData, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 120,
+          "TaleWorlds.CampaignSystem.Settlements.Village, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 275,
+          "TaleWorlds.CampaignSystem.Settlements.VillageType, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 22,
+          "TaleWorlds.CampaignSystem.Settlements.Workshops.Workshop, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 214,
+          "TaleWorlds.CampaignSystem.Settlements.Workshops.WorkshopType, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 12,
+          "TaleWorlds.CampaignSystem.Siege.BesiegerCamp, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2,
+          "TaleWorlds.CampaignSystem.Siege.SiegeEvent+SiegeEngineConstructionProgress, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 17,
+          "TaleWorlds.CampaignSystem.Siege.SiegeEvent+SiegeEnginesContainer, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 4,
+          "TaleWorlds.CampaignSystem.Siege.SiegeEvent, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2,
+          "TaleWorlds.CampaignSystem.Siege.SiegeStrategy, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 7,
+          "TaleWorlds.CampaignSystem.StanceLink, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 4774,
+          "TaleWorlds.CampaignSystem.TroopUpgradeTracker, TaleWorlds.CampaignSystem, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1124,
+          "TaleWorlds.Core.CharacterAttribute, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 6,
+          "TaleWorlds.Core.CraftingPiece, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 833,
+          "TaleWorlds.Core.CraftingTemplate, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 12,
+          "TaleWorlds.Core.Equipment, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 7542,
+          "TaleWorlds.Core.ItemCategory, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 68,
+          "TaleWorlds.Core.ItemModifier, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 94,
+          "TaleWorlds.Core.ItemModifierGroup, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 20,
+          "TaleWorlds.Core.ItemObject, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1285,
+          "TaleWorlds.Core.MBBodyProperty, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 1183,
+          "TaleWorlds.Core.MBCharacterSkills, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 716,
+          "TaleWorlds.Core.MBEquipmentRoster, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 2917,
+          "TaleWorlds.Core.Monster, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 17,
+          "TaleWorlds.Core.SiegeEngineType, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 15,
+          "TaleWorlds.Core.SkillObject, TaleWorlds.Core, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null": 18
+        },
+        "allocationCounterHash": "5686A445FC54401147F0141C91D0B5ECCFB4C82764E9D769923561BFB26AFA16",
+        "npcSample": [
+          {
+            "handle": 7983,
+            "id": "player_party",
+            "x": 658.7773,
+            "y": 278.1635,
+            "troops": 1,
+            "wounded": 0,
+            "hero": "main_hero",
+            "clan": "player_faction",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 7991,
+            "id": "lord_2_4_1_party_1",
+            "x": 423.806,
+            "y": 515.904236,
+            "troops": 111,
+            "wounded": 0,
+            "hero": "lord_2_4_1",
+            "clan": "clan_sturgia_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 7999,
+            "id": "lord_3_8_party_1",
+            "x": 621.1409,
+            "y": 177.8075,
+            "troops": 112,
+            "wounded": 1,
+            "hero": "lord_3_8",
+            "clan": "clan_aserai_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8007,
+            "id": "lord_6_1_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 221,
+            "wounded": 40,
+            "hero": "lord_6_1",
+            "clan": "clan_khuzait_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8008,
+            "id": "lord_6_2_party_1",
+            "x": 680.9754,
+            "y": 480.9313,
+            "troops": 110,
+            "wounded": 17,
+            "hero": "lord_6_2",
+            "clan": "clan_khuzait_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8009,
+            "id": "lord_6_10_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 107,
+            "wounded": 23,
+            "hero": "lord_6_10",
+            "clan": "clan_khuzait_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8017,
+            "id": "lord_6_4_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 107,
+            "wounded": 25,
+            "hero": "lord_6_4",
+            "clan": "clan_khuzait_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8018,
+            "id": "lord_6_81_party_1",
+            "x": 680.966,
+            "y": 481.89975,
+            "troops": 75,
+            "wounded": 8,
+            "hero": "lord_6_81",
+            "clan": "clan_khuzait_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8026,
+            "id": "lord_6_15_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 105,
+            "wounded": 21,
+            "hero": "lord_6_15",
+            "clan": "clan_khuzait_3",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8027,
+            "id": "lord_6_12_party_1",
+            "x": 679.5292,
+            "y": 481.740356,
+            "troops": 110,
+            "wounded": 19,
+            "hero": "lord_6_12",
+            "clan": "clan_khuzait_3",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8034,
+            "id": "lord_1_1_party_1",
+            "x": 680.9879,
+            "y": 481.41095,
+            "troops": 166,
+            "wounded": 46,
+            "hero": "lord_1_1",
+            "clan": "clan_empire_north_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8035,
+            "id": "lord_1_41_party_1",
+            "x": 463.2814,
+            "y": 471.1416,
+            "troops": 163,
+            "wounded": 0,
+            "hero": "lord_1_41",
+            "clan": "clan_empire_north_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8036,
+            "id": "lord_1_21_party_1",
+            "x": 467.9178,
+            "y": 456.961365,
+            "troops": 173,
+            "wounded": 0,
+            "hero": "lord_1_21",
+            "clan": "clan_empire_north_1",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8042,
+            "id": "lord_1_3_party_1",
+            "x": 680.914063,
+            "y": 482.353943,
+            "troops": 106,
+            "wounded": 41,
+            "hero": "lord_1_3",
+            "clan": "clan_empire_north_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8043,
+            "id": "lord_1_22_party_1",
+            "x": 680.01886,
+            "y": 481.279663,
+            "troops": 124,
+            "wounded": 40,
+            "hero": "lord_1_22",
+            "clan": "clan_empire_north_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8044,
+            "id": "lord_1_1_4_party_1",
+            "x": 680.36615,
+            "y": 481.093445,
+            "troops": 94,
+            "wounded": 33,
+            "hero": "lord_1_1_4",
+            "clan": "clan_empire_north_2",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8052,
+            "id": "lord_1_5_party_1",
+            "x": 680.2758,
+            "y": 481.129822,
+            "troops": 119,
+            "wounded": 50,
+            "hero": "lord_1_5",
+            "clan": "clan_empire_north_3",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8053,
+            "id": "lord_1_1_8_party_1",
+            "x": 681.3063,
+            "y": 482.000854,
+            "troops": 110,
+            "wounded": 46,
+            "hero": "lord_1_1_8",
+            "clan": "clan_empire_north_3",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8061,
+            "id": "lord_1_20_party_1",
+            "x": 679.9421,
+            "y": 480.575928,
+            "troops": 101,
+            "wounded": 34,
+            "hero": "lord_1_20",
+            "clan": "clan_empire_north_4",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8062,
+            "id": "lord_1_1_12_party_1",
+            "x": 680.4213,
+            "y": 481.525482,
+            "troops": 84,
+            "wounded": 32,
+            "hero": "lord_1_1_12",
+            "clan": "clan_empire_north_4",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8070,
+            "id": "lord_1_50_party_1",
+            "x": 681.2532,
+            "y": 480.803528,
+            "troops": 103,
+            "wounded": 40,
+            "hero": "lord_1_50",
+            "clan": "clan_empire_north_5",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8071,
+            "id": "lord_1_1_14_party_1",
+            "x": 680.5317,
+            "y": 482.354248,
+            "troops": 59,
+            "wounded": 17,
+            "hero": "lord_1_1_14",
+            "clan": "clan_empire_north_5",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8246,
+            "id": "lord_NE9_l_party_1",
+            "x": 447.8718,
+            "y": 438.2747,
+            "troops": 107,
+            "wounded": 0,
+            "hero": "lord_NE9_l",
+            "clan": "clan_empire_north_9",
+            "active": true,
+            "movingNpc": true
+          },
+          {
+            "handle": 8254,
+            "id": "lord_1_34_party_1",
+            "x": 404.061371,
+            "y": 327.6599,
+            "troops": 157,
+            "wounded": 0,
+            "hero": "lord_1_34",
+            "clan": "clan_empire_west_1",
+            "active": true,
+            "movingNpc": true
+          }
+        ]
+      }
+    }
+  ],
+  "probeAndXpCommands": [
+    {
+      "utc": "2026-10-18T06:11:52.517Z",
+      "side": "server",
+      "name": "coop.debug.authority.allocation_probe",
+      "args": [
+        "create"
+      ],
+      "result": {
+        "name": "coop.debug.authority.allocation_probe",
+        "arguments": [
+          "create"
+        ],
+        "found": true,
+        "output": "{\"id\":\"TroopRoster_Created_4086\",\"handle\":45030,\"retired\":false,\"nextHandle\":45031}",
+        "succeeded": true,
+        "errorCode": null,
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    },
+    {
+      "utc": "2026-10-18T06:11:53.532Z",
+      "side": "client1",
+      "name": "coop.debug.authority.allocation_probe",
+      "args": [
+        "inspect",
+        "TroopRoster_Created_4086"
+      ],
+      "result": {
+        "name": "coop.debug.authority.allocation_probe",
+        "arguments": [
+          "inspect",
+          "TroopRoster_Created_4086"
+        ],
+        "found": true,
+        "output": "{\"id\":\"TroopRoster_Created_4086\",\"handle\":45030,\"retired\":false,\"nextHandle\":45031}",
+        "succeeded": true,
+        "errorCode": null,
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    },
+    {
+      "utc": "2026-10-18T06:11:53.576Z",
+      "side": "server",
+      "name": "coop.debug.authority.allocation_probe",
+      "args": [
+        "retire",
+        "TroopRoster_Created_4086"
+      ],
+      "result": {
+        "name": "coop.debug.authority.allocation_probe",
+        "arguments": [
+          "retire",
+          "TroopRoster_Created_4086"
+        ],
+        "found": true,
+        "output": "{\"id\":\"TroopRoster_Created_4086\",\"handle\":45030,\"retired\":true,\"nextHandle\":45031}",
+        "succeeded": true,
+        "errorCode": null,
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    },
+    {
+      "utc": "2026-10-18T06:11:54.598Z",
+      "side": "client1",
+      "name": "coop.debug.authority.allocation_probe",
+      "args": [
+        "inspect",
+        "TroopRoster_Created_4086"
+      ],
+      "result": {
+        "name": "coop.debug.authority.allocation_probe",
+        "arguments": [
+          "inspect",
+          "TroopRoster_Created_4086"
+        ],
+        "found": true,
+        "output": "Probe identity is absent",
+        "succeeded": false,
+        "errorCode": "probe_absent",
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    },
+    {
+      "utc": "2026-10-18T06:12:08.59Z",
+      "side": "client1",
+      "name": "coop.debug.authority.allocation_probe",
+      "args": [
+        "create"
+      ],
+      "result": {
+        "name": "coop.debug.authority.allocation_probe",
+        "arguments": [
+          "create"
+        ],
+        "found": true,
+        "output": "{\"id\":\"TroopRoster_Created_4178\",\"handle\":45119,\"retired\":false,\"nextHandle\":45120}",
+        "succeeded": true,
+        "errorCode": null,
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    },
+    {
+      "utc": "2026-10-18T06:12:09.611Z",
+      "side": "server",
+      "name": "coop.debug.authority.allocation_probe",
+      "args": [
+        "inspect",
+        "TroopRoster_Created_4178"
+      ],
+      "result": {
+        "name": "coop.debug.authority.allocation_probe",
+        "arguments": [
+          "inspect",
+          "TroopRoster_Created_4178"
+        ],
+        "found": true,
+        "output": "{\"id\":\"TroopRoster_Created_4178\",\"handle\":45119,\"retired\":false,\"nextHandle\":45120}",
+        "succeeded": true,
+        "errorCode": null,
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    },
+    {
+      "utc": "2026-10-18T06:12:09.649Z",
+      "side": "client1",
+      "name": "coop.debug.authority.allocation_probe",
+      "args": [
+        "retire",
+        "TroopRoster_Created_4178"
+      ],
+      "result": {
+        "name": "coop.debug.authority.allocation_probe",
+        "arguments": [
+          "retire",
+          "TroopRoster_Created_4178"
+        ],
+        "found": true,
+        "output": "{\"id\":\"TroopRoster_Created_4178\",\"handle\":45119,\"retired\":true,\"nextHandle\":45120}",
+        "succeeded": true,
+        "errorCode": null,
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    },
+    {
+      "utc": "2026-10-18T06:12:10.668Z",
+      "side": "server",
+      "name": "coop.debug.authority.allocation_probe",
+      "args": [
+        "inspect",
+        "TroopRoster_Created_4178"
+      ],
+      "result": {
+        "name": "coop.debug.authority.allocation_probe",
+        "arguments": [
+          "inspect",
+          "TroopRoster_Created_4178"
+        ],
+        "found": true,
+        "output": "Probe identity is absent",
+        "succeeded": false,
+        "errorCode": "probe_absent",
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    },
+    {
+      "utc": "2026-10-18T06:12:10.686Z",
+      "side": "client1",
+      "name": "coop.debug.mobile_party.character_ids",
+      "args": [
+        "Player"
+      ],
+      "result": {
+        "name": "coop.debug.mobile_party.character_ids",
+        "arguments": [
+          "Player"
+        ],
+        "found": true,
+        "output": "##RandomPlayer  (hero id: Player)\r\nMember roster:\r\nPlayer: number=1 wounded=0 xp=0 hero=True\r\nimperial_recruit: number=4 wounded=0 xp=0 hero=False\r\nPrisoner roster:\r\n",
+        "succeeded": true,
+        "errorCode": null,
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    },
+    {
+      "utc": "2026-10-18T06:12:10.742Z",
+      "side": "client1",
+      "name": "coop.debug.mobile_party.set_troop_state",
+      "args": [
+        "MobileParty_Player",
+        "imperial_recruit",
+        "true",
+        "4",
+        "0",
+        "17"
+      ],
+      "result": {
+        "name": "coop.debug.mobile_party.set_troop_state",
+        "arguments": [
+          "MobileParty_Player",
+          "imperial_recruit",
+          "true",
+          "4",
+          "0",
+          "17"
+        ],
+        "found": true,
+        "output": "TROOP_STATE_SET party=MobileParty_Player character=imperial_recruit oldExists=True oldNumber=4 oldWounded=0 oldXp=0 newExists=True newNumber=4 newWounded=0 newXp=17",
+        "succeeded": true,
+        "errorCode": null,
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    },
+    {
+      "utc": "2026-10-18T06:12:12.252Z",
+      "side": "server",
+      "name": "coop.debug.mobile_party.character_ids",
+      "args": [
+        "Player"
+      ],
+      "result": {
+        "name": "coop.debug.mobile_party.character_ids",
+        "arguments": [
+          "Player"
+        ],
+        "found": true,
+        "output": "##RandomPlayer  (hero id: Player)\r\nMember roster:\r\nPlayer: number=1 wounded=0 xp=0 hero=True\r\nimperial_recruit: number=4 wounded=0 xp=17 hero=False\r\nPrisoner roster:\r\n",
+        "succeeded": true,
+        "errorCode": null,
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    },
+    {
+      "utc": "2026-10-18T06:12:12.269Z",
+      "side": "client1",
+      "name": "coop.debug.mobile_party.character_ids",
+      "args": [
+        "Player"
+      ],
+      "result": {
+        "name": "coop.debug.mobile_party.character_ids",
+        "arguments": [
+          "Player"
+        ],
+        "found": true,
+        "output": "##RandomPlayer  (hero id: Player)\r\nMember roster:\r\nPlayer: number=1 wounded=0 xp=0 hero=True\r\nimperial_recruit: number=4 wounded=0 xp=17 hero=False\r\nPrisoner roster:\r\n",
+        "succeeded": true,
+        "errorCode": null,
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    },
+    {
+      "utc": "2026-10-18T06:12:22.899Z",
+      "side": "client1",
+      "name": "coop.debug.mobile_party.character_ids",
+      "args": [
+        "Player"
+      ],
+      "result": {
+        "name": "coop.debug.mobile_party.character_ids",
+        "arguments": [
+          "Player"
+        ],
+        "found": true,
+        "output": "##RandomPlayer  (hero id: Player)\r\nMember roster:\r\nPlayer: number=1 wounded=0 xp=0 hero=True\r\nimperial_recruit: number=4 wounded=0 xp=17 hero=False\r\nPrisoner roster:\r\n",
+        "succeeded": true,
+        "errorCode": null,
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    },
+    {
+      "utc": "2026-10-18T06:12:24.015Z",
+      "side": "server",
+      "name": "coop.debug.authority.allocation_probe",
+      "args": [
+        "create"
+      ],
+      "result": {
+        "name": "coop.debug.authority.allocation_probe",
+        "arguments": [
+          "create"
+        ],
+        "found": true,
+        "output": "{\"id\":\"TroopRoster_Created_4180\",\"handle\":45120,\"retired\":false,\"nextHandle\":45121}",
+        "succeeded": true,
+        "errorCode": null,
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    },
+    {
+      "utc": "2026-10-18T06:12:25.026Z",
+      "side": "client1",
+      "name": "coop.debug.authority.allocation_probe",
+      "args": [
+        "inspect",
+        "TroopRoster_Created_4180"
+      ],
+      "result": {
+        "name": "coop.debug.authority.allocation_probe",
+        "arguments": [
+          "inspect",
+          "TroopRoster_Created_4180"
+        ],
+        "found": true,
+        "output": "{\"id\":\"TroopRoster_Created_4180\",\"handle\":45120,\"retired\":false,\"nextHandle\":45121}",
+        "succeeded": true,
+        "errorCode": null,
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    },
+    {
+      "utc": "2026-10-18T06:12:25.035Z",
+      "side": "server",
+      "name": "coop.debug.authority.allocation_probe",
+      "args": [
+        "retire",
+        "TroopRoster_Created_4180"
+      ],
+      "result": {
+        "name": "coop.debug.authority.allocation_probe",
+        "arguments": [
+          "retire",
+          "TroopRoster_Created_4180"
+        ],
+        "found": true,
+        "output": "{\"id\":\"TroopRoster_Created_4180\",\"handle\":45120,\"retired\":true,\"nextHandle\":45121}",
+        "succeeded": true,
+        "errorCode": null,
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    },
+    {
+      "utc": "2026-10-18T06:12:26.046Z",
+      "side": "client1",
+      "name": "coop.debug.authority.allocation_probe",
+      "args": [
+        "inspect",
+        "TroopRoster_Created_4180"
+      ],
+      "result": {
+        "name": "coop.debug.authority.allocation_probe",
+        "arguments": [
+          "inspect",
+          "TroopRoster_Created_4180"
+        ],
+        "found": true,
+        "output": "Probe identity is absent",
+        "succeeded": false,
+        "errorCode": "probe_absent",
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    },
+    {
+      "utc": "2026-10-18T06:12:31.164Z",
+      "side": "server",
+      "name": "coop.debug.mobile_party.character_ids",
+      "args": [
+        "Player"
+      ],
+      "result": {
+        "name": "coop.debug.mobile_party.character_ids",
+        "arguments": [
+          "Player"
+        ],
+        "found": true,
+        "output": "##RandomPlayer  (hero id: Player)\r\nMember roster:\r\nPlayer: number=1 wounded=0 xp=0 hero=True\r\nimperial_recruit: number=4 wounded=0 xp=17 hero=False\r\nPrisoner roster:\r\n",
+        "succeeded": true,
+        "errorCode": null,
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    },
+    {
+      "utc": "2026-10-18T06:12:31.183Z",
+      "side": "client1",
+      "name": "coop.debug.mobile_party.character_ids",
+      "args": [
+        "Player"
+      ],
+      "result": {
+        "name": "coop.debug.mobile_party.character_ids",
+        "arguments": [
+          "Player"
+        ],
+        "found": true,
+        "output": "##RandomPlayer  (hero id: Player)\r\nMember roster:\r\nPlayer: number=1 wounded=0 xp=0 hero=True\r\nimperial_recruit: number=4 wounded=0 xp=17 hero=False\r\nPrisoner roster:\r\n",
+        "succeeded": true,
+        "errorCode": null,
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    },
+    {
+      "utc": "2026-10-18T06:12:31.216Z",
+      "side": "server",
+      "name": "coop.debug.mobile_party.set_troop_state",
+      "args": [
+        "MobileParty_Player",
+        "imperial_recruit",
+        "true",
+        "4",
+        "0",
+        "0"
+      ],
+      "result": {
+        "name": "coop.debug.mobile_party.set_troop_state",
+        "arguments": [
+          "MobileParty_Player",
+          "imperial_recruit",
+          "true",
+          "4",
+          "0",
+          "0"
+        ],
+        "found": true,
+        "output": "TROOP_STATE_SET party=MobileParty_Player character=imperial_recruit oldExists=True oldNumber=4 oldWounded=0 oldXp=17 newExists=True newNumber=4 newWounded=0 newXp=0",
+        "succeeded": true,
+        "errorCode": null,
+        "hasStructuredResult": false,
+        "structuredResult": null
+      }
+    }
+  ],
+  "finalParties": [
+    {
+      "side": "server",
+      "state": {
+        "mode": "ListenAuthority",
+        "localControllerId": "LocalA",
+        "mainHeroId": "main_hero",
+        "mainPartyId": "player_party",
+        "campaignId": "RVLgBrkkFApz",
+        "hours": 2186090.007664611,
+        "registeredPlayers": 2,
+        "controllerId": "LocalA",
+        "heroId": "Hero_main_hero",
+        "heroStringId": "main_hero",
+        "clanId": "Clan_player_faction",
+        "characterId": "CharacterObject_main_hero",
+        "gold": 1000,
+        "partyId": "MobileParty_player_party",
+        "partyStringId": "player_party",
+        "x": 658.7773,
+        "y": 278.1635,
+        "troops": 1,
+        "settlementId": null,
+        "items": [],
+        "wounded": 0,
+        "heroRegistrations": 1,
+        "partyRegistrations": 1,
+        "clanRegistrations": 1,
+        "connected": true,
+        "active": true,
+        "mapEvent": "none",
+        "visual": true
+      }
+    },
+    {
+      "side": "server",
+      "state": {
+        "mode": "ListenAuthority",
+        "localControllerId": "LocalA",
+        "mainHeroId": "main_hero",
+        "mainPartyId": "player_party",
+        "campaignId": "RVLgBrkkFApz",
+        "hours": 2186090.007664611,
+        "registeredPlayers": 2,
+        "controllerId": "testclient1",
+        "heroId": "Hero_Player",
+        "heroStringId": "Player",
+        "clanId": "Clan_Player",
+        "characterId": "CharacterObject_Player",
+        "gold": 920,
+        "partyId": "MobileParty_Player",
+        "partyStringId": "Player",
+        "x": 658.7773,
+        "y": 277.1635,
+        "troops": 5,
+        "settlementId": null,
+        "items": [],
+        "wounded": 0,
+        "heroRegistrations": 1,
+        "partyRegistrations": 1,
+        "clanRegistrations": 1,
+        "connected": true,
+        "active": true,
+        "mapEvent": "none",
+        "visual": true
+      }
+    },
+    {
+      "side": "client1",
+      "state": {
+        "mode": "RemoteReplica",
+        "localControllerId": "testclient1",
+        "mainHeroId": "Player",
+        "mainPartyId": "Player",
+        "campaignId": "RVLgBrkkFApz",
+        "hours": 2186090.007664611,
+        "registeredPlayers": 2,
+        "controllerId": "LocalA",
+        "heroId": "Hero_main_hero",
+        "heroStringId": "main_hero",
+        "clanId": "Clan_player_faction",
+        "characterId": "CharacterObject_main_hero",
+        "gold": 1000,
+        "partyId": "MobileParty_player_party",
+        "partyStringId": "player_party",
+        "x": 658.7773,
+        "y": 278.1635,
+        "troops": 1,
+        "settlementId": null,
+        "items": [],
+        "wounded": 0,
+        "heroRegistrations": 1,
+        "partyRegistrations": 1,
+        "clanRegistrations": 1,
+        "connected": false,
+        "active": true,
+        "mapEvent": "none",
+        "visual": true
+      }
+    },
+    {
+      "side": "client1",
+      "state": {
+        "mode": "RemoteReplica",
+        "localControllerId": "testclient1",
+        "mainHeroId": "Player",
+        "mainPartyId": "Player",
+        "campaignId": "RVLgBrkkFApz",
+        "hours": 2186090.007664611,
+        "registeredPlayers": 2,
+        "controllerId": "testclient1",
+        "heroId": "Hero_Player",
+        "heroStringId": "Player",
+        "clanId": "Clan_Player",
+        "characterId": "CharacterObject_Player",
+        "gold": 920,
+        "partyId": "MobileParty_Player",
+        "partyStringId": "Player",
+        "x": 658.7773,
+        "y": 277.1635,
+        "troops": 5,
+        "settlementId": null,
+        "items": [],
+        "wounded": 0,
+        "heroRegistrations": 1,
+        "partyRegistrations": 1,
+        "clanRegistrations": 1,
+        "connected": false,
+        "active": true,
+        "mapEvent": "none",
+        "visual": true
+      }
+    }
+  ],
+  "logChecks": [
+    {
+      "side": "server",
+      "realTickFailures": 0,
+      "duplicateIds": 0,
+      "aiBatchFailures": 0,
+      "logHash": "76B02D964D0CFB7F03C6EC2A90F8C8D90DBC75511D1DD88A48ABAEA1B066AD92"
+    },
+    {
+      "side": "client1",
+      "realTickFailures": 0,
+      "duplicateIds": 0,
+      "aiBatchFailures": 0,
+      "logHash": "EA970DE1A6D0B3851FF8F5FAF8F1C4462820572803803449B4C124A83074A90D"
+    }
+  ],
+  "screenshots": {
+    "visuallyInspected": true,
+    "BpngTransport": "Exceeds 8 MiB tool image limit; completed native BMP inspected",
+    "A": "server-e3b2cd93bb06403cac588f9ac4e51771.png",
+    "B": "client1-2d5008645e15469c857a985546d3e8fb.bmp"
+  },
+  "cleanup": [
+    {
+      "name": "server",
+      "cleanupComplete": true,
+      "processAlive": false,
+      "processTreeAlive": false
+    },
+    {
+      "name": "client1",
+      "cleanupComplete": true,
+      "processAlive": false,
+      "processTreeAlive": false
+    }
+  ]
+}
