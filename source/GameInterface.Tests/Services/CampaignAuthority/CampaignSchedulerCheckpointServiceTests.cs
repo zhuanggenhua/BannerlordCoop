@@ -15,6 +15,7 @@ using ObjectManagerService = GameInterface.Services.ObjectManager.ObjectManager;
 
 namespace GameInterface.Tests.Services.CampaignAuthority;
 
+[Collection(ModInformationRoleCollection.Name)]
 public class CampaignSchedulerCheckpointServiceTests
 {
     static CampaignSchedulerCheckpointServiceTests()
@@ -162,6 +163,98 @@ public class CampaignSchedulerCheckpointServiceTests
         Assert.True(source.Service.TryCapture(source.Manager, 0, source.Events, out var checkpoint));
         Assert.False(target.Service.TryApply(checkpoint, target.Manager, target.Events));
         Assert.Equal(-1, target.Manager._mobilePartyHourlyTicker.Index);
+    }
+
+    [Fact]
+    public void ReconnectedArmyTimerRestoresAuthorityPhaseAndRunsNextNativeCallbackExactlyOnce()
+    {
+        var previousCampaign = Campaign.Current;
+        var campaign = (Campaign)RuntimeHelpers.GetUninitializedObject(typeof(Campaign));
+        campaign.MapTimeTracker = new MapTimeTracker(new CampaignTime(1_000_000_000));
+        Campaign.Current = campaign;
+        try
+        {
+            var source = Fixture.Create();
+            var target = Fixture.Create();
+            // Actual run 0bc4... event 0: period agrees, while Army.OnAfterLoad rebuilt InitialWait.
+            source.Events[0] = new MBCampaignEvent(new CampaignTime(36_000_000), new CampaignTime(23_583_056));
+            target.Events[0] = new MBCampaignEvent(new CampaignTime(36_000_000), new CampaignTime(18_735_192));
+            const long nextTrigger = 1_050_000_000;
+            source.Events[0].NextTriggerTime = new CampaignTime(nextTrigger);
+            int calls = 0;
+            target.Events[0].AddHandler((_, _) => calls++);
+            Assert.True(source.Service.TryCapture(source.Manager, 117, source.Events, out var checkpoint));
+
+            Assert.True(target.Service.TryApply(checkpoint, target.Manager, target.Events));
+            Assert.Equal(23_583_056, target.Events[0].InitialWait.NumTicks);
+            Assert.Equal(nextTrigger, target.Events[0].NextTriggerTime.NumTicks);
+
+            // The stale reconnect deadline would have fired already; the authority's deadline must win.
+            campaign.MapTimeTracker._numTicks = nextTrigger - 1;
+            target.Events[0].CheckUpdate();
+            Assert.Equal(0, calls);
+            campaign.MapTimeTracker._numTicks = nextTrigger + 1;
+            target.Events[0].CheckUpdate();
+            target.Events[0].CheckUpdate();
+            Assert.Equal(1, calls);
+            Assert.Equal(nextTrigger + 36_000_000, target.Events[0].NextTriggerTime.NumTicks);
+
+            Assert.True(target.Service.TryCapture(target.Manager, 118, target.Events, out var back));
+            Assert.True(source.Service.TryApply(back, source.Manager, source.Events));
+            Assert.Equal(target.Events[0].InitialWait.NumTicks, source.Events[0].InitialWait.NumTicks);
+            Assert.Equal(target.Events[0].NextTriggerTime.NumTicks, source.Events[0].NextTriggerTime.NumTicks);
+        }
+        finally { Campaign.Current = previousCampaign; }
+    }
+
+    [Fact]
+    public void LaterDefinitionMismatchDoesNotPartiallyApplyEarlierRebuiltPhase()
+    {
+        var source = Fixture.Create();
+        var target = Fixture.Create();
+        source.Manager._mobilePartyHourlyTicker.Index = 1;
+        source.Manager._lastGameTime = new CampaignTime(5000);
+        source.Events[0].InitialWait = new CampaignTime(70);
+        source.Events[0].NextTriggerTime = new CampaignTime(6000);
+        source.Events[0].isEventDeleted = true;
+        var sourceEvents = source.Events.Concat(new[]
+        {
+            new MBCampaignEvent("second") { TriggerPeriod = new CampaignTime(200), InitialWait = new CampaignTime(10) },
+        }).ToList();
+        var targetEvents = target.Events.Concat(new[]
+        {
+            new MBCampaignEvent("different") { TriggerPeriod = new CampaignTime(200), InitialWait = new CampaignTime(10) },
+        }).ToList();
+        Assert.True(source.Service.TryCapture(source.Manager, 1, sourceEvents, out var checkpoint));
+
+        Assert.False(target.Service.TryApply(checkpoint, target.Manager, targetEvents));
+        Assert.Equal(-1, target.Manager._mobilePartyHourlyTicker.Index);
+        Assert.Equal(0, target.Manager._lastGameTime.NumTicks);
+        Assert.Equal(50, target.Events[0].InitialWait.NumTicks);
+        Assert.Equal(0, target.Events[0].NextTriggerTime.NumTicks);
+        Assert.False(target.Events[0].isEventDeleted);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void InvalidTransferredPhaseIsRejectedWithoutChangingCursorsOrTimer(bool invalidInitialWait)
+    {
+        var source = Fixture.Create();
+        var target = Fixture.Create();
+        source.Manager._mobilePartyHourlyTicker.Index = 1;
+        Assert.True(source.Service.TryCapture(source.Manager, 1, source.Events, out var valid));
+        var malformed = new CampaignSchedulerCheckpoint(valid.LastGameTimeTicks, valid.MinimumIntervalTicks,
+            valid.CurrentTickCount, valid.Tickers, new[]
+            {
+                new CampaignPeriodicEventState("hourly", 100, invalidInitialWait ? -1 : 50,
+                    invalidInitialWait ? 0 : -1, false),
+            });
+
+        Assert.False(target.Service.TryApply(malformed, target.Manager, target.Events));
+        Assert.Equal(-1, target.Manager._mobilePartyHourlyTicker.Index);
+        Assert.Equal(50, target.Events[0].InitialWait.NumTicks);
+        Assert.Equal(0, target.Events[0].NextTriggerTime.NumTicks);
     }
 
     [Fact]

@@ -56,7 +56,8 @@ internal sealed class CampaignSchedulerCheckpointService : ICampaignSchedulerChe
             }
             states.Add(state);
         }
-        if (events.Any(value => value == null || value.TriggerPeriod.NumTicks <= 0)) return false;
+        if (events.Any(value => value == null || value.TriggerPeriod.NumTicks <= 0 ||
+            value.InitialWait.NumTicks < 0 || value.NextTriggerTime.NumTicks < 0)) return false;
         checkpoint = new CampaignSchedulerCheckpoint(manager._lastGameTime.NumTicks,
             manager.MinimumPeriodicEventInterval.NumTicks, tickCount, states, events.Select(value =>
                 new CampaignPeriodicEventState(value.description, value.TriggerPeriod.NumTicks, value.InitialWait.NumTicks,
@@ -99,13 +100,26 @@ internal sealed class CampaignSchedulerCheckpointService : ICampaignSchedulerChe
             var state = checkpoint.Events[i];
             var target = events[i];
             if (state == null || target == null || state.TriggerPeriodTicks <= 0 ||
+                state.InitialWaitTicks < 0 || state.NextTriggerTicks < 0 ||
                 !string.Equals(state.Description, target.description, StringComparison.Ordinal) ||
-                state.TriggerPeriodTicks != target.TriggerPeriod.NumTicks || state.InitialWaitTicks != target.InitialWait.NumTicks)
+                state.TriggerPeriodTicks != target.TriggerPeriod.NumTicks)
             {
-                Logger.Warning("Rejected campaign scheduler checkpoint at periodic event {EventIndex}; event definitions differ", i);
+                Logger.Warning("Rejected campaign scheduler checkpoint at periodic event {EventIndex}; event definition or phase is invalid. " +
+                    "Source=({SourceDescription},{SourcePeriod},{SourceInitialWait},{SourceNextTrigger}); " +
+                    "local=({LocalDescription},{LocalPeriod},{LocalInitialWait},{LocalNextTrigger})",
+                    i, state?.Description, state?.TriggerPeriodTicks, state?.InitialWaitTicks, state?.NextTriggerTicks,
+                    target?.description, target?.TriggerPeriod.NumTicks, target?.InitialWait.NumTicks, target?.NextTriggerTime.NumTicks);
                 return false;
             }
-            apply.Add(() => { target.NextTriggerTime = new CampaignTime(state.NextTriggerTicks); target.isEventDeleted = state.IsDeleted; });
+            // Army.OnAfterLoad rebuilds InitialWait from the load-time clock and its saved creation
+            // time. It is constructor phase state, not an event definition. Resume the writer's
+            // complete timer state while preserving the native callback, period and event ordering.
+            apply.Add(() =>
+            {
+                target.InitialWait = new CampaignTime(state.InitialWaitTicks);
+                target.NextTriggerTime = new CampaignTime(state.NextTriggerTicks);
+                target.isEventDeleted = state.IsDeleted;
+            });
         }
 
         // Validation precedes every mutation. Global entity lists retain their native ordering.
