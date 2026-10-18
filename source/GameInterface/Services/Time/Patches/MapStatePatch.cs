@@ -17,29 +17,6 @@ namespace GameInterface.Services.Time.Patches
     [HarmonyPatch(typeof(MapState), "OnMapModeTick")]
     class MapStatePatch
     {
-        [HarmonyPrefix]
-        private static bool OnMapModeTickPrefix()
-        {
-            bool authorityContextAvailable =
-                ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authorityContext);
-            return ShouldTickMapMode(
-                ModInformation.IsListenAuthority,
-                authorityContextAvailable,
-                authorityContext);
-        }
-
-        internal static bool ShouldTickMapMode(
-            bool isListenAuthority,
-            bool authorityContextAvailable,
-            ICampaignAuthorityContext authorityContext)
-        {
-            if (!isListenAuthority || !authorityContextAvailable)
-                return true;
-
-            bool localAuthority = authorityContext.TryGetLocalAuthorityLease(out var lease);
-            return !lease.IsValid || localAuthority;
-        }
-
         //  Removes the "base.GameStateManager.ActiveState == this" condition from the guard clause.
         private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
         {

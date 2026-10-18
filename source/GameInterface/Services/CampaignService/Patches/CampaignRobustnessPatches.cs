@@ -1,5 +1,8 @@
 ﻿using Common.Logging;
 using HarmonyLib;
+using Common;
+using GameInterface.Services.CampaignAuthority;
+using GameInterface.Services.Entity;
 using Serilog;
 using System;
 using TaleWorlds.CampaignSystem;
@@ -13,7 +16,7 @@ internal class CampaignRobustnessPatches
 
     [HarmonyPatch(nameof(Campaign.RealTick))]
     [HarmonyPrefix]
-    internal static bool Prefix_RealTick()
+    internal static bool Prefix_RealTick(Campaign __instance, float realDt)
     {
         bool hasAuthorityContext = global::GameInterface.ContainerProvider.TryResolve<
             global::GameInterface.Services.CampaignAuthority.ICampaignAuthorityContext>(out var authorityContext);
@@ -22,8 +25,18 @@ internal class CampaignRobustnessPatches
 
         bool localAuthority = authorityContext.TryGetLocalAuthorityLease(out var lease);
         bool authorityKnown = lease.IsValid;
-        return ShouldRunCampaignTick(authorityKnown, localAuthority);
+        if (ShouldRunCampaignTick(authorityKnown, localAuthority)) return true;
+
+        if (!lease.IsPaused && ContainerProvider.TryResolve<IControllerIdProvider>(out var controller) &&
+            !string.Equals(controller.ControllerId, lease.AuthorityControllerId, StringComparison.Ordinal) &&
+            ContainerProvider.TryResolve<ICampaignObserverFrame>(out var observerFrame))
+            observerFrame.Tick(__instance, realDt);
+        return false;
     }
+
+    [HarmonyPatch(nameof(Campaign.Tick))]
+    [HarmonyPrefix]
+    internal static bool Prefix_Tick() => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
 
     internal static bool ShouldRunCampaignTick(bool authorityKnown, bool localAuthority) =>
         !authorityKnown || localAuthority;
