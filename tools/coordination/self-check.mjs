@@ -33,6 +33,8 @@ try {
     requireCheck(streams.modelPolicy === 'inherit-parent' && streams.maxWorkers === 3, 'Inherited model and three-worker limit');
     requireCheck(expected.every(id => streams.workstreams.filter(item => item.id === id).length === 1), 'All seven workstreams registered exactly once');
     git('merge-base', '--is-ancestor', streams.acceptedBaseline.commit, 'HEAD');
+    report.gameCodeChangesSinceBaseline = git('diff', '--name-only', streams.acceptedBaseline.commit, 'HEAD', '--', 'source')
+        .split('\n').filter(Boolean);
     requireCheck(existsSync(path.join(repo, streams.acceptedBaseline.report)), 'Accepted baseline report exists');
     report.acceptedEvidence = streams.acceptedBaseline.evidence.map(relative => {
         const bytes = readFileSync(path.join(repo, relative));

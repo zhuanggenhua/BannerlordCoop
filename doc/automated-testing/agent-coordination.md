@@ -40,6 +40,8 @@ node tools\coordination\with-game-lock.mjs --repo . -- powershell.exe -NoProfile
 ```powershell
 node tools\coordination\self-check.mjs
 node tools\coordination\orchestrator.mjs --help
+node tools\coordination\orchestrator.mjs --root . status
+node tools\coordination\orchestrator.mjs --root . next
 ```
 
 自检检查已验收基线、七条工作流及模型策略，然后实际运行任务板、锁、会话适配器和部署保护测试。报告和逐项 TAP 日志位于 Git common-dir 的 `codex-coordination/self-check`，源码中不保存机器状态。该自检不代替新的骑砍实机验收。
