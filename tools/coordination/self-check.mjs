@@ -53,7 +53,7 @@ try {
         return { path: relative, sha256: hash(bytes), runId: value.runId ?? null };
     });
 
-    for (const file of ['orchestrator.test.mjs', 'resource-lock.test.mjs', 'codex-session.test.mjs']) {
+    for (const file of ['orchestrator.test.mjs', 'resource-lock.test.mjs', 'codex-session.test.mjs', 'deployment-guard.test.mjs']) {
         const testFile = path.join(repo, 'tools/coordination', file);
         requireCheck(existsSync(testFile), `${file}: implemented suite exists`);
         const result = spawnSync(process.execPath, ['--test', '--test-reporter=tap', testFile], {

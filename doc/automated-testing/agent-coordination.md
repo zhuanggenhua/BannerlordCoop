@@ -14,6 +14,8 @@
 
 每个写入代理拥有一个独立 Git Worktree 和 `codex/` 分支，所有命令显式指定工作目录。总控保留集成检出的写权限，子代理不得在其中编辑文件。游戏引用和旧 NuGet 包缓存可通过 junction 读取，各工作树的 bin/obj、测试进程及源码独立。编译命令携带 `-p:ModName=`，避免项目的自动部署钩子覆盖测试模组。新建工作树前校验绝对目录和分支，已有目录不被覆盖。
 
+`Deploy.targets` 还会识别 linked worktree 的 `.git` 文件并禁用自动部署，因此 worker 即使漏传空 ModName 也不会通过该构建钩子写入共享游戏目录。主检出的既有构建行为保留，总控编译仍显式禁用自动部署，部署单独经过实机锁。四项真实 MSBuild 自检只向临时假游戏目录操作。
+
 任务板保存在 Git common-dir 下的 `codex-coordination`，所有工作树共享同一份登记和证据索引，但不共享源码输出目录。状态更新本身加排他保护。子代理交付使用 [handoff.schema.json](../../tools/coordination/handoff.schema.json)，包含原始 base、最终 commit、实际变更文件、测试命令、退出码、日志路径及 SHA256。提交后不得继续修改已交付工作树；需要修复时由总控重新分派。
 
 总控检查提交的祖先关系、实际 Git diff、scope、工作树是否干净，以及测试日志内容和哈希。独立审查通过后才能 cherry-pick 到协调分支，集成后运行实际测试并采集新日志。发生冲突就记录为待修复，由总控或指定修复代理处理。不能仅依据子代理的“完成”、退出码零或一份结果文件把功能标记为验收通过。实机证据缺失时保留未验收状态。
@@ -40,6 +42,6 @@ node tools\coordination\self-check.mjs
 node tools\coordination\orchestrator.mjs --help
 ```
 
-自检检查已验收基线、七条工作流及模型策略，然后实际运行任务板、锁和会话适配器测试。报告和逐项 TAP 日志位于 Git common-dir 的 `codex-coordination/self-check`，源码中不保存机器状态。该自检不代替新的骑砍实机验收。
+自检检查已验收基线、七条工作流及模型策略，然后实际运行任务板、锁、会话适配器和部署保护测试。报告和逐项 TAP 日志位于 Git common-dir 的 `codex-coordination/self-check`，源码中不保存机器状态。该自检不代替新的骑砍实机验收。
 
 原生调度由活动的总控对话执行，任务板允许下次从准确状态继续。它不伪装成关闭聊天后仍无限运行的后台服务。已核验父模型后才可启用独立 CLI 长任务；用户始终只需要给总控下达任务，不需要管理子代理聊天。

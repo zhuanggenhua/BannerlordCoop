@@ -25,6 +25,8 @@
   <PropertyGroup>
     <!-- This file lives at the repo root; locate everything relative to it. -->
     <RepoRoot>$(MSBuildThisFileDirectory)</RepoRoot>
+    <!-- Linked worker checkouts may read mb2 references, but never deploy into the shared install. -->
+    <IsLinkedWorktree>$([System.IO.File]::Exists('$(RepoRoot).git'))</IsLinkedWorktree>
     <ModsRoot>$(RepoRoot)mb2\Modules</ModsRoot>
     <DeploySourceDir>$(RepoRoot)deploy</DeploySourceDir>
     <UIMoviesDir>$(RepoRoot)UIMovies</UIMoviesDir>
@@ -37,7 +39,7 @@
 
   <Target Name="DeployToGame"
           AfterTargets="Build"
-          Condition="'$(ModName)' != '' and Exists('$(ModsRoot)')">
+          Condition="'$(ModName)' != '' and '$(IsLinkedWorktree)' != 'True' and Exists('$(ModsRoot)')">
 
     <!-- Discover these at execution time so files added after Visual Studio evaluated the project are deployed. -->
     <ItemGroup>
