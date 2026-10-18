@@ -14,6 +14,8 @@ const HELP = `Usage: node tools/mcp/scenarios/p2p-recruit-training.mjs
 Run only from the coordinator through tools/coordination/with-game-lock.mjs.
 Starts A, then B; submits four native recruitment carts once each; exercises
 A -> B -> A, native NPC daily training, critical world hashes and unique Tick.
+Selects an observed tavern town with existing shared stock and a four-purchase
+budget; never replenishes volunteers or gold.
 Writes JSONL, per-feature summary JSON and BMP screenshot references. Always
 requests stop_run and requires both owned process trees to be gone.
 No deployment, private IPC, XP setters, or retry of uncertain mutations.
@@ -81,17 +83,60 @@ function assertTraining(before, after, requireIncrease) {
     if (requireIncrease) assert.ok(increased, 'No regular NPC stack gained XP');
     return increased;
 }
-function recruitSlot(inspected, controller) {
+function recruitSlot(inspected, controller, sharedSlots) {
     const actor = inspected.players.find(player => player.controller === controller);
     assert.ok(actor && Number.isFinite(actor.gold), 'Recruit actor or gold missing');
+    const candidates = [];
     for (const notable of inspected.volunteers ?? []) {
         for (const slot of notable.slots ?? []) {
             if (notable.id && slot.character && slot.index < notable.maximumRecruitableIndex &&
-                Number.isInteger(slot.cost) && slot.cost >= 0 && slot.cost <= actor.gold)
-                return { notable: notable.id, nativeNotable: notable.nativeId, ...slot };
+                Number.isInteger(slot.cost) && slot.cost >= 0 && slot.cost <= actor.gold &&
+                (!sharedSlots || sharedSlots.some(shared => shared.nativeNotable === notable.nativeId &&
+                    shared.index === slot.index && shared.character === slot.character)))
+                candidates.push({ notable: notable.id, nativeNotable: notable.nativeId, ...slot });
         }
     }
+    candidates.sort((a, b) => a.cost - b.cost || a.nativeNotable.localeCompare(b.nativeNotable) || a.index - b.index);
+    if (candidates.length) return candidates[0];
     throw new Error(`No affordable native recruitable slot for ${controller}; no stock/gold fixture will be invented`);
+}
+function selectRecruitmentTown(catalog, locations, controllers) {
+    assert.equal(catalog.query, 'town_catalog');
+    assert.deepEqual(catalog.players.map(player => player.controller).sort(), [...controllers].sort());
+    for (const player of catalog.players) assert.ok(Number.isFinite(player.gold) && player.gold >= 0);
+    // A buys three troops, B buys one. This cap leaves at least one quarter of the smaller wallet.
+    const maximumCost = Math.floor(Math.min(...catalog.players.map(player => player.gold)) / 4);
+    assert.equal(catalog.maximumCost, maximumCost);
+    assert.equal(catalog.requiredSharedSlots, 4);
+    assert.equal(catalog.returnedTownCount, catalog.towns.length);
+    assert.ok(catalog.towns.length <= 16 && catalog.eligibleTownCount >= catalog.towns.length &&
+        catalog.scannedTownCount >= catalog.eligibleTownCount, 'Invalid bounded catalog scan metadata');
+    const observedTaverns = [...locations.matchAll(/Id: '([^']+)'/g)].map(match => match[1]);
+    const candidates = [];
+    for (const town of catalog.towns) {
+        const location = observedTaverns.find(id => id.endsWith(`_${town.id}_tavern`));
+        if (!location) continue;
+        const sharedSlots = [];
+        for (const notable of town.notables) {
+            if (!notable.id) continue;
+            for (const slot of notable.slots) {
+                if (!slot.character) continue;
+                const eligibility = catalog.players.map(player => ({ controller: player.controller, gold: player.gold,
+                    maximumRecruitableIndex: notable.players.find(value => value.controller === player.controller)?.maximumRecruitableIndex,
+                    cost: slot.players.find(value => value.controller === player.controller)?.cost }));
+                if (eligibility.every(value => Number.isInteger(value.maximumRecruitableIndex) &&
+                    slot.index < value.maximumRecruitableIndex && Number.isInteger(value.cost) &&
+                    value.cost >= 0 && value.cost <= maximumCost && value.cost <= value.gold))
+                    sharedSlots.push({ nativeNotable: notable.nativeId, index: slot.index, character: slot.character, eligibility });
+            }
+        }
+        if (sharedSlots.length >= 4)
+            candidates.push({ id: town.id, location, maximumCost, availableSharedSlots: sharedSlots.length,
+                headroom: sharedSlots.length - 4, sharedSlots });
+    }
+    candidates.sort((a, b) => b.availableSharedSlots - a.availableSharedSlots || a.id.localeCompare(b.id));
+    assert.ok(candidates.length, 'No observed tavern town has four existing shared recruitable slots within the four-purchase budget');
+    return candidates[0];
 }
 function assertRecruitCounts(before, after, controller, character) {
     assert.deepEqual(after.map(player => player.controller).sort(), before.map(player => player.controller).sort());
@@ -172,7 +217,7 @@ async function run(config) {
         config, runId: null, features: [], screenshots: [], probes: [], npcAttempts: [],
         failed: null, cleanupConfirmed: false, passed: false,
         scope: 'Native RecruitmentVM and one native NPC daily callback; not a full natural daily cycle, battle, or cold-save acceptance.' };
-    let runId, callId = 0, initial, readDeadline;
+    let runId, callId = 0, initial, readDeadline, recruitmentTown;
     const client = new Client({ name: 'codex-p2p-recruit-training', version: '1.0.0' });
     const transport = new StdioClientTransport({ command: config.server, args: ['--config', config.config],
         cwd: config.repo, stderr: 'inherit', maxBufferSize: 16 * 1024 * 1024 });
@@ -349,15 +394,22 @@ async function run(config) {
         const worlds = await pause();
         return { before, after, worlds };
     }
-    async function ensureSettlement(instance, location) {
+    async function ensureSettlement(instance, selected) {
+        const { id: townId, location } = selected;
         const current = await inspect(instance);
-        if (current.settlement === 'town_ES1') return { alreadyInside: true };
-        assert.ok(!current.settlement, `Unexpected native settlement ${current.settlement}; refusing to rewrite CurrentSettlement`);
+        if (current.settlement === townId) return { alreadyInside: true, townId };
+        if (current.settlement) {
+            assert.equal(instance, 'client1', 'A must start outside town; no host settlement rewrite is allowed');
+            await command(instance, 'coop.debug.siege.leave_settlement', [], true);
+            await poll('B leaves its old native settlement', async () => {
+                assert.equal((await inspect(instance)).settlement, null);
+            });
+        }
         const firstEntry = await command(instance, 'coop.debug.location.enter', [location], true);
         let view = await call('get_run', { run_id: runId });
         let mission = firstEntry.startsWith('Opening location') ||
             view.instances.find(value => value.name === instance)?.status?.missionActive;
-        if (!mission && (await inspect(instance)).settlement !== 'town_ES1') {
+        if (!mission && (await inspect(instance)).settlement !== townId) {
             // First call may initialize only PlayerEncounter; a second call opens the observed location.
             const secondEntry = await command(instance, 'coop.debug.location.enter', [location], true);
             view = await call('get_run', { run_id: runId });
@@ -370,14 +422,14 @@ async function run(config) {
             await waitState(instance, 'readyForCampaignTests');
         }
         return poll('native settlement ' + instance, async () => {
-            const value = await inspect(instance); assert.equal(value.settlement, 'town_ES1'); return value;
+            const value = await inspect(instance); assert.equal(value.settlement, townId); return value;
         });
     }
     async function recruit(instance, label, localAuthority) {
         const before = await Promise.all(INSTANCES.map(inspect));
         const controller = initial[INSTANCES.indexOf(instance)].controller;
         assert.equal(before[INSTANCES.indexOf(instance)].localAuthority, localAuthority);
-        const slot = recruitSlot(before[INSTANCES.indexOf(instance)], controller);
+        const slot = recruitSlot(before[INSTANCES.indexOf(instance)], controller, recruitmentTown.sharedSlots);
         const baseline = new Map(before[0].players.map(player => [player.controller, { gold: player.gold, troops: counts(player) }]));
         const output = jsonOutput(await command(instance, 'coop.debug.recruitment.submit', [slot.notable, String(slot.index)], true));
         assert.equal(output.status, 'submitted'); assert.equal(output.localAuthority, localAuthority);
@@ -484,14 +536,18 @@ async function run(config) {
             return { tick, probe: await allocationProbe('server'), worlds: await stableWorld('A first allocation') };
         });
         const locations = await command('server', 'coop.debug.location.list');
-        const location = [...locations.matchAll(/Id: '([^']+)'/g)].map(match => match[1])
-            .find(id => id.includes('town_ES1') && id.endsWith('_tavern'));
-        assert.ok(location, 'Observed registry has no town_ES1 tavern');
         await feature('native-settlement-preparation', async () => {
             await pause();
+            const catalog = jsonOutput(await command('server', 'coop.debug.recruitment.inspect', ['town_catalog']));
+            recruitmentTown = selectRecruitmentTown(catalog, locations, initial.map(value => value.controller));
+            summary.recruitmentTown = recruitmentTown;
+            const coverage = { scannedTownCount: catalog.scannedTownCount, eligibleTownCount: catalog.eligibleTownCount,
+                returnedTownCount: catalog.returnedTownCount, limited: catalog.limited };
+            await emit({ phase: 'existing-stock-preflight', coverage, players: catalog.players, selected: recruitmentTown });
             const prepared = [];
-            for (const instance of INSTANCES) prepared.push(await ensureSettlement(instance, location));
-            await awaitWriter(initial[0].controller); await pause(); return prepared;
+            for (const instance of INSTANCES) prepared.push(await ensureSettlement(instance, recruitmentTown));
+            await awaitWriter(initial[0].controller); await pause();
+            return { selected: recruitmentTown, coverage, players: catalog.players, prepared };
         });
         await feature('A-writer-native-recruit-1', () => recruit('server', 'A writer recruit', true));
         await feature('A-to-B-final-checkpoint', async () => {
@@ -601,6 +657,22 @@ async function selfTest(recordedPath) {
             { index: 2, character: 'locked', cost: 1 }] }] };
     assert.equal(recruitSlot(inspected, 'A').index, 1);
     assert.throws(() => recruitSlot({ ...inspected, volunteers: [] }, 'A'));
+    const affordable = { ...inspected, volunteers: [{ ...inspected.volunteers[0], maximumRecruitableIndex: 3,
+        slots: [{ index: 0, character: 'expensive', cost: 9 }, { index: 1, character: 'cheap', cost: 2 }] }] };
+    assert.equal(recruitSlot(affordable, 'A').character, 'cheap');
+    assert.equal(recruitSlot(affordable, 'A', [{ nativeNotable: 'n', index: 0, character: 'expensive' }]).character, 'expensive');
+    const town = (id, count, cost = 20, maximum = 6) => ({ id, notables: [{ id: 'Hero_' + id,
+        nativeId: id + '_notable', players: ['A', 'B'].map(controller => ({ controller, maximumRecruitableIndex: maximum })),
+        slots: Array.from({ length: count }, (_, index) => ({ index, character: 'unit',
+            players: ['A', 'B'].map(controller => ({ controller, cost })) })) }] });
+    const catalog = { query: 'town_catalog', players: [{ controller: 'A', gold: 1000 }, { controller: 'B', gold: 920 }],
+        maximumCost: 230, requiredSharedSlots: 4, scannedTownCount: 50, eligibleTownCount: 5, returnedTownCount: 5,
+        towns: [town('locked', 6, 20, 3), town('expensive', 6, 240), town('unobserved', 6), town('just_four', 4), town('stocked', 6)] };
+    const locations = ['locked', 'expensive', 'just_four', 'stocked'].map(id => `Id: 'Location_${id}_tavern'`).join('\n');
+    const selected = selectRecruitmentTown(catalog, locations, ['A', 'B']);
+    assert.equal(selected.id, 'stocked'); assert.equal(selected.availableSharedSlots, 6); assert.equal(selected.headroom, 2);
+    assert.throws(() => selectRecruitmentTown({ ...catalog, towns: [town('locked', 6, 20, 3)], returnedTownCount: 1 },
+        locations, ['A', 'B']));
     const world = { campaign: 'c', unregisteredParties: 0, ticks: 1,
         ...Object.fromEntries(CRITICAL_KEYS.map(key => [key, key === 'nextHandle' ? 10 : 'hash'])) };
     assertWorld([world, { ...world }]);
@@ -625,13 +697,28 @@ async function selfTest(recordedPath) {
     assert.equal(logChunk({ text: 'log', cursor: 'opaque', reset: false, hasMore: false, length: 3 }).text, 'log');
     assert.throws(() => logChunk({ text: 'log', hasMore: false }));
     if (recordedPath) {
-        const replayed = { start_client: 0, stop_run: 0, read_logs: 0 };
+        const replayed = { start_client: 0, stop_run: 0, read_logs: 0, recruitmentInspect: 0, nativeRecruitmentCart: 0 };
         for (const line of (await readFile(resolve(recordedPath), 'utf8')).split(/\r?\n/).filter(Boolean)) {
             const entry = JSON.parse(line);
             if (!entry.data) continue;
             if (entry.name === 'start_client') { assertClientLaunched(entry.data); replayed.start_client++; }
             if (entry.name === 'stop_run') { assertStopped(entry.data); replayed.stop_run++; }
             if (entry.name === 'read_logs') { logChunk(entry.data); replayed.read_logs++; }
+            if (entry.name === 'execute_command' && entry.data.result?.succeeded &&
+                entry.args?.name === 'coop.debug.recruitment.inspect') {
+                const inspected = jsonOutput(entry.data.result.output);
+                assert.ok(Array.isArray(inspected.players));
+                if (!inspected.query) for (const player of inspected.players) assert.ok(Number.isInteger(counts(player)));
+                replayed.recruitmentInspect++;
+            }
+            if (entry.name === 'execute_command' && entry.data.result?.succeeded &&
+                entry.args?.name === 'coop.debug.recruitment.submit') {
+                const submitted = jsonOutput(entry.data.result.output);
+                assert.equal(submitted.status, 'submitted'); assert.equal(submitted.cart.length, 1);
+                assert.ok(Number.isInteger(field(submitted.cart[0], 'cost')));
+                assert.ok(Number.isInteger(field(submitted.cart[0], 'index')));
+                replayed.nativeRecruitmentCart++;
+            }
         }
         assert.ok(replayed.start_client > 0 && replayed.stop_run > 0, 'Recorded response wrappers are incomplete');
         console.log(JSON.stringify({ offlineRecordedWrapperReplay: replayed, record: resolve(recordedPath) }));

@@ -28,11 +28,18 @@ public static class RecruitmentDebugCommands
         public string Name => "inspect";
         public string Description => "Reads native actor, player rosters, gold and current settlement volunteer slots.";
         public CoopCommandSide Side => CoopCommandSide.Both;
-        public IExpectedArgs[] ExpectedArgs { get; } = Array.Empty<IExpectedArgs>();
+        public IExpectedArgs[] ExpectedArgs { get; } =
+        {
+            new ExpectedArgs("query", "Optional town_catalog scans existing town stock for registered heroes.", false),
+        };
         public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
         {
             if (Campaign.Current == null || MobileParty.MainParty == null)
                 return new(false, "A native campaign player is required.", "campaign_unavailable");
+            if (args.Count > 0)
+                return args[0] == "town_catalog"
+                    ? CaptureTownCatalog()
+                    : new(false, "Expected no argument or town_catalog.", "invalid_args");
             var settlement = MobileParty.MainParty.CurrentSettlement;
             authority.TryGetCurrentLease(out var lease);
             return new(true, JsonConvert.SerializeObject(new
@@ -74,6 +81,73 @@ public static class RecruitmentDebugCommands
                             .GetTroopRecruitmentCost(troop, Hero.MainHero).RoundedResultNumber,
                     }).ToArray(),
                 }).ToArray(),
+            }));
+        }
+
+        private CoopCommandResult CaptureTownCatalog()
+        {
+            var registered = players.Players.OrderBy(player => player.ControllerId).ToArray();
+            if (registered.Length < 2)
+                return new(false, "Two registered player heroes are required.", "players_unavailable");
+            var heroes = new Hero[registered.Length];
+            for (int index = 0; index < registered.Length; index++)
+                if (!objects.TryGetObject(registered[index].HeroId, out heroes[index]))
+                    return new(false, "A registered player hero is unavailable.", "player_unavailable");
+            int maximumCost = heroes.Min(hero => hero.Gold) / 4;
+            var scanned = Campaign.Current.Settlements.Where(settlement => settlement.IsTown).ToArray();
+            var candidates = scanned.Select(settlement =>
+            {
+                var notables = settlement.Notables.Select(notable =>
+                {
+                    var limits = registered.Select((player, index) => new
+                    {
+                        controller = player.ControllerId,
+                        maximumRecruitableIndex = Campaign.Current.Models.VolunteerModel
+                            .MaximumIndexHeroCanRecruitFromHero(heroes[index], notable),
+                    }).ToArray();
+                    var slots = (notable.VolunteerTypes ?? Array.Empty<CharacterObject>()).Select((troop, slot) =>
+                    {
+                        if (troop == null) return null;
+                        var prices = registered.Select((player, index) => new
+                        {
+                            controller = player.ControllerId,
+                            cost = Campaign.Current.Models.PartyWageModel
+                                .GetTroopRecruitmentCost(troop, heroes[index]).RoundedResultNumber,
+                        }).ToArray();
+                        if (limits.Any(limit => slot >= limit.maximumRecruitableIndex) ||
+                            prices.Any(price => price.cost < 0 || price.cost > maximumCost)) return null;
+                        return new { index = slot, character = troop.StringId, players = prices };
+                    }).Where(slot => slot != null).ToArray();
+                    return new
+                    {
+                        id = objects.TryGetId(notable, out var id) ? id : null,
+                        nativeId = notable.StringId,
+                        players = limits,
+                        slots,
+                    };
+                }).Where(notable => notable.id != null && notable.slots.Length > 0).ToArray();
+                return new { id = settlement.StringId, sharedSlotCount = notables.Sum(notable => notable.slots.Length), notables };
+            }).Where(town => town.sharedSlotCount >= 4)
+                .OrderByDescending(town => town.sharedSlotCount).ThenBy(town => town.id, StringComparer.Ordinal).ToArray();
+
+            return new(true, JsonConvert.SerializeObject(new
+            {
+                query = "town_catalog",
+                campaign = Campaign.Current.UniqueGameId,
+                scannedTownCount = scanned.Length,
+                eligibleTownCount = candidates.Length,
+                returnedTownCount = Math.Min(16, candidates.Length),
+                limited = candidates.Length > 16,
+                maximumCost,
+                requiredSharedSlots = 4,
+                players = registered.Select((player, index) => new
+                {
+                    controller = player.ControllerId,
+                    heroId = player.HeroId,
+                    nativeHeroId = heroes[index].StringId,
+                    gold = heroes[index].Gold,
+                }).ToArray(),
+                towns = candidates.Take(16).ToArray(),
             }));
         }
     }
