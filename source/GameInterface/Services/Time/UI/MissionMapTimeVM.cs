@@ -10,6 +10,8 @@ namespace GameInterface.Services.Time.UI;
 public sealed class MissionMapTimeVM : ViewModel
 {
     private string mapTimeText;
+    private TimeControlEnum selectedMode;
+    private bool simulationSuspended;
 
     [DataSourceProperty]
     public string MapTimeText
@@ -30,7 +32,20 @@ public sealed class MissionMapTimeVM : ViewModel
 
     public void SetTimeControlMode(TimeControlEnum mode)
     {
-        MapTimeText = $"Map Time: {GetModeText(mode)}";
+        selectedMode = mode;
+        RefreshTimeText();
+    }
+
+    public void SetSimulationSuspended(bool suspended)
+    {
+        simulationSuspended = suspended;
+        RefreshTimeText();
+    }
+
+    private void RefreshTimeText()
+    {
+        var displayedMode = simulationSuspended ? TimeControlEnum.Pause : selectedMode;
+        MapTimeText = $"Map Time: {GetModeText(displayedMode)}";
     }
     
     internal static string GetModeText(TimeControlEnum mode)

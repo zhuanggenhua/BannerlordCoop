@@ -50,10 +50,19 @@ public sealed class MissionMapTimeView : MissionView, ILocationMissionBehavior
         subscribed = true;
         
         dataSource = new MissionMapTimeVM(timeControlInterface.GetTimeControl());
+        dataSource.SetSimulationSuspended(CampaignTimeDisplay.IsSimulationSuspended());
         gauntletLayer = new GauntletLayer("MissionMapTime", LayerOrder);
         movie = gauntletLayer.LoadMovie("MissionMapTime", dataSource);
         
         MissionScreen.AddLayer(gauntletLayer);
+    }
+
+    public override void OnMissionScreenTick(float dt)
+    {
+        base.OnMissionScreenTick(dt);
+
+        // Lease changes do not change the selected time mode or publish a time-speed message.
+        dataSource?.SetSimulationSuspended(CampaignTimeDisplay.IsSimulationSuspended());
     }
 
     public override void OnMissionScreenFinalize()

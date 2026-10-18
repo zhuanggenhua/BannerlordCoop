@@ -29,4 +29,38 @@ public class MissionMapTimeVMTests
         
         Assert.Equal("Map Time: Fast Forward", viewModel.MapTimeText);
     }
+    [Theory]
+    [InlineData(TimeControlEnum.Play_1x, "Map Time: Normal")]
+    [InlineData(TimeControlEnum.Play_2x, "Map Time: Fast Forward")]
+    public void SimulationPausePreservesSelectedModeForResume(TimeControlEnum mode, string resumedText)
+    {
+        var viewModel = new MissionMapTimeVM(mode);
+        viewModel.SetSimulationSuspended(true);
+        Assert.Equal("Map Time: Paused", viewModel.MapTimeText);
+
+        viewModel.SetSimulationSuspended(false);
+        Assert.Equal(resumedText, viewModel.MapTimeText);
+    }
+
+    [Fact]
+    public void SpeedChangedWhileSuspendedIsShownOnlyAfterResume()
+    {
+        var viewModel = new MissionMapTimeVM(TimeControlEnum.Play_1x);
+        viewModel.SetSimulationSuspended(true);
+        viewModel.SetTimeControlMode(TimeControlEnum.Play_2x);
+        Assert.Equal("Map Time: Paused", viewModel.MapTimeText);
+
+        viewModel.SetSimulationSuspended(false);
+        Assert.Equal("Map Time: Fast Forward", viewModel.MapTimeText);
+    }
+
+    [Fact]
+    public void UserSelectedPauseRemainsPausedAfterSimulationResumes()
+    {
+        var viewModel = new MissionMapTimeVM(TimeControlEnum.Pause);
+        viewModel.SetSimulationSuspended(true);
+        viewModel.SetSimulationSuspended(false);
+
+        Assert.Equal("Map Time: Paused", viewModel.MapTimeText);
+    }
 }
