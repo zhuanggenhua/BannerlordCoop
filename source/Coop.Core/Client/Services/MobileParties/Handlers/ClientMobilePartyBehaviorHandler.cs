@@ -1,5 +1,6 @@
 ﻿using Common.Messaging;
 using Common.Network;
+using Common;
 using Coop.Core.Server.Services.MobileParties.Packets;
 using GameInterface.Services.MobileParties.Messages.Behavior;
 using GameInterface.Services.MobileParties.Data;
@@ -61,14 +62,19 @@ namespace Coop.Core.Client.Services.MobileParties.Handlers
 
         internal void HandleAuthorityCommand(MessagePayload<NetworkCampaignAuthorityPartyBehaviorCommand> obj)
         {
-            if (!authorityContext.TryGetLocalAuthorityLease(out var lease) ||
-                !obj.What.Matches(lease) ||
-                !wireMapper.TryFromNetwork(obj.What.BehaviorUpdateData, out var data) ||
-                !TryAdvanceAuthorityCommandSequence(lease, obj.What.Sequence))
-                return;
+            GameThread.RunSafe(() =>
+            {
+                // Recheck the lease after earlier world deltas and freeze actions, on the
+                // same thread that resolves handles and applies this command once.
+                if (!authorityContext.TryGetLocalAuthorityLease(out var lease) ||
+                    !obj.What.Matches(lease) ||
+                    !wireMapper.TryFromNetwork(obj.What.BehaviorUpdateData, out var data) ||
+                    !TryAdvanceAuthorityCommandSequence(lease, obj.What.Sequence))
+                    return;
 
-            data.OriginControllerId = obj.What.OriginControllerId;
-            messageBroker.Publish(obj.Who, new UpdatePartyBehavior(ref data));
+                data.OriginControllerId = obj.What.OriginControllerId;
+                messageBroker.Publish(obj.Who, new UpdatePartyBehavior(ref data, alreadyOnGameThread: true));
+            }, context: nameof(ClientMobilePartyBehaviorHandler));
         }
 
         private bool TryAdvanceAuthorityCommandSequence(AuthorityLease lease, long sequence)

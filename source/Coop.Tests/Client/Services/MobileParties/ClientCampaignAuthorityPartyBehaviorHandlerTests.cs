@@ -1,4 +1,5 @@
-using Common.Messaging;
+﻿using Common.Messaging;
+using Common;
 using Common.Network;
 using Common.PacketHandlers;
 using Coop.Core.Client.Services.MobileParties.Handlers;
@@ -154,11 +155,43 @@ public class ClientCampaignAuthorityPartyBehaviorHandlerTests
 
         handler.HandleAuthorityCommand(payload);
         handler.HandleAuthorityCommand(payload);
+        GameThread.Run(() => { }, blocking: true);
 
         broker.Verify(messageBroker => messageBroker.Publish(
             source,
             It.Is<UpdatePartyBehavior>(update =>
-                !update.IsAuthorityReplay &&
+                !update.IsAuthorityReplay && update.AlreadyOnGameThread &&
                 update.BehaviorUpdateData.OriginControllerId == "controller-a")), Times.Once);
+    }
+
+    [Fact]
+    public void OldEpochCommandQueuedBehindPauseCannotResolveOrApplyObjects()
+    {
+        var broker = new Mock<IMessageBroker>();
+        var mapper = new Mock<IPartyBehaviorWireMapper>();
+        var context = new Mock<ICampaignAuthorityContext>();
+        var lease = new AuthorityLease("room-a", "authority-b", "controller-b", 2);
+        bool active = true;
+        context.Setup(value => value.TryGetLocalAuthorityLease(out It.Ref<AuthorityLease>.IsAny))
+            .Returns((out AuthorityLease current) => { current = lease; return active; });
+        var wireData = new NetworkPartyBehaviorUpdateData { MobilePartyId = 42 };
+        var data = new PartyBehaviorUpdateData();
+        mapper.Setup(value => value.TryFromNetwork(wireData, out data)).Returns(true);
+        using var handler = new ClientMobilePartyBehaviorHandler(
+            broker.Object, Mock.Of<INetwork>(), mapper.Object, context.Object);
+        using var entered = new System.Threading.ManualResetEventSlim();
+        using var release = new System.Threading.ManualResetEventSlim();
+        GameThread.EnqueueSafe(() => { entered.Set(); release.Wait(System.TimeSpan.FromSeconds(5)); });
+        try
+        {
+            Assert.True(entered.Wait(System.TimeSpan.FromSeconds(5)));
+            GameThread.EnqueueSafe(() => active = false);
+            handler.HandleAuthorityCommand(new MessagePayload<NetworkCampaignAuthorityPartyBehaviorCommand>(
+                this, new NetworkCampaignAuthorityPartyBehaviorCommand(lease, 1, "controller-a", wireData)));
+        }
+        finally { release.Set(); }
+        GameThread.Run(() => { }, blocking: true);
+        mapper.Verify(value => value.TryFromNetwork(wireData, out It.Ref<PartyBehaviorUpdateData>.IsAny), Times.Never);
+        broker.Verify(value => value.Publish(It.IsAny<object>(), It.IsAny<UpdatePartyBehavior>()), Times.Never);
     }
 }
