@@ -24,15 +24,21 @@ public class RecruitmentAuthorityRoutingTests
     public void NativeOnDoneOnlyRunsForConfirmedUnfrozenWriter(
         string local, string writer, bool roomHost, bool paused, bool frozen, bool expected)
     {
-        var identity = new SessionIdentity();
-        var lease = new AuthorityLease("room", "world", writer, 5, paused);
-        Assert.True(identity.TryApply(lease, "a"));
-        if (frozen) Assert.True(identity.TryFreezeLocalAuthority(lease, 7));
-        var controller = new ControllerIdProvider();
-        controller.SetControllerId(local);
-        var context = new CampaignAuthorityContext(identity, controller);
+        var previousMode = ModInformation.SessionMode;
+        ModInformation.SessionMode = roomHost ? SessionMode.ListenAuthority : SessionMode.RemoteReplica;
+        try
+        {
+            var identity = new SessionIdentity();
+            var lease = new AuthorityLease("room", "world", writer, 5, paused);
+            Assert.True(identity.TryApply(lease, "a"));
+            if (frozen) Assert.True(identity.TryFreezeLocalAuthority(lease, 7));
+            var controller = new ControllerIdProvider();
+            controller.SetControllerId(local);
+            var context = new CampaignAuthorityContext(identity, controller);
 
-        Assert.Equal(expected, RecruitmentVMPatches.ShouldUseNativeRecruitment(context, roomHost));
+            Assert.Equal(expected, RecruitmentVMPatches.ShouldUseNativeRecruitment(context, roomHost));
+        }
+        finally { ModInformation.SessionMode = previousMode; }
     }
 
     [Theory]
@@ -40,6 +46,21 @@ public class RecruitmentAuthorityRoutingTests
     [InlineData(false)]
     public void NoConfirmedLeasePreservesLegacyMode(bool roomHost) =>
         Assert.Equal(roomHost, RecruitmentVMPatches.ShouldUseNativeRecruitment(null!, roomHost));
+
+    [Fact]
+    public void ObserverCasesSetTheirOwnRoleAndRestoreAPreviousDedicatedMode()
+    {
+        var previousMode = ModInformation.SessionMode;
+        ModInformation.SessionMode = SessionMode.DedicatedAuthority;
+        try
+        {
+            NativeOnDoneOnlyRunsForConfirmedUnfrozenWriter("a", "b", true, false, false, false);
+            Assert.Equal(SessionMode.DedicatedAuthority, ModInformation.SessionMode);
+            NativeOnDoneOnlyRunsForConfirmedUnfrozenWriter("b", "a", false, false, false, false);
+            Assert.Equal(SessionMode.DedicatedAuthority, ModInformation.SessionMode);
+        }
+        finally { ModInformation.SessionMode = previousMode; }
+    }
 
     [Fact]
     public void NativeCartRejectsAlreadyConsumedAndDuplicateVolunteerSlots()

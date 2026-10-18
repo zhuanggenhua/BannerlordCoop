@@ -30,5 +30,18 @@ public class CampaignSchedulerCheckpointSerializationTests
         Assert.Equal(50, periodicEvent.InitialWaitTicks);
         Assert.Equal(500, periodicEvent.NextTriggerTicks);
         Assert.True(periodicEvent.IsDeleted);
+        Assert.Empty(periodicEvent.CallbackIdentities);
+    }
+
+    [Fact]
+    public void RoundTripPreservesOrderedCallbackOwnersWithTheSameMethod()
+    {
+        var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
+        var callbacks = new[] { "Army#7|Army.HourlyTick", "Army#8|Army.HourlyTick" };
+        var state = new CampaignPeriodicEventState(null, 100, 50, 500, false, callbacks);
+        var received = serializer.Deserialize<CampaignPeriodicEventState>(serializer.Serialize(state));
+
+        Assert.Equal(callbacks, received.CallbackIdentities);
+        Assert.NotSame(callbacks, received.CallbackIdentities);
     }
 }

@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Library;
 
@@ -15,6 +16,7 @@ public interface ICampaignSchedulerCheckpointService
 {
     bool TryCapture(out CampaignSchedulerCheckpoint checkpoint);
     bool TryApply(CampaignSchedulerCheckpoint checkpoint);
+    bool TryCaptureCallbacks(MBCampaignEvent campaignEvent, out string[] identities);
 }
 
 internal sealed class CampaignSchedulerCheckpointService : ICampaignSchedulerCheckpointService
@@ -41,6 +43,62 @@ internal sealed class CampaignSchedulerCheckpointService : ICampaignSchedulerChe
         return true;
     }
 
+    public bool TryCaptureCallbacks(MBCampaignEvent campaignEvent, out string[] identities)
+    {
+        identities = null;
+        if (campaignEvent?.handlers == null) return false;
+        var result = new List<string>();
+        foreach (var handler in campaignEvent.handlers)
+        {
+            if (handler == null) return false;
+            foreach (var callback in handler.GetInvocationList())
+            {
+                var method = callback.Method;
+                if (method.DeclaringType?.FullName == null ||
+                    !TryGetCallbackOwnerIdentity(callback.Target, method.IsStatic, out var owner))
+                    return false;
+                result.Add(owner + "|" + method.DeclaringType.Assembly.GetName().Name + ":" +
+                    method.DeclaringType.FullName + "." + method.Name + "(" +
+                    string.Join(",", method.GetParameters().Select(parameter => parameter.ParameterType.FullName)) + ")");
+            }
+        }
+        identities = result.ToArray();
+        return true;
+    }
+
+    private bool TryGetCallbackOwnerIdentity(object owner, bool isStatic, out string identity)
+    {
+        identity = null;
+        if (owner == null)
+        {
+            if (!isStatic) return false;
+            identity = "static";
+            return true;
+        }
+        if (objectManager.TryGetHandle(owner, out var handle) && handle != 0)
+        {
+            identity = owner.GetType().FullName + "#" + handle.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            return true;
+        }
+        var campaign = Campaign.Current;
+        if (owner is Campaign && ReferenceEquals(owner, campaign) && !string.IsNullOrWhiteSpace(campaign.UniqueGameId))
+        {
+            identity = "Campaign:" + campaign.UniqueGameId;
+            return true;
+        }
+        // These are the only unregistered singleton owners in the native periodic-event call sites.
+        // A same-type object from another campaign is not the current behavior singleton.
+        if ((owner is MapTracksCampaignBehavior &&
+             ReferenceEquals(owner, campaign?.CampaignBehaviorManager?.GetBehavior<MapTracksCampaignBehavior>())) ||
+            (owner is MapWeatherCampaignBehavior &&
+             ReferenceEquals(owner, campaign?.CampaignBehaviorManager?.GetBehavior<MapWeatherCampaignBehavior>())))
+        {
+            identity = "CampaignBehavior:" + owner.GetType().FullName;
+            return true;
+        }
+        return false;
+    }
+
     internal bool TryCapture(CampaignPeriodicEventManager manager, int tickCount, IList<MBCampaignEvent> events,
         out CampaignSchedulerCheckpoint checkpoint)
     {
@@ -56,12 +114,22 @@ internal sealed class CampaignSchedulerCheckpointService : ICampaignSchedulerChe
             }
             states.Add(state);
         }
-        if (events.Any(value => value == null || value.TriggerPeriod.NumTicks <= 0 ||
-            value.InitialWait.NumTicks < 0 || value.NextTriggerTime.NumTicks < 0)) return false;
+        var eventStates = new List<CampaignPeriodicEventState>();
+        foreach (var value in events)
+        {
+            if (value == null || value.TriggerPeriod.NumTicks <= 0 || value.InitialWait.NumTicks < 0 ||
+                value.NextTriggerTime.NumTicks < 0 ||
+                !TryCaptureCallbacks(value, out var callbacks))
+            {
+                Logger.Warning("Could not capture native periodic event {EventIndex}; timer phase or callback owner identity is unavailable",
+                    eventStates.Count);
+                return false;
+            }
+            eventStates.Add(new CampaignPeriodicEventState(value.description, value.TriggerPeriod.NumTicks,
+                value.InitialWait.NumTicks, value.NextTriggerTime.NumTicks, value.isEventDeleted, callbacks));
+        }
         checkpoint = new CampaignSchedulerCheckpoint(manager._lastGameTime.NumTicks,
-            manager.MinimumPeriodicEventInterval.NumTicks, tickCount, states, events.Select(value =>
-                new CampaignPeriodicEventState(value.description, value.TriggerPeriod.NumTicks, value.InitialWait.NumTicks,
-                    value.NextTriggerTime.NumTicks, value.isEventDeleted)));
+            manager.MinimumPeriodicEventInterval.NumTicks, tickCount, states, eventStates);
         return true;
     }
 
@@ -109,6 +177,16 @@ internal sealed class CampaignSchedulerCheckpointService : ICampaignSchedulerChe
                     "local=({LocalDescription},{LocalPeriod},{LocalInitialWait},{LocalNextTrigger})",
                     i, state?.Description, state?.TriggerPeriodTicks, state?.InitialWaitTicks, state?.NextTriggerTicks,
                     target?.description, target?.TriggerPeriod.NumTicks, target?.InitialWait.NumTicks, target?.NextTriggerTime.NumTicks);
+                return false;
+            }
+            bool callbacksResolved = TryCaptureCallbacks(target, out var callbacks);
+            if (state.CallbackIdentities == null || !callbacksResolved ||
+                !state.CallbackIdentities.SequenceEqual(callbacks, StringComparer.Ordinal))
+            {
+                Logger.Warning("Rejected campaign scheduler checkpoint at periodic event {EventIndex}; callback owners or order differ. " +
+                    "Source={SourceCallbacks}; local={LocalCallbacks}", i,
+                    string.Join(";", state.CallbackIdentities ?? Array.Empty<string>()),
+                    callbacksResolved ? string.Join(";", callbacks) : "<unresolved>");
                 return false;
             }
             // Army.OnAfterLoad rebuilds InitialWait from the load-time clock and its saved creation

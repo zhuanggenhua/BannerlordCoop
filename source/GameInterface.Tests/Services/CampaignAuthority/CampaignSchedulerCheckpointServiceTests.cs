@@ -181,8 +181,10 @@ public class CampaignSchedulerCheckpointServiceTests
             target.Events[0] = new MBCampaignEvent(new CampaignTime(36_000_000), new CampaignTime(18_735_192));
             const long nextTrigger = 1_050_000_000;
             source.Events[0].NextTriggerTime = new CampaignTime(nextTrigger);
-            int calls = 0;
-            target.Events[0].AddHandler((_, _) => calls++);
+            var sourceCounter = source.Register<CallbackCounter>(101);
+            var targetCounter = target.Register<CallbackCounter>(101);
+            source.Events[0].AddHandler(sourceCounter.Record);
+            target.Events[0].AddHandler(targetCounter.Record);
             Assert.True(source.Service.TryCapture(source.Manager, 117, source.Events, out var checkpoint));
 
             Assert.True(target.Service.TryApply(checkpoint, target.Manager, target.Events));
@@ -192,11 +194,11 @@ public class CampaignSchedulerCheckpointServiceTests
             // The stale reconnect deadline would have fired already; the authority's deadline must win.
             campaign.MapTimeTracker._numTicks = nextTrigger - 1;
             target.Events[0].CheckUpdate();
-            Assert.Equal(0, calls);
+            Assert.Equal(0, targetCounter.Calls);
             campaign.MapTimeTracker._numTicks = nextTrigger + 1;
             target.Events[0].CheckUpdate();
             target.Events[0].CheckUpdate();
-            Assert.Equal(1, calls);
+            Assert.Equal(1, targetCounter.Calls);
             Assert.Equal(nextTrigger + 36_000_000, target.Events[0].NextTriggerTime.NumTicks);
 
             Assert.True(target.Service.TryCapture(target.Manager, 118, target.Events, out var back));
@@ -255,6 +257,57 @@ public class CampaignSchedulerCheckpointServiceTests
         Assert.Equal(-1, target.Manager._mobilePartyHourlyTicker.Index);
         Assert.Equal(50, target.Events[0].InitialWait.NumTicks);
         Assert.Equal(0, target.Events[0].NextTriggerTime.NumTicks);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SamePeriodArmyOwnerOrCallbackOrderMismatchCannotPartiallyApply(bool reverseCallbacks)
+    {
+        var source = Fixture.Create();
+        var target = Fixture.Create();
+        var firstSource = source.Register<Army>(101);
+        var secondSource = source.Register<Army>(102);
+        var firstTarget = target.Register<Army>(101);
+        var secondTarget = target.Register<Army>(102);
+        var sourceEvents = new[] { Timer(firstSource), Timer(secondSource) };
+        var targetEvents = new[] { Timer(firstTarget), Timer(secondTarget) };
+        if (reverseCallbacks)
+        {
+            sourceEvents[0].AddHandler(secondSource.HourlyTick);
+            targetEvents[0].handlers.Clear();
+            targetEvents[0].AddHandler(secondTarget.HourlyTick);
+            targetEvents[0].AddHandler(firstTarget.HourlyTick);
+        }
+        else Array.Reverse(targetEvents);
+        source.Manager._mobilePartyHourlyTicker.Index = 1;
+        source.Manager._lastGameTime = new CampaignTime(5000);
+        sourceEvents[0].InitialWait = new CampaignTime(70);
+        sourceEvents[0].NextTriggerTime = new CampaignTime(6000);
+        Assert.True(source.Service.TryCapture(source.Manager, 1, sourceEvents, out var checkpoint));
+
+        Assert.False(target.Service.TryApply(checkpoint, target.Manager, targetEvents));
+        Assert.Equal(-1, target.Manager._mobilePartyHourlyTicker.Index);
+        Assert.Equal(0, target.Manager._lastGameTime.NumTicks);
+        Assert.All(targetEvents, value =>
+        {
+            Assert.Equal(50, value.InitialWait.NumTicks);
+            Assert.Equal(0, value.NextTriggerTime.NumTicks);
+            Assert.False(value.isEventDeleted);
+        });
+    }
+
+    private static MBCampaignEvent Timer(Army owner)
+    {
+        var timer = new MBCampaignEvent(null) { TriggerPeriod = new CampaignTime(100), InitialWait = new CampaignTime(50) };
+        timer.AddHandler(owner.HourlyTick);
+        return timer;
+    }
+
+    private sealed class CallbackCounter
+    {
+        public int Calls;
+        public void Record(MBCampaignEvent _, object[] args) => Calls++;
     }
 
     [Fact]

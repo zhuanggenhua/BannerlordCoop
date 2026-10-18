@@ -52,15 +52,17 @@ public sealed class CampaignPeriodicEventState
     [ProtoMember(3)] public long InitialWaitTicks { get; private set; }
     [ProtoMember(4)] public long NextTriggerTicks { get; private set; }
     [ProtoMember(5)] public bool IsDeleted { get; private set; }
+    [ProtoMember(6)] public string[] CallbackIdentities { get; private set; } = Array.Empty<string>();
 
     private CampaignPeriodicEventState() { }
     public CampaignPeriodicEventState(string description, long triggerPeriodTicks, long initialWaitTicks,
-        long nextTriggerTicks, bool isDeleted)
+        long nextTriggerTicks, bool isDeleted, IEnumerable<string> callbackIdentities = null)
     {
         Description = description;
         TriggerPeriodTicks = triggerPeriodTicks;
         InitialWaitTicks = initialWaitTicks;
         NextTriggerTicks = nextTriggerTicks;
         IsDeleted = isDeleted;
+        CallbackIdentities = callbackIdentities?.ToArray() ?? Array.Empty<string>();
     }
 }

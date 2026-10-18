@@ -29,8 +29,10 @@ public static class CampaignAuthorityDebugCommands
         private readonly ISessionIdentity identity;
         private readonly ICampaignAuthorityContext context;
         private readonly IControllerIdProvider controller;
-        public StateCommand(ISessionIdentity identity, ICampaignAuthorityContext context, IControllerIdProvider controller)
-        { this.identity = identity; this.context = context; this.controller = controller; }
+        private readonly ICampaignSchedulerCheckpointService scheduler;
+        public StateCommand(ISessionIdentity identity, ICampaignAuthorityContext context, IControllerIdProvider controller,
+            ICampaignSchedulerCheckpointService scheduler)
+        { this.identity = identity; this.context = context; this.controller = controller; this.scheduler = scheduler; }
         public string Prefix => "coop.debug.authority";
         public string Name => "state";
         public string Description => "Reports the local campaign lease, world tick and actor identity for handoff validation.";
@@ -74,6 +76,7 @@ public static class CampaignAuthorityDebugCommands
                 events = Campaign.Current.CustomPeriodicCampaignEvents.Select(value => new
                 {
                     description = value.description,
+                    callbackIdentities = scheduler.TryCaptureCallbacks(value, out var callbacks) ? callbacks : null,
                     periodTicks = value.TriggerPeriod.NumTicks,
                     initialWaitTicks = value.InitialWait.NumTicks,
                     nextTriggerTicks = value.NextTriggerTime.NumTicks,
