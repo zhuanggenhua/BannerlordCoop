@@ -1,5 +1,5 @@
-import { mkdir, readFile, writeFile, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, writeFile, rm, realpath } from 'node:fs/promises';
+import { join, resolve, dirname, basename } from 'node:path';
 import { tmpdir, hostname } from 'node:os';
 import { randomUUID, createHash } from 'node:crypto';
 import { promisify } from 'node:util';
@@ -40,6 +40,16 @@ async function readOwner(path) {
     catch { throw failure('LOCK_UNKNOWN', 'Missing or unreadable owner; preserve lock for inspection', { path }); }
 }
 
+async function removeLock(options, path) {
+    const root = resolve(options.lockRoot ?? defaultLockRoot), target = resolve(path);
+    const comparable = value => process.platform === 'win32' ? value.toLowerCase() : value;
+    if (comparable(dirname(target)) !== comparable(root) || !/^game-[0-9a-f]{64}$/.test(basename(target))
+        || comparable(await realpath(target)) !== comparable(join(await realpath(root), basename(target)))) {
+        throw failure('LOCK_PATH_INVALID', 'Resolved lock is outside its designated root; deletion refused');
+    }
+    await rm(target, { recursive: true });
+}
+
 export async function acquireResourceLock(options) {
     const path = lockPath(options);
     await mkdir(options.lockRoot ?? defaultLockRoot, { recursive: true });
@@ -51,7 +61,7 @@ export async function acquireResourceLock(options) {
     }
     const identity = await processIdentity(process.pid);
     if (identity.state !== 'alive') {
-        await rm(path, { recursive: true });
+        await removeLock(options, path);
         throw failure('IDENTITY_UNKNOWN', 'Cannot establish owner start identity');
     }
     const owner = { token: randomUUID(), pid: process.pid, start: identity.start,
@@ -62,7 +72,11 @@ export async function acquireResourceLock(options) {
         if (released) return;
         const current = await readOwner(path);
         if (current.token !== owner.token) throw failure('TOKEN_MISMATCH', 'Owner token changed; preserve current lock');
-        await rm(path, { recursive: true });
+        try {
+            await readFile(join(path, 'recovery_required.json'));
+            throw failure('CLEANUP_REQUIRED', 'Unknown cleanup preserves the lock');
+        } catch (error) { if (error.code !== 'ENOENT') throw error; }
+        await removeLock(options, path);
         released = true;
     } };
 }
@@ -78,6 +92,10 @@ export async function recoverResourceLock(options) {
     const path = lockPath(options);
     const owner = await readOwner(path);
     if (!options.token || owner.token !== options.token) throw failure('TOKEN_MISMATCH', 'Recovery requires exact owner token');
+    try {
+        await readFile(join(path, 'recovery_required.json'));
+        throw failure('CLEANUP_REQUIRED', 'Inspect remaining game processes before explicitly clearing the recovery receipt');
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
     if (owner.host !== hostname()) throw failure('OWNER_UNKNOWN', 'Owner belongs to a different host');
     const identity = await processIdentity(owner.pid);
     if (identity.state !== 'dead') throw failure('OWNER_ACTIVE_OR_UNKNOWN', 'Original PID is present or unknown; recovery refused');
@@ -85,6 +103,6 @@ export async function recoverResourceLock(options) {
     catch (error) { throw failure('RECOVERY_BUSY', 'Recovery is already claimed; inspect before retrying', { cause: error }); }
     const current = await readOwner(path);
     if (current.token !== options.token) throw failure('TOKEN_MISMATCH', 'Recovery owner changed');
-    await rm(path, { recursive: true });
+    await removeLock(options, path);
     return { recovered: true, owner, path };
 }
