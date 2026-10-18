@@ -118,14 +118,15 @@ internal class TimeCommands
                 return Failed("A loaded campaign and time control interface are required.");
 
             ContainerProvider.TryResolve<ISessionIdentity>(out var identity);
+            ContainerProvider.TryResolve<IMapTimeTrackerInterface>(out var clock);
             var selectedMode = timeControl.GetTimeControl();
             var mapTime = ScreenManager._globalLayers?.OfType<GauntletMapBarGlobalLayer>()
                 .Select(layer => layer._dataSource?.MapTimeControl).FirstOrDefault(value => value != null);
             return Succeeded(JsonConvert.SerializeObject(new
             {
                 selectedMode = selectedMode.ToString(),
-                effectiveMode = CampaignTimeDisplay.GetEffectiveMode(selectedMode, identity).ToString(),
-                simulationSuspended = CampaignTimeDisplay.IsSimulationSuspended(identity),
+                effectiveMode = CampaignTimeDisplay.GetEffectiveMode(selectedMode, identity, clock).ToString(),
+                simulationSuspended = CampaignTimeDisplay.IsSimulationSuspended(identity, clock),
                 mapTimeFlowState = mapTime?.TimeFlowState,
                 mapPaused = mapTime?.IsCurrentlyPausedOnMap,
                 missionMapTimeText = Mission.Current?.GetMissionBehavior<MissionMapTimeView>()?.DisplayText,

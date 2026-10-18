@@ -1,4 +1,5 @@
 ﻿using GameInterface.Services.Heroes.Enum;
+using GameInterface.Services.Time.Interfaces;
 
 namespace GameInterface.Services.Time.UI;
 
@@ -7,18 +8,19 @@ internal static class CampaignTimeDisplay
 {
     internal static bool IsSimulationSuspended()
     {
-        return ContainerProvider.TryResolve<ISessionIdentity>(out var identity) &&
-            IsSimulationSuspended(identity);
+        ContainerProvider.TryResolve<ISessionIdentity>(out var identity);
+        ContainerProvider.TryResolve<IMapTimeTrackerInterface>(out var clock);
+        return IsSimulationSuspended(identity, clock);
     }
 
-    internal static bool IsSimulationSuspended(ISessionIdentity identity)
+    internal static bool IsSimulationSuspended(ISessionIdentity identity, IMapTimeTrackerInterface clock = null)
     {
         return identity != null && identity.TryGetConfirmedLease(out var lease) &&
-            (lease.IsPaused || identity.IsLocallyFrozen(lease));
+            (lease.IsPaused || identity.IsLocallyFrozen(lease) || clock?.IsObserverClockSuspended == true);
     }
 
-    internal static TimeControlEnum GetEffectiveMode(TimeControlEnum selectedMode, ISessionIdentity identity)
+    internal static TimeControlEnum GetEffectiveMode(TimeControlEnum selectedMode, ISessionIdentity identity, IMapTimeTrackerInterface clock = null)
     {
-        return IsSimulationSuspended(identity) ? TimeControlEnum.Pause : selectedMode;
+        return IsSimulationSuspended(identity, clock) ? TimeControlEnum.Pause : selectedMode;
     }
 }

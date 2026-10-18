@@ -112,6 +112,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     {
         Interlocked.Exchange(ref disposed, 1);
         reconciliationTimer.Dispose();
+        mapTimeTracker?.SetObserverClockSuspended(false);
         messageBroker.Unsubscribe<CampaignReady>(Handle_CampaignReady);
         messageBroker.Unsubscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Unsubscribe<NetworkCampaignSimulationAvailabilityReport>(Handle_AvailabilityReport);
@@ -440,6 +441,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             return false;
         }
 
+        mapTimeTracker?.SetObserverClockSuspended(false);
         pendingLeaseBroadcast = nextLease;
         BroadcastPendingLease();
         Logger.Information("Committed {LeaseState} campaign authority lease epoch {Epoch} for controller {ControllerId}",
@@ -620,6 +622,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             hasPendingFreeze = true;
         }
 
+        mapTimeTracker?.SetObserverClockSuspended(true);
         if (!TryGetSynchronizedPeer(currentLease.AuthorityControllerId, out var peer)) return;
         network.Send(peer, new NetworkCampaignAuthorityFreezeRequest(currentLease,
             pendingFreezeCandidateControllerId, pendingFreezeSequence));
@@ -648,6 +651,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         pendingFreezeLease = default;
         pendingFreezeCandidateControllerId = string.Empty;
         pendingFreezeSequence = 0;
+        mapTimeTracker?.SetObserverClockSuspended(false);
     }
 
     private void Handle_FreezeAcknowledged(MessagePayload<NetworkCampaignAuthorityFreezeAcknowledged> payload)

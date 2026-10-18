@@ -1,11 +1,32 @@
 ﻿using GameInterface.Services.Heroes.Enum;
 using GameInterface.Services.Time.UI;
+using GameInterface.Services.Time.Interfaces;
 using Xunit;
 
 namespace GameInterface.Tests.Services.Time.UI;
 
 public class CampaignTimeDisplayTests
 {
+    [Theory]
+    [InlineData(TimeControlEnum.Play_1x)]
+    [InlineData(TimeControlEnum.Play_2x)]
+    public void WaitingForFinalRemoteCheckpointDisplaysPauseUntilObserverHoldIsCancelled(TimeControlEnum selectedMode)
+    {
+        var identity = new SessionIdentity();
+        var lease = new AuthorityLease("room", "writer-b", "b", 5);
+        Assert.True(identity.TryApply(lease));
+        var clock = new MapTimeTrackerInterface();
+        clock.SetObserverClockSuspended(true);
+        Assert.True(CampaignTimeDisplay.IsSimulationSuspended(identity, clock));
+        Assert.Equal(TimeControlEnum.Pause, CampaignTimeDisplay.GetEffectiveMode(selectedMode, identity, clock));
+        Assert.Equal(lease, identity.CurrentLease);
+        Assert.False(identity.IsLocallyFrozen(lease));
+
+        clock.SetObserverClockSuspended(false);
+        Assert.False(CampaignTimeDisplay.IsSimulationSuspended(identity, clock));
+        Assert.Equal(selectedMode, CampaignTimeDisplay.GetEffectiveMode(selectedMode, identity, clock));
+    }
+
     [Theory]
     [InlineData(TimeControlEnum.Play_1x)]
     [InlineData(TimeControlEnum.Play_2x)]

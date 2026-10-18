@@ -7,6 +7,19 @@ namespace GameInterface.Tests.Services.Time;
 public class MapTimeTrackerInterfaceTests
 {
     [Fact]
+    public void FinalHandoffCheckpointDoesNotReleaseObserverHoldBeforeLeaseCommit()
+    {
+        var tracker = CreateTrackerWithServerRate();
+        tracker.SetObserverClockSuspended(true);
+        tracker.ResetAuthorityHandoffPacing(500L);
+        Assert.True(tracker.IsObserverClockSuspended);
+        Assert.False(tracker.TryConsumeHardSync(out _));
+
+        tracker.ResetForCampaignJoin();
+        Assert.False(tracker.IsObserverClockSuspended);
+    }
+
+    [Fact]
     public void HandoffBaselineClearsPendingHardCorrectionAndOldPacingRate()
     {
         var tracker = CreateTrackerWithServerRate();

@@ -12,6 +12,12 @@ namespace GameInterface.Services.Time.Interfaces;
 /// </summary>
 public interface IMapTimeTrackerInterface : IGameAbstraction
 {
+    /// <summary>Whether local observer time is held while the old writer's final checkpoint is missing.</summary>
+    bool IsObserverClockSuspended { get; }
+
+    /// <summary>Holds observer extrapolation without changing the authority lease or selected speed.</summary>
+    void SetObserverClockSuspended(bool suspended);
+
     /// <summary>
     /// Gets the current authoritative tick value from the campaign's <see cref="MapTimeTracker"/>.
     /// </summary>
@@ -149,6 +155,11 @@ internal class MapTimeTrackerInterface : IMapTimeTrackerInterface
     private bool hasPostJoinBaselineHeartbeat;
     private bool joinBaselineRequiresRefresh;
     private bool skipNextServerRateEstimate;
+    private bool observerClockSuspended;
+
+    public bool IsObserverClockSuspended => Volatile.Read(ref observerClockSuspended);
+
+    public void SetObserverClockSuspended(bool suspended) => Volatile.Write(ref observerClockSuspended, suspended);
 
     public bool TryGetCurrentTicks(out long ticks)
     {
@@ -240,6 +251,17 @@ internal class MapTimeTrackerInterface : IMapTimeTrackerInterface
                             appliedSample.Ticks,
                             maxServerProgressTicks,
                             appliedSample.OneWayLatencySeconds);
+                        if ((campaign.TimeControlMode == CampaignTimeControlMode.Stop ||
+                            campaign.TimeControlMode == CampaignTimeControlMode.FastForwardStop) &&
+                            (!joinCatchUpActive || appliedSample.Ticks >= previousServerTicks))
+                        {
+                            TryConsumeHardSync(out _);
+                            correctionTicksPerSecond = 0d;
+                            correctionAccumulator = 0d;
+                            tracker._numTicks = appliedSample.Ticks;
+                            tracker._deltaTimeInTicks = 0L;
+                            campaign._dt = 0f;
+                        }
                     }
                 }, appliedSample.OnApplied);
                 if (!sampleApplied) return;
@@ -282,6 +304,13 @@ internal class MapTimeTrackerInterface : IMapTimeTrackerInterface
         if (campaign == null) throw new ArgumentNullException(nameof(campaign));
 
         var tracker = campaign.MapTimeTracker;
+        if (IsObserverClockSuspended)
+        {
+            tracker._numTicks -= tracker._deltaTimeInTicks;
+            tracker._deltaTimeInTicks = 0L;
+            campaign._dt = 0f;
+            return;
+        }
         if (TryConsumeHardSync(out long hardSyncTicks))
         {
             LogHardSync(tracker._numTicks, hardSyncTicks);
@@ -316,6 +345,7 @@ internal class MapTimeTrackerInterface : IMapTimeTrackerInterface
 
     public void ResetForCampaignJoin()
     {
+        SetObserverClockSuspended(false);
         Volatile.Write(ref waitingForJoinBaseline, true);
         Volatile.Write(ref latestServerTimeSample, null);
         hasServerTime = false;
@@ -386,7 +416,9 @@ internal class MapTimeTrackerInterface : IMapTimeTrackerInterface
 
     internal void ResetAuthorityHandoffPacing(long authorityTicks)
     {
+        bool suspended = IsObserverClockSuspended;
         ResetForCampaignJoin();
+        SetObserverClockSuspended(suspended);
         hasServerTime = true;
         previousServerTicks = authorityTicks;
         pendingServerTicks = authorityTicks;

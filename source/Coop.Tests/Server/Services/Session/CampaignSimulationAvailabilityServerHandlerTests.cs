@@ -27,6 +27,83 @@ namespace Coop.Tests.Server.Services.Session;
 public class CampaignSimulationAvailabilityServerHandlerTests
 {
     [Fact]
+    public void DisconnectedWriterWithoutFinalCheckpointStopsObserverClockWithoutChangingLease()
+    {
+        var previousMode = ModInformation.SessionMode;
+        ModInformation.SessionMode = SessionMode.ListenAuthority;
+        try
+        {
+            var broker = new TestMessageBroker();
+            var identity = new SessionIdentity();
+            var lease = new AuthorityLease("room-a", "authority-guest", "guest", 5);
+            Assert.True(identity.TryApply(lease, "host"));
+            var coordinator = new CampaignAuthorityAvailabilityCoordinator(identity, new CampaignAuthorityCandidateSelector());
+            var guestPeer = new TestNetwork().CreatePeer();
+            var host = new Player("host", "hero-host", "party-host", "clan-host", "character-host");
+            var guest = new Player("guest", "hero-guest", "party-guest", "clan-guest", "character-guest");
+            var players = new Mock<IPlayerManager>();
+            players.Setup(value => value.TryGetPlayer("host", out host)).Returns(true);
+            players.Setup(value => value.TryGetPlayer(guestPeer, out guest)).Returns(true);
+            players.Setup(value => value.TryGetPeer("guest", out It.Ref<LiteNetLib.NetPeer>.IsAny))
+                .Returns((string _, out LiteNetLib.NetPeer peer) => { peer = guestPeer; return true; });
+            bool connected = true;
+            var connections = new Mock<IConnectionCollection>();
+            connections.Setup(value => value.HasCompletedCampaignSynchronization(guestPeer)).Returns(() => connected);
+            var controller = new ControllerIdProvider();
+            controller.SetControllerId("host");
+            var clock = new MapTimeTrackerInterface();
+            var network = new Mock<INetwork>();
+            using var handler = new CampaignSimulationAvailabilityServerHandler(
+                broker, coordinator, connections.Object, players.Object, controller,
+                network.Object, identity, mapTimeTracker: clock, asyncTasks: CampaignHandoffTestServices.Drained());
+            broker.Publish(this, new CampaignReady());
+            broker.Publish(guestPeer, new NetworkCampaignSimulationAvailabilityReport(CampaignSimulationAvailability.MapReady, 1));
+            GameThread.Run(() => { }, blocking: true);
+            connected = false;
+            broker.Publish(this, new PlayerDisconnected(guestPeer, default));
+            broker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
+            GameThread.Run(() => { }, blocking: true);
+
+            var campaign = (TaleWorlds.CampaignSystem.Campaign)System.Runtime.CompilerServices.RuntimeHelpers.GetUninitializedObject(typeof(TaleWorlds.CampaignSystem.Campaign));
+            campaign.MapTimeTracker = new TaleWorlds.CampaignSystem.MapTimeTracker(new TaleWorlds.CampaignSystem.CampaignTime(1000L));
+            for (int frame = 0; frame < 50; frame++)
+            {
+                campaign._dt = 0.025f;
+                campaign.MapTimeTracker._numTicks += 10L;
+                campaign.MapTimeTracker._deltaTimeInTicks = 10L;
+                clock.ApplyClientSimulationTime(campaign, 0.1f);
+                Assert.Equal(1000L, campaign.MapTimeTracker._numTicks);
+                Assert.Equal(0L, campaign.MapTimeTracker._deltaTimeInTicks);
+                Assert.Equal(0f, campaign._dt);
+            }
+            Assert.Equal(lease, identity.CurrentLease);
+            Assert.False(identity.IsLocallyFrozen(lease));
+            network.Verify(value => value.SendAll(It.IsAny<NetworkAuthorityLeaseSnapshot>()), Times.Never);
+            Assert.True(clock.IsObserverClockSuspended);
+            connected = true;
+            broker.Publish(this, new CampaignMapSimulationReadinessChanged(false));
+            broker.Publish(guestPeer, new NetworkCampaignSimulationAvailabilityReport(CampaignSimulationAvailability.MapReady, 2));
+            GameThread.Run(() => { }, blocking: true);
+            Assert.False(clock.IsObserverClockSuspended);
+            campaign.MapTimeTracker._numTicks += 10L;
+            campaign.MapTimeTracker._deltaTimeInTicks = 10L;
+            campaign._dt = 0.025f;
+            clock.ApplyClientSimulationTime(campaign, 0.1f);
+            Assert.Equal(1010L, campaign.MapTimeTracker._numTicks);
+            Assert.Equal(lease, identity.CurrentLease);
+            broker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
+            GameThread.Run(() => { }, blocking: true);
+            Assert.True(clock.IsObserverClockSuspended);
+            handler.Dispose();
+            Assert.False(clock.IsObserverClockSuspended);
+        }
+        finally
+        {
+            ModInformation.SessionMode = previousMode;
+        }
+    }
+
+    [Fact]
     public void StaleReadinessPausesOnlyAfterTheInFlightGameThreadWorkCompletes()
     {
         var previousMode = ModInformation.SessionMode;
@@ -184,6 +261,9 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             rosterService.Setup(value => value.TryCapture(out rosters)).Returns(true);
             long finalTicks = 999;
             var clock = new Mock<IMapTimeTrackerInterface>();
+            bool observerHeld = false;
+            clock.Setup(value => value.SetObserverClockSuspended(It.IsAny<bool>()))
+                .Callback<bool>(value => observerHeld = value);
             clock.Setup(value => value.TryGetCurrentTicks(out finalTicks)).Callback(() =>
             {
                 Assert.True(GameThread.Instance.IsGameThread);
@@ -284,11 +364,13 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             Assert.Equal("guest", identity.AuthorityControllerId);
             Assert.Equal(3, identity.Epoch);
             Assert.True(freezeRequest.HandoffSequence > 0);
+            Assert.True(observerHeld);
             Assert.Equal("host", freezeRequest.CandidateControllerId);
             messageBroker.Publish(guestPeer, freezeRequest.ToAcknowledged());
             GameThread.Run(() => { }, blocking: true);
             Assert.Equal(3, identity.Epoch);
             Assert.Equal("guest", identity.AuthorityControllerId);
+            Assert.True(observerHeld);
             bool finalDeltaApplied = false;
             GameThread.EnqueueSafe(() => finalDeltaApplied = true);
             sessions.Setup(value => value.TryApply(sessionCheckpoint))
@@ -308,6 +390,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             Assert.False(identity.CurrentLease.IsPaused);
             Assert.Equal("host", identity.AuthorityControllerId);
             Assert.Equal(5, identity.Epoch);
+            Assert.False(observerHeld);
             network.Verify(value => value.SendAll(It.Is<NetworkAuthorityLeaseSnapshot>(
                 snapshot => !snapshot.IsPaused && snapshot.AuthorityControllerId == "host" && snapshot.Epoch == 5)), Times.Once);
         }
