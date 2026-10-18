@@ -2,6 +2,7 @@
 using Common.Logging;
 using Common.Messaging;
 using GameInterface.Services.Locations.Messages;
+using GameInterface.Services.Time.UI;
 using HarmonyLib;
 using SandBox;
 using Serilog;
@@ -70,8 +71,11 @@ internal class PlayerLocationEntryPatches
 
     internal static void Handle(string scene, Location location, Mission mission)
     {
-        // The interior is owned locally by the player who entered it; the server has no main party
-        // walking into a tavern, so it never requests an instance for itself.
+        // ListenAuthority has a native player entering this Mission, but does not join its own
+        // P2P location instance. Attach only the campaign-time presentation before that early return.
+        if (ModInformation.IsListenAuthority) AttachListenTimeOverlay(mission);
+
+        // DedicatedAuthority has no local player. Both host modes retain the existing no-instance path.
         if (ModInformation.IsServer)
         {
             Logger.Debug("[LocationSync] OpenIndoorMission('{Scene}') on server — no instance request", scene);
@@ -102,7 +106,7 @@ internal class PlayerLocationEntryPatches
     // GameInterface cannot reference the Missions P2P behaviors directly (Missions depends on
     // GameInterface), so resolve them from the shared container as ILocationMissionBehavior and add them
     // to the mission. Runs on the game thread (Harmony postfix on the engine call).
-    private static void AttachLocationBehaviors(Mission mission)
+    internal static void AttachLocationBehaviors(Mission mission)
     {
         if (mission == null) return;
 
@@ -125,6 +129,22 @@ internal class PlayerLocationEntryPatches
                 Logger.Information("[LocationSync] Attached {Behavior} to mission '{Scene}'", behavior.GetType().Name, mission.SceneName);
             }
         }
+    }
+
+    private static void AttachListenTimeOverlay(Mission mission)
+    {
+        if (mission == null || mission.GetMissionBehavior<MissionMapTimeView>() != null) return;
+        if (!ContainerProvider.TryResolve<MissionMapTimeView>(out var view))
+        {
+            Logger.Warning("[LocationSync] Mission time view is unavailable for the local listen player");
+            return;
+        }
+
+        // Do not mark LocationMissionTracker or resolve the location behavior collection here:
+        // those enable the P2P location controller and its instance request, not just presentation.
+        mission.AddMissionBehavior(view);
+        Logger.Information("[LocationSync] Attached MissionMapTimeView for local listen player to mission '{Scene}'",
+            mission.SceneName);
     }
 }
 
