@@ -97,7 +97,7 @@ public static class CampaignAuthorityDebugCommands
         public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
         {
             if (Campaign.Current == null || !rosters.TryCapture(out var checkpoint))
-                return new(false, "World rosters are unavailable or contain unregistered identities");
+                return new(false, "World rosters are unavailable or contain unregistered identities", "world_unavailable");
             var parties = Campaign.Current.MobileParties.Select(party => new
             {
                 handle = objects.TryGetHandle(party, out var handle) ? handle : 0,
@@ -159,29 +159,29 @@ public static class CampaignAuthorityDebugCommands
         { new ExpectedArgs("operation", "create, inspect or retire"), new ExpectedArgs("id", "Probe registry id", false) };
         public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
         {
-            if (args.Count < 1) return new(false, "Expected create, inspect or retire");
+            if (args.Count < 1) return new(false, "Expected create, inspect or retire", "invalid_argument");
             TroopRoster roster;
             string id;
             if (args[0] == "create" && args.Count == 1)
             {
-                if (!context.TryGetLocalAuthorityLease(out _)) return new(false, "An unfrozen writer is required");
+                if (!context.TryGetLocalAuthorityLease(out _)) return new(false, "An unfrozen writer is required", "not_world_writer");
                 roster = TroopRoster.CreateDummyTroopRoster();
-                if (!objects.TryGetId(roster, out id)) return new(false, "Native roster creation did not register an identity");
+                if (!objects.TryGetId(roster, out id)) return new(false, "Native roster creation did not register an identity", "registry_failure");
                 probes.Add(id);
             }
             else if (args.Count == 2 && (args[0] == "inspect" || args[0] == "retire"))
             {
                 id = args[1];
-                if (!objects.TryGetObject(id, out roster)) return new(false, "Probe identity is absent");
+                if (!objects.TryGetObject(id, out roster)) return new(false, "Probe identity is absent", "probe_absent");
             }
-            else return new(false, "Expected create, inspect <id> or retire <id>");
-            if (!objects.TryGetHandle(roster, out var handle)) return new(false, "Probe handle is absent");
+            else return new(false, "Expected create, inspect <id> or retire <id>", "invalid_argument");
+            if (!objects.TryGetHandle(roster, out var handle)) return new(false, "Probe handle is absent", "registry_failure");
             if (args[0] == "retire")
             {
                 if (!context.TryGetLocalAuthorityLease(out _) || !probes.Contains(id) || roster.OwnerParty != null || roster.Count != 0)
-                    return new(false, "Only a local empty probe can be retired by its writer");
+                    return new(false, "Only a local empty probe can be retired by its writer", "not_owned_probe");
                 LifetimePatches<TroopRoster>.DestroyPostfix(ref roster, true);
-                if (objects.TryGetObject<TroopRoster>(id, out _)) return new(false, "Probe retirement did not remove its identity");
+                if (objects.TryGetObject<TroopRoster>(id, out _)) return new(false, "Probe retirement did not remove its identity", "registry_failure");
                 probes.Remove(id);
             }
             var allocation = objects.CaptureAllocationCheckpoint();
