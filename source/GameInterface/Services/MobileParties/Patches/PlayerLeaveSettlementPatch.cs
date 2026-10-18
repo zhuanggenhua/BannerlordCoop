@@ -1,11 +1,14 @@
 ﻿using Common.Messaging;
 using Common;
+using GameInterface.Services.CampaignAuthority;
+using GameInterface.Services.Entity;
 #if DEBUG
 using GameInterface.Services.GameMenus.Patches;
 #endif
 using GameInterface.Services.MobileParties.Messages.Behavior;
 using HarmonyLib;
 using SandBox.CampaignBehaviors;
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
@@ -34,8 +37,20 @@ internal class PlayerLeaveSettlementPatch
 
     internal static bool RequestLeave()
     {
-        // Listen A owns this encounter. Native consequences execute once and publish world effects.
-        if (ModInformation.IsListenAuthority) return true;
+        if (ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authority) && authority.IsAuthorityKnown)
+        {
+            if (!authority.TryGetCurrentLease(out var lease) || !lease.IsValid || lease.IsPaused) return false;
+            if (authority.TryGetLocalAuthorityLease(out var localLease) && localLease == lease) return true;
+
+            // A frozen owner must not turn its native action into an observer request.
+            if (ModInformation.IsListenAuthority ||
+                !ContainerProvider.TryResolve<IControllerIdProvider>(out var controller) ||
+                string.IsNullOrWhiteSpace(controller.ControllerId) ||
+                string.Equals(controller.ControllerId, lease.AuthorityControllerId, StringComparison.Ordinal))
+                return false;
+        }
+        else if (ModInformation.IsListenAuthority) return true;
+
         var party = MobileParty.MainParty;
 
         var message = new EndSettlementEncounterAttempted(party);

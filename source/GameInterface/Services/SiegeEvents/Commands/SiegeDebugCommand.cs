@@ -3,6 +3,8 @@ using Autofac;
 using Common;
 using Common.Logging;
 using Common.Messaging;
+using GameInterface.Services.CampaignAuthority;
+using GameInterface.Services.Entity;
 using GameInterface.Services.Armies.Patches;
 using GameInterface.Services.MapEvents;
 using GameInterface.Services.MobileParties.Data;
@@ -1344,6 +1346,26 @@ public class SiegeDebugCommand
             if (party.CurrentSettlement == null)
             {
                 return Failed("The local player party is not in a settlement encounter");
+            }
+
+            if (ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authority) && authority.IsAuthorityKnown)
+            {
+                if (!authority.TryGetCurrentLease(out var lease) || !lease.IsValid || lease.IsPaused)
+                    return Failed("The campaign authority is paused or unavailable");
+
+                if (authority.TryGetLocalAuthorityLease(out var localLease) && localLease == lease)
+                {
+                    // Native IL does not read MenuCallbackArgs. Its Harmony prefix performs the leave gate.
+                    PlayerTownVisitCampaignBehavior.game_menu_settlement_leave_on_consequence(null);
+                    return party.CurrentSettlement == null
+                        ? Succeeded("Left the settlement through the native consequence")
+                        : Failed("The native settlement leave did not complete");
+                }
+
+                if (!ContainerProvider.TryResolve<IControllerIdProvider>(out var controller) ||
+                    string.IsNullOrWhiteSpace(controller.ControllerId) ||
+                    string.Equals(controller.ControllerId, lease.AuthorityControllerId, StringComparison.Ordinal))
+                    return Failed("The local campaign writer is frozen or unavailable");
             }
 
             var settlementName = party.CurrentSettlement.Name;
