@@ -1,4 +1,5 @@
 ﻿using Common;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.MobileParties.Extensions;
 using HarmonyLib;
 using System.Collections.Generic;
@@ -15,7 +16,21 @@ namespace GameInterface.Services.MobileParties.Patches.Disable;
 internal class DisableMobilePartyTrainingBehavior
 {
     [HarmonyPatch(nameof(MobilePartyTrainingBehavior.RegisterEvents))]
-    static bool Prefix() => ModInformation.IsServer;
+    [HarmonyPrefix]
+    internal static bool PrefixRegisterEvents() => true;
+
+    // Both peers keep their native listeners; changing writer never registers them again.
+    [HarmonyPatch(nameof(MobilePartyTrainingBehavior.HourlyTickParty))]
+    [HarmonyPrefix]
+    internal static bool PrefixHourlyTickParty() => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
+
+    [HarmonyPatch(nameof(MobilePartyTrainingBehavior.OnDailyTickParty))]
+    [HarmonyPrefix]
+    internal static bool PrefixDailyTickParty() => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
+
+    [HarmonyPatch(nameof(MobilePartyTrainingBehavior.OnPlayerUpgradedTroops))]
+    [HarmonyPrefix]
+    internal static bool PrefixPlayerUpgradedTroops() => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
 }
 
 // OnPlayerUpgradedTroops already replaced in PartyDoneLogicHandler.ApplyUpgradedTroopHistory
