@@ -39,6 +39,8 @@ node tools\coordination\with-game-lock.mjs --repo . -- powershell.exe -NoProfile
 
 每个功能的顺序为子代理测试与提交、总控审查、集成、验证和证据采集，再启动下一项相关工作。已验证的子任务收口，失效任务中断。只清理本工具登记创建且已验证集成的干净工作树和分支，保留既有实验、未审提交和失败现场的可追溯证据。当前流程不创建 PR，也不推送；需要发布时再按会话授权执行。
 
+Windows 清理还须确认物理目录消失，不能只看 Git 返回成功。任务板完整核对已知 `mb2`、`source/packages` junction 的父路径和目标后，仅移除链接；残留空父目录使用非递归删除。旧 `cleanedAt` 下仍有这些链接的目录可重新清理，旧时间保留为 `previousCleanedAt`。未知内容或目标变化进入 `cleanup_required` 并保留现场，不扩大删除范围。真实原生任务及回归证据见 [编排验收记录](agent-coordination-verification.md)。
+
 总控可运行基础设施自检：
 
 ```powershell

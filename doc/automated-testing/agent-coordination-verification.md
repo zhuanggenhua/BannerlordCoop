@@ -51,3 +51,21 @@
 自检读取并校验了既有 A→B→A、真实酒馆 Mission、全员离图暂停恢复的验收记录及旧失败名单对比，未重新运行这些骑砍场景。本次 61 项通过仅说明所列编排基础设施测试通过，不改变 [已有玩法验收边界](../p2p-authority-live-acceptance-2026-10-18.md)，也不能宣称整个游戏测试全绿。
 
 本文件交付时，真实原生任务仍等待总控校验 handoff、非作者审查、cherry-pick、集成 HEAD 上的实际测试，以及关闭和清理。只有这些 gate 的后续真实记录可以证明完整收口；本代理不自行集成、关闭或删除工作树。Node 任务板持久化状态，原生派工与中断由活动总控执行，并未伪装成关闭聊天后仍无限运行的后台服务。
+
+总控随后完成了真实交付流程：核验 `995bbb3db37f532f8520c83fa20a7974d78f42ab` 的单文件 diff、11 项文件证据及测试哈希，独立审查 session 适配器后集成为 `f8e59c9adcef5e6b2f42dab7c810f71a74593a56`，实跑 63 项全部通过。该轮清理发现 Windows Git 已删除工作树登记和分支，却保留 `mb2` 与 `source/packages` junction；因此总控把任务重新标记为 `needs_fix`，没有将 Git 退出码零视为完整收口。
+
+修复提交 `aa3642bcfee10235c632a2aa97bee70c611d4615` 由 board 代理提交，另一位原生代理独立只读复核通过，总控集成为 `bdacfc4a78dfa7e73fa7d4d59b20b30ef87611f2`。实现先完整校验已知链接的路径、父目录与精确目标，再只 unlink 链接本身；确认物理工作树目录消失后，才删除分支和记录 `cleanedAt`。旧完成标记下的已知链接残留可恢复；未知内容和更换目标会保留现场并记录 `cleanup_required`。没有对实际遗留目录执行递归删除。
+
+总控在代码 HEAD `bdacfc4a78dfa7e73fa7d4d59b20b30ef87611f2` 再次实际执行完整自检，**25 项检查通过，68 项测试通过、0 失败、0 跳过**：任务板 24、锁 12、会话适配器 28、部署保护 4。任务板新增的五项 Windows 测试覆盖非空目标的原生 junction unlink、正常清理、无 Git 登记和分支的旧残留恢复、更换目标拒绝、未知残留保留。每项均核对受保护目标 sentinel 保持完整。
+
+最终真实证据仍位于 Git common-dir：
+
+- `codex-coordination/self-check/1792319327749-dbef1ff1/report.json`：68 项集成自检及逐套日志索引，SHA256 `e02d82a17740a5f59b31d6f3653ce2a957249fd92ef030f26946a93943d67bc3`。
+- `codex-coordination/evidence/orchestration-acceptance/integration-24fb0f71-741f-43d6-b16a-43ea9121e22c.log`：总控验证命令的完整输出，SHA256 `b2d511e0d9b598e607c2386204edac0fb4dd74d1c565dc01c72652b0b6a01690`。
+- `codex-coordination/native-acceptance/junction-fix-independent-review.json`：非作者复核、原提交、集成提交及作者 24 项日志哈希。
+- `codex-coordination/native-acceptance/actual-cleanup-after-junction-repair.json`：总控已重新验证、关闭并清理实际原生任务，目录、分支和 Git 登记均不存在，保留旧错误时间及新清理时间。
+- `codex-coordination/native-acceptance/bootstrap-cleanup.json`：三位原生代理均结束；逐一核对干净工作树、分支身份与全部 patch 已集成后，移除本轮三棵临时工作树及分支。原始提交保存在 `refs/codex-coordination/accepted/` 下，既有实验工作树保持原状。
+- `codex-coordination/native-acceptance/references-and-installed-mod-after-cleanup.json`：游戏与 packages 的链接目标及顶层目录条目未变；现有部署 manifest 中七个实际文件的 SHA256 全部未变。
+- `codex-coordination/native-acceptance/game-processes-after-cleanup.json`：收口时骑砍及服务器进程为零。
+
+本次真实原生任务现已 `closed` 且 `cleanupStatus=cleaned`，三个工作代理没有遗留运行任务。后续只补充本段验收记录与流程说明，不改已验证代码。七条玩法 next 仍未完成；本轮未启动游戏、重新部署、执行真实 CLI 推理、推送或创建 PR。实际能力是活动总控统一派工及持久状态恢复；未核验父模型名称前，继续采用继承当前模型的原生代理。
