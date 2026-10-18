@@ -1,0 +1,163 @@
+{
+  "runId": "03b2b52c2dbf4d66a4c4b9106ead98e4",
+  "sourceCommit": "067993782",
+  "status": "failed_safe_pause_at_derived_party_scheduler",
+  "blocker": "villager partial-hourly ticker order or membership differs; next build retains exact membership validation and logs the difference",
+  "processes": {
+    "B": 16840,
+    "A": 29548
+  },
+  "partyStates": [
+    {
+      "instance": "server",
+      "state": {
+        "mode": "ListenAuthority",
+        "localControllerId": "LocalA",
+        "mainHeroId": "main_hero",
+        "mainPartyId": "player_party",
+        "campaignId": "RVLgBrkkFApz",
+        "hours": 2186084.6142255,
+        "registeredPlayers": 2,
+        "controllerId": "LocalA",
+        "heroId": "Hero_main_hero",
+        "heroStringId": "main_hero",
+        "clanId": "Clan_player_faction",
+        "characterId": "CharacterObject_main_hero",
+        "gold": 1000,
+        "partyId": "MobileParty_player_party",
+        "partyStringId": "player_party",
+        "x": 660.7773,
+        "y": 278.1635,
+        "troops": 1,
+        "settlementId": null,
+        "items": [],
+        "wounded": 0,
+        "heroRegistrations": 1,
+        "partyRegistrations": 1,
+        "clanRegistrations": 1,
+        "connected": true,
+        "active": true,
+        "mapEvent": "none",
+        "visual": true
+      }
+    },
+    {
+      "instance": "client1",
+      "state": {
+        "mode": "RemoteReplica",
+        "localControllerId": "testclient1",
+        "mainHeroId": "Player",
+        "mainPartyId": "Player",
+        "campaignId": "RVLgBrkkFApz",
+        "hours": 2186084.7648888053,
+        "registeredPlayers": 2,
+        "controllerId": "LocalA",
+        "heroId": "Hero_main_hero",
+        "heroStringId": "main_hero",
+        "clanId": "Clan_player_faction",
+        "characterId": "CharacterObject_main_hero",
+        "gold": 1000,
+        "partyId": "MobileParty_player_party",
+        "partyStringId": "player_party",
+        "x": 660.7773,
+        "y": 278.1635,
+        "troops": 1,
+        "settlementId": null,
+        "items": [],
+        "wounded": 0,
+        "heroRegistrations": 1,
+        "partyRegistrations": 1,
+        "clanRegistrations": 1,
+        "connected": false,
+        "active": true,
+        "mapEvent": "none",
+        "visual": true
+      }
+    },
+    {
+      "instance": "server",
+      "state": {
+        "mode": "ListenAuthority",
+        "localControllerId": "LocalA",
+        "mainHeroId": "main_hero",
+        "mainPartyId": "player_party",
+        "campaignId": "RVLgBrkkFApz",
+        "hours": 2186084.6242298055,
+        "registeredPlayers": 2,
+        "controllerId": "testclient1",
+        "heroId": "Hero_Player",
+        "heroStringId": "Player",
+        "clanId": "Clan_Player",
+        "characterId": "CharacterObject_Player",
+        "gold": 920,
+        "partyId": "MobileParty_Player",
+        "partyStringId": "Player",
+        "x": 658.7773,
+        "y": 277.413422,
+        "troops": 5,
+        "settlementId": null,
+        "items": [],
+        "wounded": 0,
+        "heroRegistrations": 1,
+        "partyRegistrations": 1,
+        "clanRegistrations": 1,
+        "connected": true,
+        "active": true,
+        "mapEvent": "none",
+        "visual": true
+      }
+    },
+    {
+      "instance": "client1",
+      "state": {
+        "mode": "RemoteReplica",
+        "localControllerId": "testclient1",
+        "mainHeroId": "Player",
+        "mainPartyId": "Player",
+        "campaignId": "RVLgBrkkFApz",
+        "hours": 2186084.7742439443,
+        "registeredPlayers": 2,
+        "controllerId": "testclient1",
+        "heroId": "Hero_Player",
+        "heroStringId": "Player",
+        "clanId": "Clan_Player",
+        "characterId": "CharacterObject_Player",
+        "gold": 920,
+        "partyId": "MobileParty_Player",
+        "partyStringId": "Player",
+        "x": 658.7773,
+        "y": 277.1635,
+        "troops": 5,
+        "settlementId": null,
+        "items": [],
+        "wounded": 0,
+        "heroRegistrations": 1,
+        "partyRegistrations": 1,
+        "clanRegistrations": 1,
+        "connected": false,
+        "active": true,
+        "mapEvent": "none",
+        "visual": true
+      }
+    }
+  ],
+  "schedulerRejection": [
+    "[(16840) 12:58:07 WRN GameInterface.Services.CampaignAuthority.CampaignSchedulerCheckpointService] Rejected campaign scheduler checkpoint at ticker _villagerMobilePartyPartialHourlyAiEventTicker; order, membership or cursor differs",
+    "[(16840) 12:58:07 WRN Coop.Core.Client.Services.Session.CampaignAuthorityHandoffBarrierClientHandler] Rejected campaign handoff barrier 1; native campaign scheduler did not match"
+  ],
+  "cleanup": [
+    {
+      "instance": null,
+      "cleanupComplete": true,
+      "processAlive": false,
+      "processTreeAlive": false
+    },
+    {
+      "instance": null,
+      "cleanupComplete": true,
+      "processAlive": false,
+      "processTreeAlive": false
+    }
+  ],
+  "accepted": false
+}

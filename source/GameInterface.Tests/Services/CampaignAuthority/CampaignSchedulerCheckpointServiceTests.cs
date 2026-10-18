@@ -61,6 +61,49 @@ public class CampaignSchedulerCheckpointServiceTests
         Assert.Equal(target.Settlements, target.Manager._hourlyTickSettlementTicker._list);
     }
 
+    [Fact]
+    public void DerivedPartyPartitionKeepsLiveMembershipAfterOrderAndCursorTransfer()
+    {
+        var source = Fixture.Create();
+        var target = Fixture.Create();
+        source.Manager._villagerMobilePartyPartialHourlyAiEventTicker.Index = 0;
+        source.Manager._villagerMobilePartyPartialHourlyAiEventTicker.TickDebt = .75;
+        target.Manager._villagerMobilePartyPartialHourlyAiEventTicker._list.Reverse();
+        var nativePartition = target.Manager._villagerMobilePartyPartialHourlyAiEventTicker._list;
+        var globalParties = target.Manager._mobilePartyHourlyTicker._list.ToArray();
+        Assert.True(source.Service.TryCapture(source.Manager, 1, source.Events, out var checkpoint));
+        Assert.True(target.Service.TryApply(checkpoint, target.Manager, target.Events));
+        Assert.Same(nativePartition, target.Manager._villagerMobilePartyPartialHourlyAiEventTicker._list);
+        Assert.Equal(globalParties, target.Manager._mobilePartyHourlyTicker._list);
+        var calls = new List<MobileParty>();
+        var ticker = target.Manager._villagerMobilePartyPartialHourlyAiEventTicker;
+        ticker._action = calls.Add;
+        ticker.PeriodicTickSome(.2);
+        Assert.Same(target.Parties[1], Assert.Single(calls));
+        var added = target.Register<MobileParty>(90);
+        nativePartition.Add(added);
+        nativePartition.Remove(target.Parties[0]);
+        Assert.Contains(added, ticker._list);
+        Assert.DoesNotContain(target.Parties[0], ticker._list);
+        Assert.True(target.Service.TryCapture(target.Manager, 2, target.Events, out var back));
+        var returned = back.Tickers.Single(value => value.Name == "_villagerMobilePartyPartialHourlyAiEventTicker");
+        Assert.Equal(new[] { 2u, 90u }, returned.OrderedHandles);
+    }
+
+    [Fact]
+    public void RejectsDifferentDerivedMembershipBeforeChangingListsOrCursors()
+    {
+        var source = Fixture.Create();
+        var target = Fixture.Create();
+        source.Manager._mobilePartyHourlyTicker.Index = 1;
+        target.Manager._villagerMobilePartyPartialHourlyAiEventTicker._list[0] = target.Register<MobileParty>(90);
+        var original = target.Manager._villagerMobilePartyPartialHourlyAiEventTicker._list.ToArray();
+        Assert.True(source.Service.TryCapture(source.Manager, 1, source.Events, out var checkpoint));
+        Assert.False(target.Service.TryApply(checkpoint, target.Manager, target.Events));
+        Assert.Equal(-1, target.Manager._mobilePartyHourlyTicker.Index);
+        Assert.Equal(original, target.Manager._villagerMobilePartyPartialHourlyAiEventTicker._list);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

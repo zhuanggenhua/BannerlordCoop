@@ -127,19 +127,19 @@ internal sealed class CampaignSchedulerCheckpointService : ICampaignSchedulerChe
         yield return Wrap(nameof(manager._dailyTickHeroTicker), manager._dailyTickHeroTicker);
         yield return Wrap(nameof(manager._dailyTickClanTicker), manager._dailyTickClanTicker);
         yield return Wrap(nameof(manager._quarterDailyPartyTicker), manager._quarterDailyPartyTicker);
-        yield return Wrap(nameof(manager._caravanMobilePartyPartialHourlyAiEventTicker), manager._caravanMobilePartyPartialHourlyAiEventTicker);
-        yield return Wrap(nameof(manager._garrisonMobilePartyPartialHourlyAiEventTicker), manager._garrisonMobilePartyPartialHourlyAiEventTicker);
-        yield return Wrap(nameof(manager._militiaMobilePartyPartialHourlyAiEventTicker), manager._militiaMobilePartyPartialHourlyAiEventTicker);
-        yield return Wrap(nameof(manager._villagerMobilePartyPartialHourlyAiEventTicker), manager._villagerMobilePartyPartialHourlyAiEventTicker);
-        yield return Wrap(nameof(manager._customMobilePartyPartialHourlyAiEventTicker), manager._customMobilePartyPartialHourlyAiEventTicker);
-        yield return Wrap(nameof(manager._banditMobilePartyPartialHourlyAiEventTicker), manager._banditMobilePartyPartialHourlyAiEventTicker);
-        yield return Wrap(nameof(manager._lordMobilePartyPartialHourlyAiEventTicker), manager._lordMobilePartyPartialHourlyAiEventTicker);
-        yield return Wrap(nameof(manager._partiesWithoutPartyComponentsPartialHourlyAiEventTicker), manager._partiesWithoutPartyComponentsPartialHourlyAiEventTicker);
-        yield return Wrap(nameof(manager._patrolPartyPartialHourlyAiEventTicker), manager._patrolPartyPartialHourlyAiEventTicker);
+        yield return Wrap(nameof(manager._caravanMobilePartyPartialHourlyAiEventTicker), manager._caravanMobilePartyPartialHourlyAiEventTicker, true);
+        yield return Wrap(nameof(manager._garrisonMobilePartyPartialHourlyAiEventTicker), manager._garrisonMobilePartyPartialHourlyAiEventTicker, true);
+        yield return Wrap(nameof(manager._militiaMobilePartyPartialHourlyAiEventTicker), manager._militiaMobilePartyPartialHourlyAiEventTicker, true);
+        yield return Wrap(nameof(manager._villagerMobilePartyPartialHourlyAiEventTicker), manager._villagerMobilePartyPartialHourlyAiEventTicker, true);
+        yield return Wrap(nameof(manager._customMobilePartyPartialHourlyAiEventTicker), manager._customMobilePartyPartialHourlyAiEventTicker, true);
+        yield return Wrap(nameof(manager._banditMobilePartyPartialHourlyAiEventTicker), manager._banditMobilePartyPartialHourlyAiEventTicker, true);
+        yield return Wrap(nameof(manager._lordMobilePartyPartialHourlyAiEventTicker), manager._lordMobilePartyPartialHourlyAiEventTicker, true);
+        yield return Wrap(nameof(manager._partiesWithoutPartyComponentsPartialHourlyAiEventTicker), manager._partiesWithoutPartyComponentsPartialHourlyAiEventTicker, true);
+        yield return Wrap(nameof(manager._patrolPartyPartialHourlyAiEventTicker), manager._patrolPartyPartialHourlyAiEventTicker, true);
     }
 
-    private ITicker Wrap<T>(string name, CampaignPeriodicEventManager.PeriodicTicker<T> ticker) where T : class =>
-        new Ticker<T>(name, ticker, objectManager);
+    private ITicker Wrap<T>(string name, CampaignPeriodicEventManager.PeriodicTicker<T> ticker, bool derivedPartyList = false) where T : class =>
+        new Ticker<T>(name, ticker, objectManager, derivedPartyList);
 
     private interface ITicker
     {
@@ -153,8 +153,9 @@ internal sealed class CampaignSchedulerCheckpointService : ICampaignSchedulerChe
         public string Name { get; }
         private readonly CampaignPeriodicEventManager.PeriodicTicker<T> ticker;
         private readonly IObjectManager objects;
-        public Ticker(string name, CampaignPeriodicEventManager.PeriodicTicker<T> ticker, IObjectManager objects)
-        { Name = name; this.ticker = ticker; this.objects = objects; }
+        private readonly bool derivedPartyList;
+        public Ticker(string name, CampaignPeriodicEventManager.PeriodicTicker<T> ticker, IObjectManager objects, bool derivedPartyList)
+        { Name = name; this.ticker = ticker; this.objects = objects; this.derivedPartyList = derivedPartyList; }
 
         public bool TryCapture(out CampaignPeriodicTickerState state)
         {
@@ -182,14 +183,32 @@ internal sealed class CampaignSchedulerCheckpointService : ICampaignSchedulerChe
             MBReadOnlyList<T> ordered = ticker._list;
             if (!local.OrderedHandles.SequenceEqual(state.OrderedHandles))
             {
-                // Only the settlement tickers own a shuffled snapshot. Other lists are live engine
-                // membership/index structures and must never be replaced or reordered here.
-                if (typeof(T) != typeof(Settlement) || local.OrderedHandles.Length != state.OrderedHandles.Length ||
-                    !local.OrderedHandles.OrderBy(value => value).SequenceEqual(state.OrderedHandles.OrderBy(value => value))) return false;
+                if ((!derivedPartyList && typeof(T) != typeof(Settlement)) ||
+                    local.OrderedHandles.Length != state.OrderedHandles.Length ||
+                    !local.OrderedHandles.OrderBy(value => value).SequenceEqual(state.OrderedHandles.OrderBy(value => value)))
+                {
+                    Logger.Warning("Scheduler ticker {TickerName} mismatch: source count={SourceCount} local count={LocalCount}, source-only={SourceOnly}, local-only={LocalOnly}",
+                        Name, state.OrderedHandles.Length, local.OrderedHandles.Length,
+                        string.Join(",", state.OrderedHandles.Except(local.OrderedHandles).Take(12)),
+                        string.Join(",", local.OrderedHandles.Except(state.OrderedHandles).Take(12)));
+                    return false;
+                }
                 var byHandle = local.OrderedHandles.Zip(ticker._list, (handle, value) => (handle, value)).ToDictionary(pair => pair.handle, pair => pair.value);
                 ordered = new MBReadOnlyList<T>(state.OrderedHandles.Select(handle => byHandle[handle]));
             }
-            apply = () => { ticker._list = ordered; ticker.Index = state.Index; ticker.TickDebt = state.TickDebt; };
+            apply = () =>
+            {
+                if (derivedPartyList && !ReferenceEquals(ordered, ticker._list))
+                {
+                    // Component partitions use object-based Add/Remove. Keep their native live
+                    // list reference so later creation and destruction remain visible to the ticker.
+                    ticker._list.Clear();
+                    ticker._list.AddRange(ordered);
+                }
+                else ticker._list = ordered;
+                ticker.Index = state.Index;
+                ticker.TickDebt = state.TickDebt;
+            };
             return true;
         }
 
