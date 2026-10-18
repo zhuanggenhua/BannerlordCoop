@@ -7,6 +7,7 @@ using Common.Messaging;
 using GameInterface.Services.MobileParties.Extensions;
 using GameInterface.Services.MobileParties.Messages.Behavior;
 using GameInterface.Services.ObjectManager;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Party.Patches;
 using GameInterface.Services.TroopRosters.Data;
 using GameInterface.Services.TroopRosters.Interfaces;
@@ -462,7 +463,7 @@ internal class PartyCommands
 
         public string Description => "Reports set troop state.";
 
-        public CoopCommandSide Side => CoopCommandSide.Server;
+        public CoopCommandSide Side => CoopCommandSide.Both;
 
         public IExpectedArgs[] ExpectedArgs { get; } = new IExpectedArgs[]
         {
@@ -476,7 +477,8 @@ internal class PartyCommands
 
         public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
         {
-            if (ModInformation.IsClient) return Failed("Command can only be run on the server.");
+            if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation())
+                return Failed("Command requires the current unfrozen campaign authority.");
             string validationError = ValidateTroopStateArgs(
                 args,
                 out var shouldExist,

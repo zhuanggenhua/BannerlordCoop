@@ -7,6 +7,9 @@ using GameInterface.Services.Time.Messages;
 using Newtonsoft.Json;
 using System;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using GameInterface.Services.ObjectManager;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.GameState;
 using TaleWorlds.Core;
@@ -75,6 +78,65 @@ public static class CampaignAuthorityDebugCommands
                 }).ToArray(),
             },
         }));
+    }
+
+    public sealed class WorldStateCommand : ICoopCommand
+    {
+        private readonly IObjectManager objects;
+        private readonly ICampaignRosterCheckpointService rosters;
+        public WorldStateCommand(IObjectManager objects, ICampaignRosterCheckpointService rosters)
+        { this.objects = objects; this.rosters = rosters; }
+        public string Prefix => "coop.debug.authority";
+        public string Name => "world_state";
+        public string Description => "Reports critical world hashes and an NPC position sample without changing game state.";
+        public CoopCommandSide Side => CoopCommandSide.Both;
+        public IExpectedArgs[] ExpectedArgs { get; } = Array.Empty<IExpectedArgs>();
+        public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
+        {
+            if (Campaign.Current == null || !rosters.TryCapture(out var checkpoint))
+                return new(false, "World rosters are unavailable or contain unregistered identities");
+            var parties = Campaign.Current.MobileParties.Select(party => new
+            {
+                handle = objects.TryGetHandle(party, out var handle) ? handle : 0,
+                id = party.StringId,
+                x = party.Position.X, y = party.Position.Y,
+                troops = party.MemberRoster.TotalManCount,
+                wounded = party.MemberRoster.TotalWounded,
+                hero = party.LeaderHero?.StringId,
+                clan = party.ActualClan?.StringId,
+                active = party.IsActive,
+                movingNpc = party.IsLordParty || party.IsCaravan || party.IsVillager,
+            }).OrderBy(party => party.handle).ToArray();
+            var allRosters = checkpoint.Rosters.OrderBy(roster => roster.RosterHandle).ToArray();
+            var heroes = Hero.AllAliveHeroes.OrderBy(hero => hero.StringId, StringComparer.Ordinal).ToArray();
+            var allocation = objects.CaptureAllocationCheckpoint();
+            return new(true, JsonConvert.SerializeObject(new
+            {
+                campaign = Campaign.Current.UniqueGameId,
+                ticks = CampaignTime.Now.NumTicks,
+                parties = parties.Length,
+                unregisteredParties = parties.Count(party => party.handle == 0),
+                partyIdentityHash = Hash(parties.Select(party => new { party.handle, party.id, party.hero, party.clan })),
+                rosterCount = allRosters.Length,
+                rosterCountsHash = Hash(allRosters.Select(roster => new { roster.RosterHandle,
+                    elements = roster.Elements.OrderBy(element => element.CharacterHandle).Select(element =>
+                        new { element.CharacterHandle, element.Number, element.Wounded }) })),
+                rosterXpHash = Hash(allRosters.Select(roster => new { roster.RosterHandle,
+                    elements = roster.Elements.OrderBy(element => element.CharacterHandle).ToArray() })),
+                volunteerHash = Hash(heroes.Select(hero => new { id = hero.StringId,
+                    troops = (hero.VolunteerTypes ?? Array.Empty<CharacterObject>()).Select(troop => troop?.StringId).ToArray() })),
+                heroGoldHash = Hash(heroes.Select(hero => new { id = hero.StringId, hero.Gold })),
+                nextHandle = allocation.NextHandle,
+                allocationCounterHash = Hash(allocation.TypeCounters.OrderBy(pair => pair.Key, StringComparer.Ordinal)),
+                npcSample = parties.Where(party => party.active && party.movingNpc).Take(24).ToArray(),
+            }));
+        }
+
+        private static string Hash(object value)
+        {
+            using var sha = SHA256.Create();
+            return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(value)))).Replace("-", "");
+        }
     }
 
     public sealed class AvailabilityCommand : ICoopCommand

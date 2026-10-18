@@ -4,6 +4,7 @@ using Common.Messaging;
 using Common.Network;
 using Common.Network.Coalescing;
 using Common.Util;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.MapEvents;
 using GameInterface.Services.ObjectManager;
 using GameInterface.Services.Party;
@@ -50,6 +51,7 @@ internal class TroopRosterDeltaHandler : IHandler
     private readonly IPartyScreenRosterRefresher partyScreenRosterRefresher;
     private readonly IPlayerManager playerManager;
     private readonly IPlayerTroopXpRelevance playerTroopXpRelevance;
+    private readonly ICampaignAuthorityContext authorityContext;
 
     public TroopRosterDeltaHandler(
         IMessageBroker messageBroker,
@@ -59,7 +61,8 @@ internal class TroopRosterDeltaHandler : IHandler
         IPartyScreenRosterRefresher partyScreenRosterRefresher,
         IPlayerManager playerManager,
         IPlayerTroopXpRelevance playerTroopXpRelevance,
-        ISendCoalescer coalescer = null)
+        ISendCoalescer coalescer = null,
+        ICampaignAuthorityContext authorityContext = null)
     {
         this.messageBroker = messageBroker;
         this.objectManager = objectManager;
@@ -69,6 +72,7 @@ internal class TroopRosterDeltaHandler : IHandler
         this.partyScreenRosterRefresher = partyScreenRosterRefresher;
         this.playerManager = playerManager;
         this.playerTroopXpRelevance = playerTroopXpRelevance;
+        this.authorityContext = authorityContext;
 
         // Authority send path: the roster patches publish these local events (server-only) with the server index.
         messageBroker.Subscribe<CountsAtIndexAdded>(Handle_CountsAtIndexAdded);
@@ -170,6 +174,18 @@ internal class TroopRosterDeltaHandler : IHandler
     private void EnqueueRegular(TroopRoster roster, uint rosterId, uint characterId,
         TroopRosterElementOperation operation)
     {
+        if (authorityContext?.IsAuthorityKnown == true)
+        {
+            if (!authorityContext.TryGetLocalAuthorityLease(out _)) return;
+            // Every map replica can become the next writer. Preserve NPC and player XP
+            // on all of them, including the room host when it has no remote-player peer.
+            if (!ModInformation.IsDedicatedAuthority)
+            {
+                Enqueue(rosterId, characterId, operation);
+                return;
+            }
+        }
+
         var mobileParty = roster.OwnerParty?.MobileParty;
         if (mobileParty == null)
         {
