@@ -8,6 +8,7 @@ using Common.Session;
 using Common.Tests.Utils;
 using Coop.Core.Client.Services.Session;
 using GameInterface.Services.Entity;
+using GameInterface.Services.ObjectManager;
 using Moq;
 using System.Collections.Generic;
 using Xunit;
@@ -27,6 +28,11 @@ public class CampaignAuthorityFreezeClientHandlerTests
         controller.SetControllerId("controller-b");
         var network = new Mock<INetwork>();
         var operations = new List<string>();
+        var checkpoint = new RegistryAllocationCheckpoint(444, new Dictionary<string, int>());
+        var objectManager = new Mock<IObjectManager>();
+        objectManager.Setup(value => value.CaptureAllocationCheckpoint())
+            .Callback(() => Assert.True(identity.IsLocallyFrozen(lease)))
+            .Returns(checkpoint);
         NetworkCampaignAuthorityFreezeAcknowledged? acknowledgement = null;
 
         network.Setup(value => value.FlushPendingMessages())
@@ -40,7 +46,7 @@ public class CampaignAuthorityFreezeClientHandlerTests
             });
 
         var request = new NetworkCampaignAuthorityFreezeRequest(lease, "controller-a", 44);
-        using var handler = new CampaignAuthorityFreezeClientHandler(broker, network.Object, identity, controller);
+        using var handler = new CampaignAuthorityFreezeClientHandler(broker, network.Object, identity, controller, objectManager.Object);
         broker.Publish(this, request);
         GameThread.Run(() => { }, blocking: true);
 
@@ -49,6 +55,7 @@ public class CampaignAuthorityFreezeClientHandlerTests
         Assert.Equal(new[] { "flush", "ack", "flush" }, operations);
         Assert.Equal(request.HandoffSequence, acknowledgement.Value.HandoffSequence);
         Assert.Equal(request.CandidateControllerId, acknowledgement.Value.CandidateControllerId);
+        Assert.Same(checkpoint, acknowledgement.Value.AllocationCheckpoint);
 
         broker.Publish(this, request.ToCanceled());
         GameThread.Run(() => { }, blocking: true);
@@ -79,13 +86,14 @@ public class CampaignAuthorityFreezeClientHandlerTests
     public void FreezeRequestAcknowledgementAndCancellationRoundTripThroughTheMessageWireFormat()
     {
         var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
+        var checkpoint = new RegistryAllocationCheckpoint(555, new Dictionary<string, int> { ["type"] = 800 });
         var lease = new AuthorityLease("room-a", "authority-b", "controller-b", 3);
         var request = new NetworkCampaignAuthorityFreezeRequest(lease, "controller-a", 44);
 
         var receivedRequest = Assert.IsType<NetworkCampaignAuthorityFreezeRequest>(
             serializer.Deserialize<IMessage>(MessagePacket.Create(request, serializer).Data));
         var receivedAcknowledgement = Assert.IsType<NetworkCampaignAuthorityFreezeAcknowledged>(
-            serializer.Deserialize<IMessage>(MessagePacket.Create(request.ToAcknowledged(), serializer).Data));
+            serializer.Deserialize<IMessage>(MessagePacket.Create(request.ToAcknowledged(checkpoint), serializer).Data));
         var receivedCancellation = Assert.IsType<NetworkCampaignAuthorityFreezeCanceled>(
             serializer.Deserialize<IMessage>(MessagePacket.Create(request.ToCanceled(), serializer).Data));
 
@@ -96,6 +104,8 @@ public class CampaignAuthorityFreezeClientHandlerTests
         Assert.Equal(request.CandidateControllerId, receivedRequest.CandidateControllerId);
         Assert.Equal(request.HandoffSequence, receivedRequest.HandoffSequence);
         Assert.Equal(request.HandoffSequence, receivedAcknowledgement.HandoffSequence);
+        Assert.Equal(555u, receivedAcknowledgement.AllocationCheckpoint.NextHandle);
+        Assert.Equal(800, receivedAcknowledgement.AllocationCheckpoint.TypeCounters["type"]);
         Assert.Equal(request.HandoffSequence, receivedCancellation.HandoffSequence);
     }
 }

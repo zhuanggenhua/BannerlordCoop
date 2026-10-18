@@ -1,4 +1,4 @@
-using Common;
+﻿using Common;
 using Common.Messaging;
 using Common.Network;
 using Common.PacketHandlers;
@@ -11,6 +11,9 @@ using Coop.Core.Client.Services.Session;
 using GameInterface.Services.Entity;
 using GameInterface.Services.Time.Messages;
 using Moq;
+using Serilog;
+using System.Collections.Generic;
+using ObjectManagerService = GameInterface.Services.ObjectManager.ObjectManager;
 using Xunit;
 
 namespace Coop.Tests.Client.Services.Session;
@@ -48,8 +51,9 @@ public class CampaignAuthorityHandoffBarrierClientHandlerTests
     public void BarrierAndAcknowledgementRoundTripThroughTheMessageWireFormat()
     {
         var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
+        var checkpoint = new RegistryAllocationCheckpoint(200, new Dictionary<string, int> { ["type"] = 90 });
         var barrier = new NetworkCampaignAuthorityHandoffBarrier(
-            "room-a", "paused-authority", 7, "controller-b", 4);
+            "room-a", "paused-authority", 7, "controller-b", 4, checkpoint);
         var acknowledgement = barrier.ToApplied();
 
         var receivedBarrier = Assert.IsType<NetworkCampaignAuthorityHandoffBarrier>(
@@ -62,6 +66,8 @@ public class CampaignAuthorityHandoffBarrierClientHandlerTests
         Assert.Equal(barrier.PausedEpoch, receivedBarrier.PausedEpoch);
         Assert.Equal(barrier.CandidateControllerId, receivedBarrier.CandidateControllerId);
         Assert.Equal(barrier.BarrierSequence, receivedBarrier.BarrierSequence);
+        Assert.Equal(200u, receivedBarrier.AllocationCheckpoint.NextHandle);
+        Assert.Equal(90, receivedBarrier.AllocationCheckpoint.TypeCounters["type"]);
         Assert.Equal(barrier.RoomId, receivedAcknowledgement.RoomId);
         Assert.Equal(barrier.PausedAuthorityId, receivedAcknowledgement.PausedAuthorityId);
         Assert.Equal(barrier.PausedEpoch, receivedAcknowledgement.PausedEpoch);
@@ -80,16 +86,22 @@ public class CampaignAuthorityHandoffBarrierClientHandlerTests
             "controller-a"));
         var controllerIdProvider = new ControllerIdProvider();
         controllerIdProvider.SetControllerId("controller-b");
+        var objectManager = new ObjectManagerService(Mock.Of<ILogger>());
         var barrier = new NetworkCampaignAuthorityHandoffBarrier(
-            "room-a", "paused-authority", 7, "controller-b", 4);
+            "room-a", "paused-authority", 7, "controller-b", 4,
+            new RegistryAllocationCheckpoint(200, new Dictionary<string, int>()));
         bool earlierApplyCompleted = false;
         NetworkCampaignAuthorityHandoffBarrierApplied? acknowledgement = null;
         network.Setup(value => value.SendAll(It.IsAny<IMessage>()))
-            .Callback<IMessage>(message => acknowledgement =
-                Assert.IsType<NetworkCampaignAuthorityHandoffBarrierApplied>(message));
+            .Callback<IMessage>(message =>
+            {
+                Assert.True(earlierApplyCompleted);
+                Assert.Equal(200u, objectManager.CaptureAllocationCheckpoint().NextHandle);
+                acknowledgement = Assert.IsType<NetworkCampaignAuthorityHandoffBarrierApplied>(message);
+            });
 
         using var handler = new CampaignAuthorityHandoffBarrierClientHandler(
-            messageBroker, network.Object, sessionIdentity, controllerIdProvider);
+            messageBroker, network.Object, sessionIdentity, controllerIdProvider, objectManager);
         messageBroker.Publish(this, new ClientCampaignReady());
         messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
 
@@ -108,5 +120,30 @@ public class CampaignAuthorityHandoffBarrierClientHandlerTests
         Assert.Equal(barrier.CandidateControllerId, acknowledgement.Value.CandidateControllerId);
         Assert.Equal(barrier.BarrierSequence, acknowledgement.Value.BarrierSequence);
         network.Verify(value => value.FlushPendingMessages(), Times.Once);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MissingOrInvalidAllocationCheckpointCannotBeAcknowledged(bool malformed)
+    {
+        var broker = new TestMessageBroker();
+        var network = new Mock<INetwork>();
+        var identity = new SessionIdentity();
+        Assert.True(identity.TryApply(new AuthorityLease("room", "paused", "", 2, isPaused: true), "host"));
+        var controller = new ControllerIdProvider();
+        controller.SetControllerId("candidate");
+        var manager = new ObjectManagerService(Mock.Of<ILogger>());
+        var checkpoint = malformed
+            ? new RegistryAllocationCheckpoint(300, new Dictionary<string, int> { ["type"] = -1 })
+            : null;
+        using var handler = new CampaignAuthorityHandoffBarrierClientHandler(broker, network.Object, identity, controller, manager);
+        broker.Publish(this, new ClientCampaignReady());
+        broker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
+        broker.Publish(this, new NetworkCampaignAuthorityHandoffBarrier("room", "paused", 2, "candidate", 1, checkpoint));
+        GameThread.Run(() => { }, blocking: true);
+
+        network.Verify(value => value.SendAll(It.IsAny<IMessage>()), Times.Never);
+        Assert.Equal(1u, manager.CaptureAllocationCheckpoint().NextHandle);
     }
 }

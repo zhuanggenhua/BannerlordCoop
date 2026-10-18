@@ -8,6 +8,7 @@ using Common.Session;
 using Coop.Core.Common.Session;
 using Coop.Core.Server.Connections;
 using GameInterface.Services.Entity;
+using GameInterface.Services.ObjectManager;
 using GameInterface.Services.GameState.Messages;
 using GameInterface.Services.Players;
 using GameInterface.Services.Time.Messages;
@@ -32,6 +33,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private readonly IControllerIdProvider controllerIdProvider;
     private readonly INetwork network;
     private readonly ISessionIdentity sessionIdentity;
+    private readonly IObjectManager objectManager;
     private readonly object peerGate = new object();
     private readonly object localReportGate = new object();
     private readonly object selectionGate = new object();
@@ -51,6 +53,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private bool hasPendingBarrier;
     private bool pendingBarrierAcknowledged;
     private int heartbeatQueued;
+    private int barrierCaptureQueued;
     private int disposed;
 
     public CampaignSimulationAvailabilityServerHandler(
@@ -60,7 +63,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         IPlayerManager playerManager,
         IControllerIdProvider controllerIdProvider,
         INetwork network = null,
-        ISessionIdentity sessionIdentity = null)
+        ISessionIdentity sessionIdentity = null,
+        IObjectManager objectManager = null)
     {
         this.messageBroker = messageBroker;
         this.coordinator = coordinator;
@@ -69,6 +73,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         this.controllerIdProvider = controllerIdProvider;
         this.network = network;
         this.sessionIdentity = sessionIdentity;
+        this.objectManager = objectManager;
         messageBroker.Subscribe<CampaignReady>(Handle_CampaignReady);
         messageBroker.Subscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Subscribe<NetworkCampaignSimulationAvailabilityReport>(Handle_AvailabilityReport);
@@ -379,6 +384,28 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
 
     private void TrySendHandoffBarrier(AuthorityLease pausedLease, string candidateControllerId)
     {
+        if (objectManager == null) return;
+
+        if (!GameThread.Instance.IsGameThread)
+        {
+            if (Interlocked.Exchange(ref barrierCaptureQueued, 1) != 0) return;
+            GameThread.EnqueueSafe(() =>
+            {
+                try
+                {
+                    lock (selectionGate)
+                    lock (leaseGate)
+                        if (Volatile.Read(ref disposed) == 0)
+                            TrySendHandoffBarrier(pausedLease, candidateControllerId);
+                }
+                finally
+                {
+                    Interlocked.Exchange(ref barrierCaptureQueued, 0);
+                }
+            }, context: nameof(CampaignSimulationAvailabilityServerHandler));
+            return;
+        }
+
         if (!pausedLease.IsPaused || string.IsNullOrWhiteSpace(candidateControllerId) ||
             string.Equals(candidateControllerId, sessionIdentity.RoomHostControllerId, StringComparison.Ordinal) ||
             network == null || !coordinator.IsFreshMapReady(candidateControllerId))
@@ -417,7 +444,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             pausedLease.AuthorityId,
             pausedLease.Epoch,
             candidateControllerId,
-            sequence);
+            sequence,
+            objectManager.CaptureAllocationCheckpoint());
 
         try
         {

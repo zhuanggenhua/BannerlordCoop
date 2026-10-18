@@ -5,6 +5,7 @@ using Common.Network;
 using Common.Network.Session;
 using Common.Session;
 using GameInterface.Services.Entity;
+using GameInterface.Services.ObjectManager;
 using Serilog;
 
 namespace Coop.Core.Client.Services.Session;
@@ -18,17 +19,20 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
     private readonly INetwork network;
     private readonly ISessionIdentity sessionIdentity;
     private readonly IControllerIdProvider controllerIdProvider;
+    private readonly IObjectManager objectManager;
 
     public CampaignAuthorityFreezeClientHandler(
         IMessageBroker messageBroker,
         INetwork network,
         ISessionIdentity sessionIdentity,
-        IControllerIdProvider controllerIdProvider)
+        IControllerIdProvider controllerIdProvider,
+        IObjectManager objectManager)
     {
         this.messageBroker = messageBroker;
         this.network = network;
         this.sessionIdentity = sessionIdentity;
         this.controllerIdProvider = controllerIdProvider;
+        this.objectManager = objectManager;
         messageBroker.Subscribe<NetworkCampaignAuthorityFreezeRequest>(Handle_FreezeRequest);
         messageBroker.Subscribe<NetworkCampaignAuthorityFreezeCanceled>(Handle_FreezeCanceled);
     }
@@ -61,7 +65,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
             // Fence local simulation before flushing. The acknowledgement follows every already queued
             // authority delta on this reliable-ordered connection.
             network.FlushPendingMessages();
-            network.SendAll(request.ToAcknowledged());
+            network.SendAll(request.ToAcknowledged(objectManager.CaptureAllocationCheckpoint()));
             network.FlushPendingMessages();
             Logger.Information("Froze local campaign writes and acknowledged handoff {HandoffSequence} at epoch {Epoch} to controller {CandidateControllerId}",
                 request.HandoffSequence, request.Epoch, request.CandidateControllerId);

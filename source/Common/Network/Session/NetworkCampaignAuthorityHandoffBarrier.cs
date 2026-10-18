@@ -1,4 +1,4 @@
-using Common.Messaging;
+﻿using Common.Messaging;
 using ProtoBuf;
 
 namespace Common.Network.Session;
@@ -15,19 +15,22 @@ public readonly struct NetworkCampaignAuthorityHandoffBarrier : IServerToClientC
     [ProtoMember(3)] public readonly long PausedEpoch;
     [ProtoMember(4)] public readonly string CandidateControllerId;
     [ProtoMember(5)] public readonly long BarrierSequence;
+    [ProtoMember(6)] public readonly RegistryAllocationCheckpoint AllocationCheckpoint;
 
     public NetworkCampaignAuthorityHandoffBarrier(
         string roomId,
         string pausedAuthorityId,
         long pausedEpoch,
         string candidateControllerId,
-        long barrierSequence)
+        long barrierSequence,
+        RegistryAllocationCheckpoint allocationCheckpoint = null)
     {
         RoomId = roomId ?? string.Empty;
         PausedAuthorityId = pausedAuthorityId ?? string.Empty;
         PausedEpoch = pausedEpoch;
         CandidateControllerId = candidateControllerId ?? string.Empty;
         BarrierSequence = barrierSequence;
+        AllocationCheckpoint = allocationCheckpoint;
     }
 
     public NetworkCampaignAuthorityHandoffBarrierApplied ToApplied() => new NetworkCampaignAuthorityHandoffBarrierApplied(

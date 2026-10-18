@@ -27,9 +27,9 @@ public readonly struct NetworkCampaignAuthorityFreezeRequest : IServerToClientCo
         HandoffSequence = handoffSequence;
     }
 
-    public NetworkCampaignAuthorityFreezeAcknowledged ToAcknowledged() =>
+    public NetworkCampaignAuthorityFreezeAcknowledged ToAcknowledged(RegistryAllocationCheckpoint allocationCheckpoint = null) =>
         new NetworkCampaignAuthorityFreezeAcknowledged(
-            RoomId, AuthorityId, AuthorityControllerId, Epoch, CandidateControllerId, HandoffSequence);
+            RoomId, AuthorityId, AuthorityControllerId, Epoch, CandidateControllerId, HandoffSequence, allocationCheckpoint);
 
     public NetworkCampaignAuthorityFreezeCanceled ToCanceled() =>
         new NetworkCampaignAuthorityFreezeCanceled(
@@ -46,6 +46,7 @@ public readonly struct NetworkCampaignAuthorityFreezeAcknowledged : IMessage
     [ProtoMember(4)] public readonly long Epoch;
     [ProtoMember(5)] public readonly string CandidateControllerId;
     [ProtoMember(6)] public readonly long HandoffSequence;
+    [ProtoMember(7)] public readonly RegistryAllocationCheckpoint AllocationCheckpoint;
 
     public NetworkCampaignAuthorityFreezeAcknowledged(
         string roomId,
@@ -53,7 +54,8 @@ public readonly struct NetworkCampaignAuthorityFreezeAcknowledged : IMessage
         string authorityControllerId,
         long epoch,
         string candidateControllerId,
-        long handoffSequence)
+        long handoffSequence,
+        RegistryAllocationCheckpoint allocationCheckpoint = null)
     {
         RoomId = roomId ?? string.Empty;
         AuthorityId = authorityId ?? string.Empty;
@@ -61,6 +63,7 @@ public readonly struct NetworkCampaignAuthorityFreezeAcknowledged : IMessage
         Epoch = epoch;
         CandidateControllerId = candidateControllerId ?? string.Empty;
         HandoffSequence = handoffSequence;
+        AllocationCheckpoint = allocationCheckpoint;
     }
 }
 

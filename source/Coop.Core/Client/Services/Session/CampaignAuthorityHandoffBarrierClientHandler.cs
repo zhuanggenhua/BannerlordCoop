@@ -1,4 +1,4 @@
-using Common;
+﻿using Common;
 using Common.Logging;
 using Common.Messaging;
 using Common.Network;
@@ -6,6 +6,7 @@ using Common.Network.Session;
 using Common.Session;
 using Coop.Core.Client.Messages;
 using GameInterface.Services.Entity;
+using GameInterface.Services.ObjectManager;
 using GameInterface.Services.Time.Messages;
 using Serilog;
 using System;
@@ -24,6 +25,7 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
     private readonly INetwork network;
     private readonly ISessionIdentity sessionIdentity;
     private readonly IControllerIdProvider controllerIdProvider;
+    private readonly IObjectManager objectManager;
     private bool campaignSynchronized;
     private bool mapReady;
 
@@ -31,12 +33,14 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         IMessageBroker messageBroker,
         INetwork network,
         ISessionIdentity sessionIdentity,
-        IControllerIdProvider controllerIdProvider)
+        IControllerIdProvider controllerIdProvider,
+        IObjectManager objectManager)
     {
         this.messageBroker = messageBroker;
         this.network = network;
         this.sessionIdentity = sessionIdentity;
         this.controllerIdProvider = controllerIdProvider;
+        this.objectManager = objectManager;
         messageBroker.Subscribe<ClientCampaignReady>(Handle_ClientCampaignReady);
         messageBroker.Subscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Subscribe<NetworkCampaignAuthorityHandoffBarrier>(Handle_HandoffBarrier);
@@ -77,6 +81,13 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
             Logger.Warning("Ignored campaign authority handoff barrier {BarrierSequence} for controller {ControllerId}; " +
                 "campaign sync, map readiness, or paused lease did not match",
                 barrier.BarrierSequence, controllerIdProvider.ControllerId);
+            return;
+        }
+
+        if (!objectManager.TryApplyAllocationCheckpoint(barrier.AllocationCheckpoint))
+        {
+            Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; registry allocation checkpoint is missing or invalid",
+                barrier.BarrierSequence);
             return;
         }
 

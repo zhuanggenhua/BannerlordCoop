@@ -10,6 +10,7 @@ using Coop.Core.Server.Services.Session;
 using Coop.Tests.Mocks;
 using Common.Network;
 using GameInterface.Services.Entity;
+using GameInterface.Services.ObjectManager;
 using GameInterface.Services.GameState.Messages;
 using GameInterface.Services.Players;
 using GameInterface.Services.Players.Data;
@@ -152,6 +153,10 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             controllerId.SetControllerId("host");
             var network = new Mock<INetwork>();
             NetworkCampaignAuthorityHandoffBarrier appliedBarrier = default;
+            var objectManager = new Mock<IObjectManager>();
+            objectManager.Setup(value => value.CaptureAllocationCheckpoint())
+                .Callback(() => Assert.True(GameThread.Instance.IsGameThread))
+                .Returns(new RegistryAllocationCheckpoint(555, new System.Collections.Generic.Dictionary<string, int>()));
             network.Setup(value => value.Send(guestPeer, It.IsAny<NetworkCampaignAuthorityHandoffBarrier>()))
                 .Callback<LiteNetLib.NetPeer, Common.Messaging.IMessage>((_, message) =>
                     appliedBarrier = (NetworkCampaignAuthorityHandoffBarrier)message);
@@ -163,7 +168,8 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                 playerManager.Object,
                 controllerId,
                 network.Object,
-                identity);
+                identity,
+                objectManager.Object);
 
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
             messageBroker.Publish(this, new CampaignReady());
@@ -173,6 +179,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             Assert.Equal(1, identity.Epoch);
 
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(false));
+            GameThread.Run(() => { }, blocking: true);
 
             Assert.True(identity.CurrentLease.IsPaused);
             Assert.Equal(2, identity.Epoch);
@@ -186,6 +193,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                     barrier.CandidateControllerId == "guest" &&
                     barrier.BarrierSequence > 0)), Times.Once);
             Assert.True(appliedBarrier.BarrierSequence > 0);
+            Assert.Equal(555u, appliedBarrier.AllocationCheckpoint.NextHandle);
 
             var applied = new NetworkCampaignAuthorityHandoffBarrierApplied(
                 appliedBarrier.RoomId, appliedBarrier.PausedAuthorityId, appliedBarrier.PausedEpoch,
