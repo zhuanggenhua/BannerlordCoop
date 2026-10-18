@@ -69,6 +69,9 @@ public interface IObjectManager
     void SetJoinHandleMap(IReadOnlyDictionary<string, uint> handles);
     void ClearJoinHandleMap();
 
+    RegistryAllocationCheckpoint CaptureAllocationCheckpoint();
+    bool TryApplyAllocationCheckpoint(RegistryAllocationCheckpoint checkpoint);
+
     /// <summary>
     /// Retains registrations made by <paramref name="registerAndValidate"/> only when it returns true.
     /// Registrations added before a false result or exception are removed before control returns to the caller.
@@ -116,7 +119,7 @@ public class ObjectManager : IObjectManager
     protected ConditionalWeakTable<object, HandleBox> objsHandles = new ConditionalWeakTable<object, HandleBox>();
     private ConditionalWeakTable<object, HandleBox> retiredHandles = new ConditionalWeakTable<object, HandleBox>();
 
-    private readonly ConcurrentDictionary<Type, int> objectCounters = new ConcurrentDictionary<Type, int>();
+    private readonly ConcurrentDictionary<string, int> objectCounters = new(StringComparer.Ordinal);
     private IReadOnlyDictionary<string, uint> joinHandles;
     private uint nextHandle = 1;
 
@@ -239,6 +242,7 @@ public class ObjectManager : IObjectManager
             }
 
             newId = $"{obj.GetType().Name}_{GetUniqueTypeId(obj)}";
+            var handle = ResolveRegistrationHandle(newId, obj);
 
             if (!idObjs.TryAdd(newId, obj))
             {
@@ -252,7 +256,6 @@ public class ObjectManager : IObjectManager
 
             objsIds.Add(obj, newId);
 
-            var handle = ResolveRegistrationHandle(newId, obj);
             if (handle != 0 && !AddHandle(obj, handle))
             {
                 idObjs.TryRemove(newId, out _);
@@ -272,25 +275,25 @@ public class ObjectManager : IObjectManager
 
     public int GetUniqueTypeId(object obj)
     {
-        var type = obj.GetType();
+        var type = obj.GetType().AssemblyQualifiedName;
 
         lock(objectCounters)
         {
             return objectCounters.AddOrUpdate(
                 type,
                 1,                // initial value if missing
-                (_, current) => current + 1
+                (_, current) => checked(current + 1)
             );
         }
     }
 
     public int EnsureNextUniqueIdAbove(object obj, int value)
     {
-        var type = obj.GetType();
+        var type = obj.GetType().AssemblyQualifiedName;
 
         lock (objectCounters)
         {
-            int nextValue = value + 1;
+            int nextValue = checked(value + 1);
 
             return objectCounters.AddOrUpdate(
                 type,
@@ -464,6 +467,35 @@ public class ObjectManager : IObjectManager
         }
     }
 
+    public RegistryAllocationCheckpoint CaptureAllocationCheckpoint()
+    {
+        lock (_gate)
+        lock (objectCounters)
+            return new RegistryAllocationCheckpoint(nextHandle, objectCounters);
+    }
+
+    public bool TryApplyAllocationCheckpoint(RegistryAllocationCheckpoint checkpoint)
+    {
+        if (checkpoint?.TypeCounters == null) return false;
+
+        lock (_gate)
+        lock (objectCounters)
+        {
+            // Validate the entire checkpoint before modifying either allocator. Type names are opaque
+            // keys from the identical game build; applying a checkpoint must never load remote types.
+            foreach (var entry in checkpoint.TypeCounters)
+                if (string.IsNullOrWhiteSpace(entry.Key) || entry.Value < 0) return false;
+
+            if (nextHandle != 0 && (checkpoint.NextHandle == 0 || checkpoint.NextHandle > nextHandle))
+                nextHandle = checkpoint.NextHandle;
+
+            foreach (var entry in checkpoint.TypeCounters)
+                objectCounters.AddOrUpdate(entry.Key, entry.Value, (_, current) => Math.Max(current, entry.Value));
+
+            return true;
+        }
+    }
+
     private uint ResolveRegistrationHandle(string id, object obj)
     {
         if (joinHandles != null && joinHandles.TryGetValue(id, out var mappedHandle))
@@ -510,7 +542,7 @@ public class ObjectManager : IObjectManager
 
         objsHandles.Add(obj, new HandleBox(handle));
         retiredHandles.Remove(obj);
-        if (handle >= nextHandle)
+        if (nextHandle != 0 && handle >= nextHandle)
             nextHandle = handle == uint.MaxValue ? 0 : handle + 1;
         return true;
     }

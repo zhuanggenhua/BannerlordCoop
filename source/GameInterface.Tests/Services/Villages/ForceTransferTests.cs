@@ -771,6 +771,8 @@ public class ForceTransferTests
         public IReadOnlyDictionary<string, uint> GetHandleMap() { throw new NotImplementedException(); }
         public void SetJoinHandleMap(IReadOnlyDictionary<string, uint> handles) { throw new NotImplementedException(); }
         public void ClearJoinHandleMap() { throw new NotImplementedException(); }
+        public Common.RegistryAllocationCheckpoint CaptureAllocationCheckpoint() { throw new NotImplementedException(); }
+        public bool TryApplyAllocationCheckpoint(Common.RegistryAllocationCheckpoint checkpoint) { throw new NotImplementedException(); }
         public bool RunRegistrationTransaction(Func<bool> registerAndValidate) { throw new NotImplementedException(); }
         public bool Remove(object obj) { throw new NotImplementedException(); }
         public void Clear() { throw new NotImplementedException(); }
