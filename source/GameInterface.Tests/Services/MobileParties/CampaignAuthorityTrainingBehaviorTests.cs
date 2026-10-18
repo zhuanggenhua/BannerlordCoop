@@ -1,8 +1,10 @@
 ﻿using Autofac;
 using Common;
+using Common.Commands;
 using Common.Util;
 using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Entity;
+using GameInterface.Services.ObjectManager;
 using GameInterface.Services.MobileParties.Patches.Disable;
 using HarmonyLib;
 using Moq;
@@ -32,6 +34,8 @@ public class CampaignAuthorityTrainingBehaviorTests : IDisposable
     private readonly Mock<PartyTrainingModel> trainingModel = new();
     private readonly MobileParty party = ObjectHelper.SkipConstructor<MobileParty>();
     private readonly CharacterObject troop = new();
+    private static int hourlyOriginalCalls;
+    private static int upgradeOriginalCalls;
 
     static CampaignAuthorityTrainingBehaviorTests() =>
         RuntimeHelpers.RunModuleConstructor(typeof(Coop.Tests.Mocks.TestNetwork).Module.ModuleHandle);
@@ -55,6 +59,12 @@ public class CampaignAuthorityTrainingBehaviorTests : IDisposable
         party.IsDisbanding = true; // Skip the separate optional Bow perk after the real roster-training loop.
         Campaign.Current = campaign;
         harmony.CreateClassProcessor(typeof(DisableMobilePartyTrainingBehavior)).Patch();
+        hourlyOriginalCalls = 0;
+        upgradeOriginalCalls = 0;
+        harmony.Patch(AccessTools.Method(typeof(MobilePartyTrainingBehavior), nameof(MobilePartyTrainingBehavior.HourlyTickParty)),
+            postfix: new HarmonyMethod(typeof(CampaignAuthorityTrainingBehaviorTests), nameof(RecordHourlyOriginal)));
+        harmony.Patch(AccessTools.Method(typeof(MobilePartyTrainingBehavior), nameof(MobilePartyTrainingBehavior.OnPlayerUpgradedTroops)),
+            postfix: new HarmonyMethod(typeof(CampaignAuthorityTrainingBehaviorTests), nameof(RecordUpgradeOriginal)));
         behavior.RegisterEvents();
     }
 
@@ -80,6 +90,7 @@ public class CampaignAuthorityTrainingBehaviorTests : IDisposable
             AssertSingleNativeListeners();
         }
         trainingModel.Verify(model => model.GetEffectiveDailyExperience(party, It.IsAny<TroopRosterElement>()), Times.Exactly(3));
+        Assert.Equal(0, upgradeOriginalCalls); // Daily training does not re-run the separate player-upgrade path.
     }
 
     [Theory]
@@ -109,6 +120,84 @@ public class CampaignAuthorityTrainingBehaviorTests : IDisposable
         ModInformation.SessionMode = mode;
         ((MbEvent<MobileParty>)CampaignEvents.DailyTickPartyEvent).Invoke(party);
         Assert.Equal(runs ? 128 : 100, party.MemberRoster.GetElementXp(troop));
+    }
+
+    [Theory]
+    [InlineData("a", "b", false, false)]
+    [InlineData("b", "a", false, false)]
+    [InlineData("a", "a", false, true)]
+    [InlineData("b", "b", false, true)]
+    [InlineData("a", "", true, false)]
+    public void ObserverPausedAndFrozenActionEventsDoNotReplayTrainingSideEffects(
+        string local, string writer, bool paused, bool frozen)
+    {
+        var lease = new AuthorityLease("room", "writer", writer, 1, paused);
+        Assert.True(identity.TryApply(lease));
+        SetLocal(local);
+        if (frozen) Assert.True(identity.TryFreezeLocalAuthority(lease, 1));
+        using (new AllowedThread())
+        {
+            ((MbEvent<MobileParty>)CampaignEvents.HourlyTickPartyEvent).Invoke(party);
+            ((MbEvent<CharacterObject, CharacterObject, int>)CampaignEvents.PlayerUpgradedTroopsEvent)
+                .Invoke(troop, troop, 1);
+        }
+        Assert.Equal(0, hourlyOriginalCalls);
+        Assert.Equal(0, upgradeOriginalCalls);
+        Assert.Equal(100, party.MemberRoster.GetElementXp(troop));
+        AssertSingleNativeListeners();
+    }
+
+    [Theory]
+    [InlineData("a", "b")]
+    [InlineData("b", "a")]
+    public void NativeHourlyListenerRemainsReadyAfterPromotion(string initialWriter, string nextWriter)
+    {
+        SetLocal(nextWriter);
+        Assert.True(identity.TryApply(new AuthorityLease("room", "first", initialWriter, 1)));
+        ((MbEvent<MobileParty>)CampaignEvents.HourlyTickPartyEvent).Invoke(party);
+        Assert.Equal(0, hourlyOriginalCalls);
+
+        Assert.True(identity.TryApply(new AuthorityLease("room", "second", nextWriter, 2)));
+        ((MbEvent<MobileParty>)CampaignEvents.HourlyTickPartyEvent).Invoke(party);
+        Assert.Equal(1, hourlyOriginalCalls);
+        AssertSingleNativeListeners();
+    }
+
+#if DEBUG
+    [Fact]
+    public void DailyProbeCallsNativeTrainingOnceAndRejectsTheObserver()
+    {
+        Assert.True(identity.TryApply(new AuthorityLease("room", "writer-b", "b", 1)));
+        SetLocal("b");
+        var manager = new Mock<ICampaignBehaviorManager>();
+        manager.Setup(value => value.GetBehavior<MobilePartyTrainingBehavior>()).Returns(behavior);
+        campaign._campaignBehaviorManager = manager.Object;
+        var objects = new Mock<IObjectManager>();
+        var foundParty = party;
+        objects.Setup(value => value.TryGetObject("npc", out foundParty)).Returns(true);
+        var command = new DisableMobilePartyTrainingBehavior.TrainingDailyCoopCommand(objects.Object);
+        var args = new CoopCommandArgsFactory().FromValues(new[] { "npc" });
+
+        var result = command.ProcessCommand(args);
+        Assert.True(result.Succeeded);
+        Assert.Contains("OnDailyTickParty", result.Output);
+        Assert.Equal(128, party.MemberRoster.GetElementXp(troop));
+        trainingModel.Verify(model => model.GetEffectiveDailyExperience(party, It.IsAny<TroopRosterElement>()), Times.Once);
+
+        SetLocal("a");
+        Assert.Equal("not_world_writer", command.ProcessCommand(args).ErrorCode);
+        Assert.Equal(128, party.MemberRoster.GetElementXp(troop));
+    }
+#endif
+
+    private static void RecordHourlyOriginal(bool __runOriginal)
+    {
+        if (__runOriginal) hourlyOriginalCalls++;
+    }
+
+    private static void RecordUpgradeOriginal(bool __runOriginal)
+    {
+        if (__runOriginal) upgradeOriginalCalls++;
     }
 
     private void SetLocal(string local)
