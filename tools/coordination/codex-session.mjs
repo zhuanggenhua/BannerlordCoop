@@ -1,8 +1,9 @@
 import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFileSync, spawn } from 'node:child_process';
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { StringDecoder } from 'node:string_decoder';
+import { setTimeout as delay } from 'node:timers/promises';
 
 const handoffSchemaPath = fileURLToPath(new URL('./handoff.schema.json', import.meta.url));
 
@@ -142,6 +143,81 @@ async function killOwnedTree(child) {
     }
 }
 
+async function cleanupDescendants(rootPid, earliest, rootExitedAt) {
+    if (process.platform !== 'win32') {
+        try {
+            process.kill(-rootPid, 'SIGKILL');
+            return { complete: true, method: 'owned-process-group', identities: [] };
+        } catch (error) {
+            if (error.code === 'ESRCH') return { complete: true, method: 'owned-process-group', identities: [] };
+            throw error;
+        }
+    }
+    // An exited PID is never killed. A direct child must have been created while
+    // our root was alive; every kill rechecks PID, parent and creation time.
+    const script = `
+$ErrorActionPreference = 'Stop'
+$identities = [System.Collections.Generic.List[object]]::new()
+$seen = [System.Collections.Generic.HashSet[string]]::new()
+$errors = [System.Collections.Generic.List[string]]::new()
+function CreationMs($value) { ([DateTimeOffset]$value.CreationDate.ToUniversalTime()).ToUnixTimeMilliseconds() }
+function Collect([int]$ownerPid, [long]$earliestMs, [long]$latestMs) {
+    if ($identities.Count -ge 128) { throw 'Descendant identity limit exceeded.' }
+    $children = @(Get-CimInstance Win32_Process -Filter "ParentProcessId = $ownerPid" -Property ProcessId,ParentProcessId,CreationDate)
+    foreach ($candidate in $children) {
+        $created = CreationMs $candidate
+        if ($created -lt $earliestMs -or $created -gt $latestMs) { continue }
+        $key = "$($candidate.ProcessId):$created"
+        if (!$seen.Add($key)) { continue }
+        $entry = [pscustomobject]@{ pid = [int]$candidate.ProcessId; parentPid = $ownerPid; createdAtMs = $created; status = 'observed' }
+        $identities.Add($entry)
+        $current = @(Get-CimInstance Win32_Process -Filter "ProcessId = $($entry.pid)" -Property ProcessId,ParentProcessId,CreationDate)
+        if ($current.Count -eq 1 -and (CreationMs $current[0]) -eq $created -and [int]$current[0].ParentProcessId -eq $ownerPid) {
+            Collect $entry.pid $created ([long]::MaxValue)
+        } else {
+            $errors.Add("Descendant $($entry.pid) changed or exited before its tree could be verified.")
+        }
+    }
+}
+Collect ${rootPid} ${earliest} ${rootExitedAt}
+for ($index = $identities.Count - 1; $index -ge 0; $index--) {
+    $entry = $identities[$index]
+    $current = @(Get-CimInstance Win32_Process -Filter "ProcessId = $($entry.pid)" -Property ProcessId,ParentProcessId,CreationDate)
+    if ($current.Count -eq 0) { $entry.status = 'exited'; continue }
+    if ((CreationMs $current[0]) -ne $entry.createdAtMs -or [int]$current[0].ParentProcessId -ne $entry.parentPid) {
+        $entry.status = 'identity_changed'
+        $errors.Add("Descendant $($entry.pid) identity changed; it was not killed.")
+        continue
+    }
+    & (Join-Path $env:SystemRoot 'System32/taskkill.exe') /PID $entry.pid /T /F 2>$null | Out-Null
+    $entry.status = 'termination_requested'
+}
+$deadline = [DateTimeOffset]::UtcNow.AddSeconds(2)
+do {
+    $remaining = @()
+    foreach ($entry in $identities) {
+        $current = @(Get-CimInstance Win32_Process -Filter "ProcessId = $($entry.pid)" -Property ProcessId,ParentProcessId,CreationDate)
+        if ($current.Count -eq 1 -and (CreationMs $current[0]) -eq $entry.createdAtMs) { $remaining += $entry.pid }
+        elseif ($entry.status -eq 'termination_requested') { $entry.status = 'terminated' }
+    }
+    if ($remaining.Count -gt 0) { Start-Sleep -Milliseconds 25 }
+} while ($remaining.Count -gt 0 -and [DateTimeOffset]::UtcNow -lt $deadline)
+[pscustomobject]@{ complete = ($remaining.Count -eq 0 -and $errors.Count -eq 0); method = 'verified-parent-and-creation-time'; identities = $identities.ToArray(); remaining = @($remaining); errors = $errors.ToArray() } | ConvertTo-Json -Depth 8 -Compress
+`;
+    const executable = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    return new Promise((resolve, reject) => {
+        execFile(executable, ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', script], {
+            windowsHide: true, shell: false, encoding: 'utf8', timeout: 10_000, maxBuffer: 1024 * 1024,
+        }, (error, stdout) => {
+            if (error) reject(new Error(`Descendant verification failed: ${error.message}`));
+            else {
+                try { resolve(JSON.parse(stdout)); }
+                catch { reject(new Error('Descendant verification did not return valid JSON.')); }
+            }
+        });
+    });
+}
+
 // A completed receipt is a schema-valid worker handoff. Review, integration and
 // gameplay acceptance remain coordinator gates, even when the CLI exits cleanly.
 export async function runCodexSession(options) {
@@ -179,6 +255,7 @@ export async function runCodexSession(options) {
         executable, args: [...executableArgs, ...args], pid: null, threadId: null,
         startedAt: new Date().toISOString(), finishedAt: null, exitCode: null, signal: null,
         paths, errors: [], handoff: null, requiresCoordinatorReview: true,
+        cleanup: { complete: false, method: 'not-checked', identities: [] },
     };
     writeReceipt(paths.receipt, receipt);
     const protocol = { events: [], threadId: null, completed: false, failed: false, errors: [] };
@@ -189,12 +266,14 @@ export async function runCodexSession(options) {
     let lineNumber = 0;
     let eventBytes = 0;
     let closed = false;
+    let rootExited = false;
+    let rootExitedAt;
     let termination;
     let killPromise = Promise.resolve();
     let timer;
     let child;
     const stop = (state, message) => {
-        if (closed || termination) return;
+        if (closed || rootExited || termination) return;
         termination = { state, message };
         receipt.state = 'stopping';
         receipt.errors.push(message);
@@ -223,7 +302,9 @@ export async function runCodexSession(options) {
         if (options.signal?.aborted) {
             termination = { state: 'aborted', message: 'Session was cancelled before spawn.' };
             receipt.errors.push(termination.message);
+            receipt.cleanup = { complete: true, method: 'not-spawned', identities: [] };
         } else {
+            receipt.spawnedAt = new Date().toISOString();
             child = spawn(executable, [...executableArgs, ...args], {
                 cwd: options.cwd, shell: false, windowsHide: true,
                 detached: process.platform !== 'win32', stdio: ['pipe', 'pipe', 'pipe'],
@@ -232,12 +313,24 @@ export async function runCodexSession(options) {
             receipt.state = 'running';
             writeReceipt(paths.receipt, receipt);
             const completion = new Promise(resolve => {
-                child.once('error', error => receipt.errors.push(`Spawn failed: ${error.message}`));
+                child.once('error', error => {
+                    receipt.errors.push(`Spawn failed: ${error.message}`);
+                    rootExited = true;
+                    rootExitedAt = Date.now();
+                    resolve();
+                });
+                child.once('exit', (code, signal) => {
+                    rootExited = true;
+                    rootExitedAt = Date.now();
+                    receipt.rootExitedAt = new Date(rootExitedAt).toISOString();
+                    receipt.exitCode = code;
+                    receipt.signal = signal;
+                    resolve();
+                });
                 child.once('close', (code, signal) => {
                     closed = true;
                     receipt.exitCode = code;
                     receipt.signal = signal;
-                    resolve();
                 });
             });
             child.stdout.on('data', chunk => {
@@ -259,13 +352,34 @@ export async function runCodexSession(options) {
             timer = setTimeout(() => stop('timeout', 'Session exceeded timeoutMs.'), options.timeoutMs ?? 1_800_000);
             child.stdin.end(prompt);
             await completion;
+            clearTimeout(timer);
             await killPromise;
+            if (receipt.pid) {
+                try {
+                    receipt.cleanup = await cleanupDescendants(receipt.pid, Date.parse(receipt.spawnedAt), rootExitedAt);
+                } catch (error) {
+                    receipt.cleanup = { complete: false, method: 'verification-failed', identities: [], errors: [error.message] };
+                }
+            } else {
+                receipt.cleanup = { complete: true, method: 'not-spawned', identities: [] };
+            }
+            for (let retry = 0; !closed && retry < 50; retry++) await delay(10);
+            if (!closed) {
+                receipt.cleanup.complete = false;
+                receipt.errors.push('CLI streams remained open after root exit; detached descendants may still own them.');
+                child.stdin.destroy();
+                child.stdout.destroy();
+                child.stderr.destroy();
+                for (let retry = 0; !closed && retry < 50; retry++) await delay(10);
+            }
             consume(decoder.end());
             if (pending.trim()) parseLine(protocol, pending, ++lineNumber);
         }
     } catch (error) {
         receipt.errors.push(error.message);
-        if (child && !closed) {
+        if (!child) {
+            receipt.cleanup = { complete: true, method: 'not-spawned', identities: [] };
+        } else if (!closed) {
             stop('failed', 'Session setup or transport failed.');
             await killPromise;
         }
@@ -293,9 +407,10 @@ export async function runCodexSession(options) {
             receipt.errors.push(`Invalid final handoff JSON: ${error.message}`);
         }
     }
-    receipt.state = termination?.state ?? (receipt.errors.length === 0 ? 'completed' : 'failed');
+    if (!receipt.cleanup.complete) receipt.errors.push('Owned process cleanup requires coordinator recovery.');
+    receipt.state = !receipt.cleanup.complete ? 'cleanup_required' : termination?.state ?? (receipt.errors.length === 0 ? 'completed' : 'failed');
     receipt.finishedAt = new Date().toISOString();
-    receipt.retryable = receipt.state !== 'completed';
+    receipt.retryable = receipt.state !== 'completed' && receipt.state !== 'cleanup_required';
     receipt.turnCompleted = protocol.completed;
     writeReceipt(paths.receipt, receipt);
     return receipt;

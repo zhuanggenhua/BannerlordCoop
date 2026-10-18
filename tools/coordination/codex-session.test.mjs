@@ -100,6 +100,14 @@ process.stdin.on('end', () => {
     if (mode === 'malformed') process.stdout.write('{"type":');
     else if (mode !== 'exit-only') emit({ type: 'turn.completed' });
     if (mode === 'nonzero') process.exitCode = 7;
+    if (mode === 'orphan-inherit' || mode === 'orphan-ignore') {
+        const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+            stdio: mode === 'orphan-inherit' ? ['ignore', process.stdout, process.stderr] : 'ignore', windowsHide: true, detached: true,
+        });
+        writeFileSync(join(directory, 'descendant.pid'), String(child.pid));
+        child.unref();
+        setTimeout(() => process.exit(0), 30);
+    }
 });
 `, 'utf8');
 
@@ -252,6 +260,58 @@ test('pre-cancelled attempts do not spawn', async () => {
     const result = await runCodexSession(fixtureOptions('completed', { signal: controller.signal }));
     assert.equal(result.state, 'aborted');
     assert.equal(result.pid, null);
+});
+
+for (const mode of ['orphan-inherit', 'orphan-ignore']) {
+    test(`bounds closure and cleans verified descendants when the CLI exits first: ${mode}`, async () => {
+        const options = fixtureOptions(mode, { timeoutMs: 2000 });
+        const start = Date.now();
+        let descendant;
+        try {
+            const result = await runCodexSession(options);
+            descendant = Number(readFileSync(join(options.outputDir, 'descendant.pid'), 'utf8'));
+            assert.equal(result.exitCode, 0);
+            assert.equal(result.state, 'completed', JSON.stringify(result.errors));
+            assert.equal(result.cleanup.complete, true);
+            assert.ok(result.cleanup.identities.some(identity => identity.pid === descendant));
+            assert.ok(Date.now() - start < 12_000);
+            await assertStopped(result.pid);
+            await assertStopped(descendant);
+        } finally {
+            if (descendant) {
+                try { process.kill(descendant, 'SIGKILL'); }
+                catch (error) { if (error.code !== 'ESRCH') throw error; }
+            }
+        }
+    });
+}
+
+test('unverifiable descendants remain cleanup_required without hanging or claiming completion', { skip: process.platform !== 'win32' }, async () => {
+    const previousSystemRoot = process.env.SystemRoot;
+    const options = fixtureOptions('orphan-inherit', { timeoutMs: 2000 });
+    let descendant;
+    const start = Date.now();
+    try {
+        // Fail only this Node process's inspector lookup. No global configuration changes.
+        process.env.SystemRoot = fixtureDirectory;
+        const result = await runCodexSession(options);
+        descendant = Number(readFileSync(join(options.outputDir, 'descendant.pid'), 'utf8'));
+        assert.equal(result.state, 'cleanup_required');
+        assert.equal(result.retryable, false);
+        assert.equal(result.cleanup.complete, false);
+        assert.equal(result.exitCode, 0);
+        assert.ok(Date.now() - start < 5000);
+        assert.equal(process.kill(descendant, 0), true, 'Unknown descendants must not be killed by guessing their identity.');
+        assert.equal(loadJson(result.paths.receipt).state, 'cleanup_required');
+    } finally {
+        if (previousSystemRoot === undefined) delete process.env.SystemRoot;
+        else process.env.SystemRoot = previousSystemRoot;
+        if (descendant) {
+            try { process.kill(descendant, 'SIGKILL'); }
+            catch (error) { if (error.code !== 'ESRCH') throw error; }
+            await assertStopped(descendant);
+        }
+    }
 });
 
 test('parallel attempts retain independent cwd, output and receipts', async () => {
