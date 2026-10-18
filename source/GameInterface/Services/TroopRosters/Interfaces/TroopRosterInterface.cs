@@ -13,6 +13,7 @@ using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Actions;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
 
 namespace GameInterface.Services.TroopRosters.Interfaces;
 
@@ -68,13 +69,16 @@ internal class TroopRosterInterface : ITroopRosterInterface
     private static readonly ILogger Logger = LogManager.GetLogger<TroopRosterInterface>();
     private readonly IObjectManager objectManager;
     private readonly ITroopRosterLogger troopRosterLogger;
+    private readonly IRecruitmentCampaignEventDispatcher recruitmentEventDispatcher;
 
     public TroopRosterInterface(
         IObjectManager objectManager,
-        ITroopRosterLogger troopRosterLogger)
+        ITroopRosterLogger troopRosterLogger,
+        IRecruitmentCampaignEventDispatcher recruitmentEventDispatcher)
     {
         this.objectManager = objectManager;
         this.troopRosterLogger = troopRosterLogger;
+        this.recruitmentEventDispatcher = recruitmentEventDispatcher;
     }
 
     public TroopRosterData PackTroopRosterData(TroopRoster troopRoster)
@@ -363,10 +367,35 @@ internal class TroopRosterInterface : ITroopRosterInterface
             MessageBroker.Instance.Publish(this, new VolunteerTypesArrayUpdated(hero, null, index));
 
             mobileParty.MemberRoster.AddToCounts(characterObject, 1, false, 0, 0, true, -1);
-            CampaignEventDispatcher.Instance.OnUnitRecruited(characterObject, 1);
+            DispatchRecruitmentEventForParty(
+                recruitmentEventDispatcher,
+                mobileParty,
+                MobileParty.MainParty,
+                mobileParty.LeaderHero,
+                mobileParty.CurrentSettlement,
+                hero,
+                characterObject);
         }
 
         GiveGoldAction.ApplyBetweenCharacters(mobileParty.LeaderHero, null, cost, false);
+    }
+
+    internal static void DispatchRecruitmentEventForParty(
+        IRecruitmentCampaignEventDispatcher dispatcher,
+        MobileParty recruitedParty,
+        MobileParty localMainParty,
+        Hero recruiterHero,
+        Settlement settlement,
+        Hero troopSource,
+        CharacterObject troop)
+    {
+        if (recruitedParty == localMainParty)
+        {
+            dispatcher.OnUnitRecruited(troop, 1);
+            return;
+        }
+
+        dispatcher.OnTroopRecruited(recruiterHero, settlement, troopSource, troop, 1);
     }
 
     public TroopRosterOrderData PackTroopRosterOrderData(TroopRoster roster)
