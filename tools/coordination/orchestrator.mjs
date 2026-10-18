@@ -465,7 +465,7 @@ export class Coordinator {
           }
         };
         if (present(expected)) unlink(this.cleanupLinks(state, task, !registration));
-        if (registration) this.git(['worktree', 'remove', expected]);
+        if (registration) this.git(['-c', 'core.longpaths=true', 'worktree', 'remove', expected]);
         if (present(expected)) {
           unlink(this.cleanupLinks(state, task, true));
           const source = path.join(expected, 'source');

@@ -27,7 +27,7 @@ function fixture(t, { junctions = false } = {}) {
   fs.writeFileSync(path.join(repo, 'source', 'base.txt'), 'base\n');
   const targets = {};
   if (junctions) {
-    fs.writeFileSync(path.join(repo, '.gitignore'), '/mb2\n/source/packages\n');
+    fs.writeFileSync(path.join(repo, '.gitignore'), '/mb2\n/source/packages\n**/obj/\n');
     for (const relative of ['mb2', 'source/packages']) {
       const target = path.join(directory, relative === 'mb2' ? 'game-cache' : 'package-cache');
       fs.mkdirSync(target);
@@ -444,6 +444,43 @@ test('Windows cleanup unlinks known junctions and removes the directory while pr
   assert.equal(fs.existsSync(data.task.worktree), false);
   assert.equal(git(data.repo, 'branch', '--list', data.task.branch), '');
   assertSentinels(data.targets);
+});
+
+test('Windows cleanup explicitly enables long paths for ignored generated build output', { skip: process.platform !== 'win32' }, t => {
+  const generatedOutput = data => {
+    const folder = path.join(data.task.worktree, 'source', 'GameInterface', 'obj', ...Array.from({ length: 5 }, (_, index) => `generated-${index}-${'x'.repeat(44)}`));
+    fs.mkdirSync(folder, { recursive: true });
+    const file = path.join(folder, 'generated-build-output.cs');
+    fs.writeFileSync(file, 'ignored generated build output\n');
+    assert.ok(file.length > 260, file);
+    assert.equal(git(data.task.worktree, 'status', '--porcelain'), '');
+    return file;
+  };
+  const baseline = closedJunctionTask(t);
+  const originalFile = generatedOutput(baseline);
+  const failed = spawnSync('git', ['-c', 'core.longpaths=false', 'worktree', 'remove', baseline.task.worktree], { cwd: baseline.repo, encoding: 'utf8', windowsHide: true });
+  assert.notEqual(failed.status, 0, 'baseline must reproduce the actual Windows deletion failure');
+  assert.match(failed.stderr, /Filename too long/i);
+  assert.equal(fs.existsSync(originalFile), true);
+  assertSentinels(baseline.targets);
+  t.diagnostic(JSON.stringify({ baselineExitCode: failed.status, stderr: failed.stderr.trim(), originalPathLength: originalFile.length }));
+
+  const repaired = closedJunctionTask(t);
+  const repairedFile = generatedOutput(repaired);
+  const beforeConfig = git(repaired.repo, 'config', '--local', '--list');
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL('./orchestrator.mjs', import.meta.url)), '--root', repaired.repo, 'cleanup', '--id', repaired.task.id], {
+    cwd: repaired.repo,
+    encoding: 'utf8',
+    windowsHide: true,
+    env: { ...process.env, GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.longpaths', GIT_CONFIG_VALUE_0: 'false' },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(result.stdout).cleanupStatus, 'cleaned');
+  assert.equal(fs.existsSync(repaired.task.worktree), false);
+  assert.equal(git(repaired.repo, 'branch', '--list', repaired.task.branch), '');
+  assert.equal(git(repaired.repo, 'config', '--local', '--list'), beforeConfig);
+  assertSentinels(repaired.targets);
+  t.diagnostic(JSON.stringify({ repairedExitCode: result.status, repairedPathLength: repairedFile.length, commandDefaultLongpaths: false, targetSentinelsPreserved: true }));
 });
 
 test('Windows cleanup repairs legacy cleanedAt junction residue after Git registration and branch removal', { skip: process.platform !== 'win32' }, t => {
