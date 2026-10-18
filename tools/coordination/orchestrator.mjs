@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const digest = data => crypto.createHash('sha256').update(data).digest('hex');
 const json = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
 const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
-const writing = task => !task.readOnly && ['created', 'assigned', 'needs_fix'].includes(task.status);
+const writing = task => !task.readOnly && ['created', 'assigned', 'needs_fix', 'interrupt_requested'].includes(task.status);
 const canonical = value => fs.realpathSync.native(path.resolve(value));
 const within = (root, value) => {
   const relative = path.relative(root, value);
@@ -16,7 +16,7 @@ const within = (root, value) => {
 };
 function run(executable, args, cwd) {
   const result = spawnSync(executable, args, { cwd, encoding: 'utf8', windowsHide: true, maxBuffer: 32 * 1024 * 1024 });
-  if (result.error || result.status !== 0) throw new Error(`${executable} ${args.join(' ')}: ${result.error?.message ?? result.stderr ?? result.stdout}`);
+  if (result.error || result.status !== 0) throw new Error(`${executable} ${args.join(' ')}: ${result.error?.message ?? `${result.stdout}\n${result.stderr}`}`);
   return result.stdout.trim();
 }
 function scopes(values) {
@@ -79,9 +79,20 @@ export class Coordinator {
     if (this.repo !== state.coordinatorRoot || this.git(['branch', '--show-current']) !== state.coordinatorBranch) throw new Error('mutation requires the registered coordinator checkout and branch');
   }
 
+  finished(state, stream) {
+    const definition = state.workstreams.find(item => item.id === stream);
+    return Object.values(state.tasks).some(task => task.stream === stream && task.queueItem === definition?.next && !task.independent && task.status === 'closed');
+  }
+
   init() {
     return this.transaction(existing => {
-      if (existing) { this.coordinator(existing); return { value: existing }; }
+      if (existing) {
+        this.coordinator(existing);
+        this.clean(this.repo);
+        const observedHead = this.git(['rev-parse', 'HEAD']);
+        this.git(['merge-base', '--is-ancestor', existing.acceptedBaseline.commit, observedHead]);
+        return { value: { ...existing, observedHead } };
+      }
       this.clean(this.repo);
       const branch = this.git(['branch', '--show-current']);
       if (!branch.startsWith('codex/')) throw new Error('coordinator must use a codex/ branch');
@@ -114,12 +125,11 @@ export class Coordinator {
   next() {
     return this.transaction(state => {
       this.initialized(state);
-      const finished = stream => Object.values(state.tasks).some(task => task.stream === stream && task.status === 'closed');
-      return { value: state.workstreams.map(stream => ({ ...stream, modelPolicy: state.modelPolicy, ready: stream.dependencies.every(finished) && !Object.values(state.tasks).some(task => task.stream === stream.id && task.status !== 'closed'), blockedBy: stream.dependencies.filter(dependency => !finished(dependency)) })) };
+      return { value: state.workstreams.map(stream => ({ ...stream, modelPolicy: state.modelPolicy, completed: this.finished(state, stream.id), ready: !this.finished(state, stream.id) && stream.dependencies.every(dependency => this.finished(state, dependency)) && !Object.values(state.tasks).some(task => task.stream === stream.id && !task.independent && task.status !== 'closed'), blockedBy: stream.dependencies.filter(dependency => !this.finished(state, dependency)) })) };
     });
   }
 
-  create({ id, stream, scope, readOnly = false }) {
+  create({ id, stream, scope, readOnly = false, scopeAuthorization, objective }) {
     return this.transaction(state => {
       this.coordinator(state);
       this.clean(this.repo);
@@ -127,11 +137,14 @@ export class Coordinator {
       if (state.tasks[id]) throw new Error('task id already registered');
       const definition = state.workstreams.find(item => item.id === stream);
       if (!definition) throw new Error('unknown workstream');
+      if (objective !== undefined) requireText(objective, 'objective');
+      if (objective && objective !== definition.next && !scopeAuthorization?.trim()) throw new Error('independent objective requires scopeAuthorization');
+      if (this.finished(state, stream) && !scopeAuthorization?.trim()) throw new Error('current backlog item already completed; register an independent task explicitly');
       const taskScope = scopes(scope ?? definition.scope);
       if (!readOnly && !taskScope.length) throw new Error('writing task requires scope');
-      if (taskScope.some(value => !definition.scope.some(allowed => covers(allowed.replace(/\/+$/, ''), value)))) throw new Error('scope exceeds workstream');
-      const blocked = definition.dependencies.filter(dependency => !Object.values(state.tasks).some(task => task.stream === dependency && task.status === 'closed'));
-      if (blocked.length) throw new Error(`dependencies incomplete: ${blocked.join(', ')}`);
+      if (taskScope.some(value => !definition.scope.some(allowed => covers(allowed.replace(/\/+$/, ''), value))) && !scopeAuthorization?.trim()) throw new Error('scope exceeds workstream; coordinator scopeAuthorization required');
+      const blocked = definition.dependencies.filter(dependency => !this.finished(state, dependency));
+      if (!readOnly && blocked.length && !scopeAuthorization?.trim()) throw new Error(`dependencies incomplete: ${blocked.join(', ')}`);
       const active = Object.values(state.tasks).filter(writing);
       if (!readOnly && active.length >= state.maxWorkers) throw new Error('three writing workers already reserved');
       if (!readOnly && active.some(task => overlaps(task.scope, taskScope))) throw new Error('scope overlaps an active writer');
@@ -140,7 +153,7 @@ export class Coordinator {
       if (!within(state.managedRoot, worktree) || fs.existsSync(worktree)) throw new Error('worktree directory already exists or is unsafe');
       if (this.git(['branch', '--list', branch])) throw new Error('branch already exists');
       const baseCommit = this.git(['rev-parse', 'HEAD']);
-      const task = { id, stream, scope: taskScope, readOnly, worktree, branch, baseCommit, status: 'created', modelPolicy: 'inherit-parent', createdAt: new Date().toISOString(), registeredBy: 'codex-coordination' };
+      const task = { id, stream, objective: objective ?? definition.next, queueItem: definition.next, independent: Boolean(scopeAuthorization?.trim()), scope: taskScope, readOnly, scopeAuthorization, worktree, branch, baseCommit, status: 'created', modelPolicy: 'inherit-parent', createdAt: new Date().toISOString(), registeredBy: 'codex-coordination' };
       this.git(['worktree', 'add', '-b', branch, worktree, baseCommit]);
       try {
         for (const relative of ['mb2', 'source/packages']) {
@@ -173,16 +186,176 @@ export class Coordinator {
       task.agentId = agentId;
       task.adapter = adapter;
       task.status = 'assigned';
-      task.prompt = `Task ${id}: ${state.workstreams.find(item => item.id === task.stream).next}. Work only in ${task.worktree}, branch ${task.branch}, base ${task.baseCommit}. Scope: ${task.scope.join(', ')}. Model: inherit parent. No deployment, games, push or PR. Compile with -p:ModName=. Commit verified work; submit handoff.schema.json with actual tests, exit codes and log hashes. Native agent calls are performed by the root chat, not this Node process.`;
+      task.prompt = `Task ${id}: ${task.objective}. Work only in ${task.worktree}, branch ${task.branch}, base ${task.baseCommit}. Scope: ${task.scope.join(', ')}. Model: inherit parent. No deployment, games, push or PR. Compile with -p:ModName=. Commit verified work; submit handoff.schema.json with actual tests, exit codes and log hashes. Native agent calls are performed by the root chat, not this Node process.`;
+      return { state, value: task };
+    });
+  }
+
+  validateHandoff(task, handoff) {
+    if (handoff.taskId !== task.id || handoff.baseCommit !== task.baseCommit || !/^[0-9a-f]{40}$/.test(handoff.commit ?? '')) throw new Error('handoff task/base/commit mismatch');
+    requireText(handoff.summary, 'summary');
+    if (!Array.isArray(handoff.evidence) || !Array.isArray(handoff.risks) || handoff.risks.some(value => typeof value !== 'string')) throw new Error('evidence and risks arrays required');
+    this.clean(task.worktree);
+    if (canonical(task.worktree) !== task.worktree || this.git(['branch', '--show-current'], task.worktree) !== task.branch) throw new Error('registered worktree/branch changed');
+    if (this.git(['rev-parse', 'HEAD'], task.worktree) !== handoff.commit) throw new Error('handoff commit is not worker HEAD');
+    this.git(['merge-base', '--is-ancestor', task.baseCommit, handoff.commit]);
+    if (this.git(['rev-list', '--merges', `${task.baseCommit}..${handoff.commit}`])) throw new Error('merge commits require a separate integration plan');
+    const changedFiles = scopes(handoff.changedFiles);
+    const actual = this.git(['diff', '--name-only', '--no-renames', task.baseCommit, handoff.commit]).split('\n').filter(Boolean);
+    if (new Set(changedFiles).size !== changedFiles.length || !same(changedFiles, actual)) throw new Error('changedFiles differs from actual Git diff');
+    if ((task.readOnly && actual.length) || actual.some(file => !task.scope.some(scope => covers(scope, file)))) throw new Error('changed files exceed task scope');
+    if (!task.readOnly && !actual.length) throw new Error('writing task has no committed changes');
+    if (!Array.isArray(handoff.tests) || !handoff.tests.length) throw new Error('at least one test receipt required');
+    for (const receipt of handoff.tests) {
+      requireText(receipt.command, 'test command');
+      if (receipt.exitCode !== 0 || !/^[0-9a-f]{64}$/i.test(receipt.sha256 ?? '')) throw new Error('test failed or invalid SHA256');
+      const log = path.resolve(task.worktree, requireText(receipt.log, 'test log'));
+      if (!fs.statSync(log).isFile() || digest(fs.readFileSync(log)) !== receipt.sha256.toLowerCase()) throw new Error('test log SHA256 mismatch');
+    }
+    for (const file of handoff.evidence) {
+      if (!fs.statSync(path.resolve(task.worktree, requireText(file, 'evidence file'))).isFile()) throw new Error('evidence must be a file');
+    }
+    return structuredClone(handoff);
+  }
+
+  submit(id, handoff) {
+    return this.transaction(state => {
+      const task = this.task(state, id);
+      if (!['assigned', 'needs_fix'].includes(task.status)) throw new Error('task is not accepting a handoff');
+      if (task.integration) throw new Error('integrated task requires a new follow-up task for changes');
+      const verified = this.validateHandoff(task, handoff);
+      const retained = path.join(this.directory, 'evidence', id, verified.commit);
+      fs.mkdirSync(retained, { recursive: true });
+      verified.tests = verified.tests.map((receipt, index) => {
+        const log = path.join(retained, `test-${index}.log`);
+        fs.copyFileSync(path.resolve(task.worktree, receipt.log), log);
+        return { ...receipt, log };
+      });
+      verified.evidence = verified.evidence.map((file, index) => {
+        const target = path.join(retained, `evidence-${index}${path.extname(file)}`);
+        fs.copyFileSync(path.resolve(task.worktree, file), target);
+        return target;
+      });
+      task.handoff = verified;
+      task.status = 'submitted';
+      fs.writeFileSync(path.join(retained, 'handoff.json'), `${JSON.stringify(verified, null, 2)}\n`);
+      return { state, value: task };
+    });
+  }
+
+  review(id, { reviewerId, decision, notes }) {
+    return this.transaction(state => {
+      const task = this.task(state, id);
+      if (task.status !== 'submitted') throw new Error('review requires a submitted handoff');
+      requireText(reviewerId, 'reviewerId');
+      requireText(notes, 'review notes');
+      if (reviewerId === task.agentId || !['pass', 'needs_fix'].includes(decision)) throw new Error('independent reviewer and explicit decision required');
+      this.validateHandoff(task, task.handoff);
+      task.review = { reviewerId, decision, notes, at: new Date().toISOString() };
+      task.status = decision === 'pass' ? 'reviewed' : 'needs_fix';
+      return { state, value: task };
+    });
+  }
+
+  integrate(id) {
+    return this.transaction(state => {
+      const task = this.task(state, id);
+      if (task.status !== 'reviewed') throw new Error('integration requires a passed review');
+      this.clean(this.repo);
+      this.validateHandoff(task, task.handoff);
+      const previousHead = this.git(['rev-parse', 'HEAD']);
+      this.git(['merge-base', '--is-ancestor', task.baseCommit, previousHead]);
+      const commits = this.git(['rev-list', '--reverse', `${task.baseCommit}..${task.handoff.commit}`]).split('\n').filter(Boolean);
+      try {
+        if (commits.length) this.git(['cherry-pick', ...commits]);
+        task.integration = { previousHead, head: this.git(['rev-parse', 'HEAD']), commits, at: new Date().toISOString() };
+        task.status = 'integrated';
+      } catch (error) {
+        let abortError;
+        try { this.git(['cherry-pick', '--abort']); } catch (abort) { abortError = abort.message; }
+        task.status = 'needs_fix';
+        task.integrationFailure = { message: error.message, abortError, previousHead, observedHead: this.git(['rev-parse', 'HEAD']) };
+      }
+      return { state, value: task };
+    });
+  }
+
+  verify(id, { command, timeoutMs = 600000 }) {
+    return this.transaction(state => {
+      const task = this.task(state, id);
+      if (!['integrated', 'verified'].includes(task.status)) throw new Error('verification requires integration');
+      this.clean(this.repo);
+      if (!Array.isArray(command) || !command.length || command.some(value => typeof value !== 'string' || !value)) throw new Error('actual test command array required');
+      if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 3600000) throw new Error('timeout must be 1..3600000 ms');
+      const executable = path.basename(command[0]).toLowerCase().replace(/\.exe$/, '');
+      const compiles = executable === 'msbuild' || (executable === 'dotnet' && ['build', 'test', 'msbuild'].includes(command[1]));
+      if (compiles && !command.some(value => /^[-/]p:ModName=$/i.test(value))) throw new Error('build verification requires -p:ModName= to disable deployment');
+      const head = this.git(['rev-parse', 'HEAD']);
+      this.git(['merge-base', '--is-ancestor', task.integration.head, head]);
+      const result = spawnSync(command[0], command.slice(1), { cwd: this.repo, encoding: 'utf8', windowsHide: true, timeout: timeoutMs, maxBuffer: 32 * 1024 * 1024 });
+      const log = path.join(this.directory, 'evidence', id, `integration-${Date.now()}.log`);
+      fs.mkdirSync(path.dirname(log), { recursive: true });
+      const content = `$ ${JSON.stringify(command)}\nHEAD ${head}\n${result.stdout ?? ''}${result.stderr ?? ''}${result.error?.stack ?? ''}\nexitCode=${result.status}\n`;
+      fs.writeFileSync(log, content);
+      task.verification = { head, command, exitCode: result.status, log, sha256: digest(content), at: new Date().toISOString() };
+      task.status = result.status === 0 && !result.error ? 'verified' : 'needs_fix';
+      try { this.clean(this.repo); } catch (error) { task.status = 'needs_fix'; task.verification.dirtyError = error.message; }
+      return { state, value: task };
+    });
+  }
+
+  close(id) {
+    return this.transaction(state => {
+      const task = this.task(state, id);
+      this.clean(this.repo);
+      if (task.status !== 'verified' || task.verification?.exitCode !== 0 || task.verification.head !== this.git(['rev-parse', 'HEAD'])) throw new Error('close requires successful post-integration verification of current HEAD');
+      if (digest(fs.readFileSync(task.verification.log)) !== task.verification.sha256) throw new Error('verification log changed');
+      task.status = 'closed';
+      task.closedAt = new Date().toISOString();
+      return { state, value: task };
+    });
+  }
+
+  interrupt(id, { reason, agentStatus } = {}) {
+    return this.transaction(state => {
+      const task = this.task(state, id);
+      if (['closed', 'integrated', 'verified'].includes(task.status)) throw new Error('task no longer has a writing worker');
+      requireText(reason, 'interrupt reason');
+      if (agentStatus && !['idle', 'completed', 'interrupted'].includes(agentStatus)) throw new Error('invalid agent stop receipt');
+      task.status = agentStatus ? 'interrupted' : 'interrupt_requested';
+      task.interruption = { reason, agentStatus, agentId: task.agentId, at: new Date().toISOString() };
+      return { state, value: { ...task, needsAgentInterrupt: !agentStatus, instruction: 'The root chat must stop/observe the native agent using Codex tools. Node cannot call native agent tools.' } };
+    });
+  }
+
+  cleanup(id) {
+    return this.transaction(state => {
+      const task = this.task(state, id);
+      if (task.status !== 'closed' || !task.integration || task.verification?.exitCode !== 0 || task.registeredBy !== 'codex-coordination') throw new Error('cleanup requires a registered, integrated, verified and closed task');
+      if (task.cleanedAt) return { value: task };
+      const expected = path.join(state.managedRoot, task.id);
+      if (task.worktree !== expected || !within(state.managedRoot, expected) || canonical(expected) !== expected || canonical(state.managedRoot) !== state.managedRoot) throw new Error('unsafe managed worktree path');
+      this.clean(task.worktree);
+      if (this.git(['branch', '--show-current'], task.worktree) !== task.branch || this.git(['rev-parse', 'HEAD'], task.worktree) !== task.handoff.commit || this.git(['rev-parse', task.branch]) !== task.handoff.commit) throw new Error('worker branch changed after handoff');
+      this.git(['merge-base', '--is-ancestor', task.verification.head, this.git(['rev-parse', 'HEAD'])]);
+      this.git(['worktree', 'remove', expected]);
+      this.git(['branch', '-D', task.branch]);
+      task.cleanedAt = new Date().toISOString();
       return { state, value: task };
     });
   }
 }
 
 const help = `Usage: node tools/coordination/orchestrator.mjs --root <repo> <command> [options]
-Commands: init | status | next | create | assign
-create --id slug --stream authority [--scope path] [--read-only]
+Commands: init | status | next | create | assign | submit | review | integrate | verify | close | interrupt | cleanup
+create --id slug --stream authority [--scope path] [--read-only] [--scope-authorization coordinator-reason] [--objective text]
 assign --id slug --agent native-agent-id [--adapter native|cli]
+submit --id slug --handoff absolute-handoff.json
+review --id slug --reviewer independent-agent-id --decision pass|needs_fix --notes text
+integrate --id slug
+verify --id slug [--timeout 600000] -- node --test path/to/test.mjs
+close --id slug | cleanup --id slug
+interrupt --id slug --reason text [--agent-status idle|completed|interrupted]
 The root chat invokes native agents; this CLI registers their exclusive worktrees.
 All persistent state is in the Git common directory. Model policy: inherit-parent.`;
 
@@ -191,6 +364,7 @@ export function main(args = process.argv.slice(2)) {
   const positional = [];
   for (let index = 0; index < args.length; index++) {
     const value = args[index];
+    if (value === '--') { options.command = args.slice(index + 1); break; }
     if (value === '--help' || value === '-h') { process.stdout.write(`${help}\n`); return; }
     if (value === '--read-only') { options.readOnly = true; continue; }
     if (value.startsWith('--')) {
@@ -203,8 +377,13 @@ export function main(args = process.argv.slice(2)) {
   const command = positional[0];
   let result;
   if (['init', 'status', 'next'].includes(command)) result = board[command]();
-  else if (command === 'create') result = board.create({ id: options.id, stream: options.stream, scope: options.scope.length ? options.scope : undefined, readOnly: options.readOnly });
+  else if (command === 'create') result = board.create({ id: options.id, stream: options.stream, scope: options.scope.length ? options.scope : undefined, readOnly: options.readOnly, scopeAuthorization: options['scope-authorization'], objective: options.objective });
   else if (command === 'assign') result = board.assign(options.id, { agentId: options.agent, adapter: options.adapter });
+  else if (command === 'submit') result = board.submit(options.id, json(path.resolve(requireText(options.handoff, 'handoff file'))));
+  else if (command === 'review') result = board.review(options.id, { reviewerId: options.reviewer, decision: options.decision, notes: options.notes });
+  else if (command === 'verify') result = board.verify(options.id, { command: options.command, timeoutMs: options.timeout ? Number(options.timeout) : undefined });
+  else if (command === 'interrupt') result = board.interrupt(options.id, { reason: options.reason, agentStatus: options['agent-status'] });
+  else if (['integrate', 'close', 'cleanup'].includes(command)) result = board[command](options.id);
   else throw new Error(`unknown command; ${help}`);
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 }
