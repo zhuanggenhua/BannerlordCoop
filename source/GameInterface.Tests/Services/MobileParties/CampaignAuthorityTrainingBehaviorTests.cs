@@ -8,6 +8,7 @@ using GameInterface.Services.ObjectManager;
 using GameInterface.Services.MobileParties.Patches.Disable;
 using HarmonyLib;
 using Moq;
+using Newtonsoft.Json;
 using System;
 using System.Runtime.CompilerServices;
 using TaleWorlds.CampaignSystem;
@@ -164,6 +165,27 @@ public class CampaignAuthorityTrainingBehaviorTests : IDisposable
     }
 
 #if DEBUG
+    [Fact]
+    public void DailyProbeReadsLiveXpWithoutRefreshingNativeRosterCache()
+    {
+        Assert.True(identity.TryApply(new AuthorityLease("room", "writer-b", "b", 1)));
+        SetLocal("b");
+        var roster = party.MemberRoster;
+        var cached = roster.GetTroopRoster();
+        var version = roster.VersionNo;
+
+        behavior.OnDailyTickParty(party);
+
+        Assert.Equal(128, roster.GetElementXp(troop));
+        Assert.Equal(100, cached[0].Xp);
+        Assert.Equal(version, roster.VersionNo);
+        var captured = DisableMobilePartyTrainingBehavior.TrainingDailyCoopCommand.CaptureXp(party);
+        Assert.Equal(JsonConvert.SerializeObject(new[] { new { id = troop.StringId, number = 4, xp = 128 } }),
+            JsonConvert.SerializeObject(captured));
+        Assert.Equal(100, cached[0].Xp);
+        Assert.Equal(version, roster.VersionNo);
+    }
+
     [Fact]
     public void DailyProbeCallsNativeTrainingOnceAndRejectsTheObserver()
     {

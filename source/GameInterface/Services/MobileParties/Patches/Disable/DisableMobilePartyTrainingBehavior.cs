@@ -4,7 +4,6 @@ using Common.Commands;
 using GameInterface.Services.ObjectManager;
 using Newtonsoft.Json;
 using System;
-using System.Linq;
 #endif
 using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.MobileParties.Extensions;
@@ -76,10 +75,19 @@ internal class DisableMobilePartyTrainingBehavior
             }));
         }
 
-        private static object[] CaptureXp(MobileParty party) => party.MemberRoster.GetTroopRoster()
-            .Where(element => !element.Character.IsHero)
-            .Select(element => (object)new { id = element.Character.StringId, number = element.Number, xp = element.Xp })
-            .ToArray();
+        internal static object[] CaptureXp(MobileParty party)
+        {
+            var roster = party.MemberRoster;
+            var captured = new List<object>();
+            // Native XP changes do not invalidate GetTroopRoster's copied-element cache.
+            for (int index = 0; index < roster.Count; index++)
+            {
+                var element = roster.GetElementCopyAtIndex(index);
+                if (!element.Character.IsHero)
+                    captured.Add(new { id = element.Character.StringId, number = element.Number, xp = element.Xp });
+            }
+            return captured.ToArray();
+        }
     }
 #endif
 }
