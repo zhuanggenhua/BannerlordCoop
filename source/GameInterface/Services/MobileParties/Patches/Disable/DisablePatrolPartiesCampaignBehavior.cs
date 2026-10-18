@@ -1,4 +1,5 @@
 using Common;
+using GameInterface.Services.CampaignAuthority;
 using HarmonyLib;
 using System.Collections.Generic;
 using System.Reflection;
@@ -23,5 +24,5 @@ internal class DisablePatrolPartiesCampaignBehavior
         yield return AccessTools.Method(typeof(PatrolPartiesCampaignBehavior), nameof(PatrolPartiesCampaignBehavior.OnBuildingLevelChanged));
     }
 
-    static bool Prefix() => ModInformation.IsServer;
+    internal static bool Prefix() => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
 }
