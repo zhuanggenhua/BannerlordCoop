@@ -74,6 +74,31 @@ public class ListenAuthorityModeTests
     }
 
     [Fact]
+    public void HandoffFreezeBlocksLocalAuthorityUntilCanceledOrReplacedByANewerLease()
+    {
+        var identity = new SessionIdentity();
+        Assert.False(identity.IsLocallyFrozen(default));
+        var active = new AuthorityLease("room-a", "authority-b", "controller-b", 4);
+        Assert.True(identity.TryApply(active));
+
+        Assert.True(identity.TryFreezeLocalAuthority(active, 12));
+        Assert.True(identity.IsLocallyFrozen(active));
+        Assert.False(identity.TryExecuteWithLease(active, () => { }));
+        Assert.True(identity.TryFreezeLocalAuthority(active, 12));
+        Assert.False(identity.TryFreezeLocalAuthority(active, 13));
+        Assert.False(identity.TryCancelLocalAuthorityFreeze(active, 13));
+        Assert.True(identity.TryCancelLocalAuthorityFreeze(active, 12));
+        Assert.False(identity.IsLocallyFrozen(active));
+        Assert.True(identity.TryExecuteWithLease(active, () => { }));
+
+        Assert.True(identity.TryFreezeLocalAuthority(active, 14));
+        var successor = new AuthorityLease("room-a", "authority-a", "controller-a", 5);
+        Assert.True(identity.TryApply(successor));
+        Assert.False(identity.IsLocallyFrozen(active));
+        Assert.False(identity.IsLocallyFrozen(successor));
+    }
+
+    [Fact]
     public void AuthorityLeaseRejectsStaleEpochAndConflictingSameEpoch()
     {
         var identity = new SessionIdentity();

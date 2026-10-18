@@ -11,6 +11,9 @@ public interface ISessionIdentity
     long Epoch { get; }
     bool IsConfirmed { get; }
     bool TryGetConfirmedLease(out AuthorityLease lease);
+    bool IsLocallyFrozen(AuthorityLease lease);
+    bool TryFreezeLocalAuthority(AuthorityLease lease, long handoffSequence);
+    bool TryCancelLocalAuthorityFreeze(AuthorityLease lease, long handoffSequence);
     bool TryExecuteWithLease(AuthorityLease lease, Action action);
     bool TryApply(AuthorityLease lease);
     bool TryApply(AuthorityLease lease, string roomHostControllerId);
@@ -76,6 +79,8 @@ public sealed class SessionIdentity : ISessionIdentity
     private AuthorityLease currentLease;
     private string roomHostControllerId = string.Empty;
     private bool isConfirmed;
+    private AuthorityLease frozenLease;
+    private long freezeHandoffSequence;
 
     public SessionIdentity()
     {
@@ -113,6 +118,43 @@ public sealed class SessionIdentity : ISessionIdentity
         }
     }
 
+    public bool IsLocallyFrozen(AuthorityLease lease)
+    {
+        lock (gate) return frozenLease.IsValid && frozenLease == lease;
+    }
+
+    public bool TryFreezeLocalAuthority(AuthorityLease lease, long handoffSequence)
+    {
+        if (!lease.IsValid || lease.IsPaused || handoffSequence <= 0) return false;
+
+        lock (gate)
+        {
+            if (!isConfirmed || currentLease != lease) return false;
+            if (frozenLease.IsValid)
+                return frozenLease == lease && freezeHandoffSequence == handoffSequence;
+
+            frozenLease = lease;
+            freezeHandoffSequence = handoffSequence;
+            return true;
+        }
+    }
+
+    public bool TryCancelLocalAuthorityFreeze(AuthorityLease lease, long handoffSequence)
+    {
+        if (!lease.IsValid || handoffSequence <= 0) return false;
+
+        lock (gate)
+        {
+            if (!isConfirmed || currentLease != lease || frozenLease != lease ||
+                freezeHandoffSequence != handoffSequence)
+                return false;
+
+            frozenLease = default;
+            freezeHandoffSequence = 0;
+            return true;
+        }
+    }
+
     /// <summary>
     /// Executes a small state apply atomically with respect to lease changes. A newer lease cannot become
     /// current between the equality check and the action's completion.
@@ -123,7 +165,7 @@ public sealed class SessionIdentity : ISessionIdentity
 
         lock (gate)
         {
-            if (!isConfirmed || currentLease != lease) return false;
+            if (!isConfirmed || currentLease != lease || frozenLease == lease) return false;
             action();
             return true;
         }
@@ -149,7 +191,12 @@ public sealed class SessionIdentity : ISessionIdentity
             if (!CanApplyLease(lease)) return false;
 
             bool applyNewLease = !isConfirmed || lease.Epoch > currentLease.Epoch;
-            if (applyNewLease) currentLease = lease;
+            if (applyNewLease)
+            {
+                currentLease = lease;
+                frozenLease = default;
+                freezeHandoffSequence = 0;
+            }
             isConfirmed = true;
             if (applyRoomHost && !string.IsNullOrWhiteSpace(roomHostControllerId))
                 this.roomHostControllerId = roomHostControllerId;

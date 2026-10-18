@@ -78,4 +78,29 @@ public class CampaignAuthorityContextTests
             ModInformation.SessionMode = previousMode;
         }
     }
+
+    [Fact]
+    public void LocallyFrozenAuthorityLeaseCannotRunSimulationOrPublishAsAuthority()
+    {
+        var previousMode = ModInformation.SessionMode;
+        try
+        {
+            ModInformation.SessionMode = SessionMode.RemoteReplica;
+            var identity = new SessionIdentity();
+            var lease = new AuthorityLease("room-a", "authority-b", "controller-b", 3);
+            Assert.True(identity.TryApply(lease, "controller-a"));
+            Assert.True(identity.TryFreezeLocalAuthority(lease, 44));
+            var controller = new ControllerIdProvider();
+            controller.SetControllerId("controller-b");
+            var context = new CampaignAuthorityContext(identity, controller);
+
+            Assert.False(context.IsLocalCampaignAuthority);
+            Assert.False(context.TryGetLocalAuthorityLease(out _));
+            Assert.False(context.TryExecuteWithCurrentLease(lease, () => { }));
+        }
+        finally
+        {
+            ModInformation.SessionMode = previousMode;
+        }
+    }
 }

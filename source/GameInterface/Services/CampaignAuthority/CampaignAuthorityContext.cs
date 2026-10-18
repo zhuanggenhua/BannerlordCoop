@@ -55,6 +55,7 @@ public sealed class CampaignAuthorityContext : ICampaignAuthorityContext
     {
         if (!sessionIdentity.TryGetConfirmedLease(out lease)) return false;
         if (lease.IsPaused) return false;
+        if (sessionIdentity.IsLocallyFrozen(lease)) return false;
         if (ModInformation.IsDedicatedAuthority) return true;
 
         string controllerId = controllerIdProvider.ControllerId;
