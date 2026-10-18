@@ -1,6 +1,7 @@
 ﻿using Common;
 using Common.Messaging;
 using Common.Network;
+using Common.Network.Coalescing;
 using Common.Network.Session;
 using Common.PacketHandlers;
 using Common.Serialization;
@@ -28,6 +29,13 @@ public class CampaignAuthorityFreezeClientHandlerTests
         controller.SetControllerId("controller-b");
         var network = new Mock<INetwork>();
         var operations = new List<string>();
+        var coalescer = new Mock<ISendCoalescer>();
+        coalescer.Setup(value => value.Flush(network.Object)).Callback(() =>
+        {
+            Assert.True(GameThread.Instance.IsGameThread);
+            Assert.False(identity.IsLocallyFrozen(lease));
+            Assert.True(identity.TryExecuteWithLease(lease, () => operations.Add("coalescer")));
+        });
         var checkpoint = new RegistryAllocationCheckpoint(444, new Dictionary<string, int>());
         var objectManager = new Mock<IObjectManager>();
         objectManager.Setup(value => value.CaptureAllocationCheckpoint())
@@ -46,16 +54,22 @@ public class CampaignAuthorityFreezeClientHandlerTests
             });
 
         var request = new NetworkCampaignAuthorityFreezeRequest(lease, "controller-a", 44);
-        using var handler = new CampaignAuthorityFreezeClientHandler(broker, network.Object, identity, controller, objectManager.Object);
+        using var handler = new CampaignAuthorityFreezeClientHandler(broker, network.Object, identity, controller,
+            objectManager.Object, coalescer.Object);
         broker.Publish(this, request);
         GameThread.Run(() => { }, blocking: true);
 
         Assert.True(identity.IsLocallyFrozen(lease));
         Assert.NotNull(acknowledgement);
-        Assert.Equal(new[] { "flush", "ack", "flush" }, operations);
+        Assert.Equal(new[] { "coalescer", "flush", "ack", "flush" }, operations);
         Assert.Equal(request.HandoffSequence, acknowledgement.Value.HandoffSequence);
         Assert.Equal(request.CandidateControllerId, acknowledgement.Value.CandidateControllerId);
         Assert.Same(checkpoint, acknowledgement.Value.AllocationCheckpoint);
+
+        broker.Publish(this, request);
+        GameThread.Run(() => { }, blocking: true);
+        coalescer.Verify(value => value.Flush(network.Object), Times.Once);
+        network.Verify(value => value.SendAll(It.IsAny<NetworkCampaignAuthorityFreezeAcknowledged>()), Times.Exactly(2));
 
         broker.Publish(this, request.ToCanceled());
         GameThread.Run(() => { }, blocking: true);

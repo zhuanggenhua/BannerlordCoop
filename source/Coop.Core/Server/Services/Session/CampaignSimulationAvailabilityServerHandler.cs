@@ -2,6 +2,7 @@
 using Common.Logging;
 using Common.Messaging;
 using Common.Network;
+using Common.Network.Coalescing;
 using Common.Network.Messages;
 using Common.Network.Session;
 using Common.Session;
@@ -34,6 +35,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private readonly INetwork network;
     private readonly ISessionIdentity sessionIdentity;
     private readonly IObjectManager objectManager;
+    private readonly ISendCoalescer sendCoalescer;
     private readonly object peerGate = new object();
     private readonly object localReportGate = new object();
     private readonly object selectionGate = new object();
@@ -53,7 +55,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private bool hasPendingBarrier;
     private bool pendingBarrierAcknowledged;
     private int heartbeatQueued;
-    private int barrierCaptureQueued;
+    private int leaseReconciliationQueued;
     private int disposed;
 
     public CampaignSimulationAvailabilityServerHandler(
@@ -64,7 +66,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         IControllerIdProvider controllerIdProvider,
         INetwork network = null,
         ISessionIdentity sessionIdentity = null,
-        IObjectManager objectManager = null)
+        IObjectManager objectManager = null,
+        ISendCoalescer sendCoalescer = null)
     {
         this.messageBroker = messageBroker;
         this.coordinator = coordinator;
@@ -74,6 +77,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         this.network = network;
         this.sessionIdentity = sessionIdentity;
         this.objectManager = objectManager;
+        this.sendCoalescer = sendCoalescer;
         messageBroker.Subscribe<CampaignReady>(Handle_CampaignReady);
         messageBroker.Subscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Subscribe<NetworkCampaignSimulationAvailabilityReport>(Handle_AvailabilityReport);
@@ -225,8 +229,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             }
         }
 
-        // Expiry decisions continue even if the game thread stops pumping, allowing the room relay
-        // to fence stale availability while it can still process network messages.
+        // Candidate expiry still runs while the game thread is stalled. Lease changes wait behind
+        // in-flight game work so its final world mutations can be sent under the old lease.
         ReconcileCurrentAvailability();
     }
 
@@ -296,6 +300,25 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     {
         if (!ModInformation.IsListenAuthority || network == null || sessionIdentity == null) return;
 
+        if (!GameThread.Instance.IsGameThread)
+        {
+            if (Interlocked.Exchange(ref leaseReconciliationQueued, 1) != 0) return;
+            try
+            {
+                GameThread.EnqueueSafe(() =>
+                {
+                    try { ReconcileCurrentAvailability(); }
+                    finally { Interlocked.Exchange(ref leaseReconciliationQueued, 0); }
+                }, context: nameof(CampaignSimulationAvailabilityServerHandler));
+            }
+            catch
+            {
+                Interlocked.Exchange(ref leaseReconciliationQueued, 0);
+                throw;
+            }
+            return;
+        }
+
         lock (leaseGate)
         {
             if (!sessionIdentity.TryGetConfirmedLease(out var currentLease)) return;
@@ -342,7 +365,15 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
                 coordinator.IsFreshMapReady(currentLease.AuthorityControllerId))
                 return;
 
-            if (!TryCommitLease(currentLease, string.Empty, isPaused: true)) return;
+            // Finish the current game-thread tick and send its buffered results while the old lease
+            // can still wrap them. Freezing first would turn them into rejected unscoped writes.
+            bool committedPause = false;
+            if (!sessionIdentity.TryExecuteWithLease(currentLease, () =>
+            {
+                sendCoalescer?.Flush(network);
+                network.FlushPendingMessages();
+                committedPause = TryCommitLease(currentLease, string.Empty, isPaused: true);
+            }) || !committedPause) return;
 
             if (!selection.IsPaused &&
                 !string.Equals(selection.ControllerId, roomHostControllerId, StringComparison.Ordinal) &&
@@ -385,26 +416,6 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private void TrySendHandoffBarrier(AuthorityLease pausedLease, string candidateControllerId)
     {
         if (objectManager == null) return;
-
-        if (!GameThread.Instance.IsGameThread)
-        {
-            if (Interlocked.Exchange(ref barrierCaptureQueued, 1) != 0) return;
-            GameThread.EnqueueSafe(() =>
-            {
-                try
-                {
-                    lock (selectionGate)
-                    lock (leaseGate)
-                        if (Volatile.Read(ref disposed) == 0)
-                            TrySendHandoffBarrier(pausedLease, candidateControllerId);
-                }
-                finally
-                {
-                    Interlocked.Exchange(ref barrierCaptureQueued, 0);
-                }
-            }, context: nameof(CampaignSimulationAvailabilityServerHandler));
-            return;
-        }
 
         if (!pausedLease.IsPaused || string.IsNullOrWhiteSpace(candidateControllerId) ||
             string.Equals(candidateControllerId, sessionIdentity.RoomHostControllerId, StringComparison.Ordinal) ||

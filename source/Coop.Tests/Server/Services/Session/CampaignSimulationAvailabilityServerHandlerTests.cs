@@ -9,6 +9,7 @@ using Coop.Core.Server.Connections;
 using Coop.Core.Server.Services.Session;
 using Coop.Tests.Mocks;
 using Common.Network;
+using Common.Network.Coalescing;
 using GameInterface.Services.Entity;
 using GameInterface.Services.ObjectManager;
 using GameInterface.Services.GameState.Messages;
@@ -24,7 +25,7 @@ namespace Coop.Tests.Server.Services.Session;
 public class CampaignSimulationAvailabilityServerHandlerTests
 {
     [Fact]
-    public void StaleReadinessHeartbeatPausesTheLocalHostLease()
+    public void StaleReadinessPausesOnlyAfterTheInFlightGameThreadWorkCompletes()
     {
         var previousMode = ModInformation.SessionMode;
         ModInformation.SessionMode = SessionMode.ListenAuthority;
@@ -59,9 +60,29 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
             messageBroker.Publish(this, new CampaignReady());
             Assert.True(coordinator.IsFreshMapReady("host"));
+            GameThread.Run(() => { }, blocking: true);
 
-            now = now.AddSeconds(4);
-            handler.ReconcileCurrentAvailability();
+            using var gameWorkStarted = new System.Threading.ManualResetEventSlim();
+            using var releaseGameWork = new System.Threading.ManualResetEventSlim();
+            GameThread.EnqueueSafe(() =>
+            {
+                gameWorkStarted.Set();
+                if (!releaseGameWork.Wait(System.TimeSpan.FromSeconds(5)))
+                    throw new System.TimeoutException("The test did not release in-flight game work.");
+            });
+            Assert.True(gameWorkStarted.Wait(System.TimeSpan.FromSeconds(5)));
+            try
+            {
+                now = now.AddSeconds(4);
+                handler.ReconcileCurrentAvailability();
+                Assert.False(identity.CurrentLease.IsPaused);
+                Assert.Equal(1, identity.Epoch);
+            }
+            finally
+            {
+                releaseGameWork.Set();
+            }
+            GameThread.Run(() => { }, blocking: true);
 
             Assert.True(identity.CurrentLease.IsPaused);
             Assert.Equal(2, identity.Epoch);
@@ -153,6 +174,20 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             controllerId.SetControllerId("host");
             var network = new Mock<INetwork>();
             NetworkCampaignAuthorityHandoffBarrier appliedBarrier = default;
+            bool bufferedResultsFlushed = false;
+            var coalescer = new Mock<ISendCoalescer>();
+            coalescer.Setup(value => value.Flush(network.Object)).Callback(() =>
+            {
+                Assert.True(GameThread.Instance.IsGameThread);
+                Assert.False(identity.CurrentLease.IsPaused);
+                Assert.Equal(1, identity.Epoch);
+                bufferedResultsFlushed = true;
+            });
+            network.Setup(value => value.SendAll(It.IsAny<IMessage>())).Callback<IMessage>(message =>
+            {
+                if (message is NetworkAuthorityLeaseSnapshot snapshot && snapshot.IsPaused)
+                    Assert.True(bufferedResultsFlushed);
+            });
             var objectManager = new Mock<IObjectManager>();
             objectManager.Setup(value => value.CaptureAllocationCheckpoint())
                 .Callback(() => Assert.True(GameThread.Instance.IsGameThread))
@@ -169,7 +204,8 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                 controllerId,
                 network.Object,
                 identity,
-                objectManager.Object);
+                objectManager.Object,
+                coalescer.Object);
 
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
             messageBroker.Publish(this, new CampaignReady());
@@ -206,6 +242,8 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             Assert.Equal(2, identity.Epoch);
 
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
+
+            GameThread.Run(() => { }, blocking: true);
 
             Assert.False(identity.CurrentLease.IsPaused);
             Assert.Equal("host", identity.AuthorityControllerId);

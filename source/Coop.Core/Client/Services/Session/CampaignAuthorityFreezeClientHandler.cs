@@ -2,6 +2,7 @@
 using Common.Logging;
 using Common.Messaging;
 using Common.Network;
+using Common.Network.Coalescing;
 using Common.Network.Session;
 using Common.Session;
 using GameInterface.Services.Entity;
@@ -20,19 +21,22 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
     private readonly ISessionIdentity sessionIdentity;
     private readonly IControllerIdProvider controllerIdProvider;
     private readonly IObjectManager objectManager;
+    private readonly ISendCoalescer sendCoalescer;
 
     public CampaignAuthorityFreezeClientHandler(
         IMessageBroker messageBroker,
         INetwork network,
         ISessionIdentity sessionIdentity,
         IControllerIdProvider controllerIdProvider,
-        IObjectManager objectManager)
+        IObjectManager objectManager,
+        ISendCoalescer sendCoalescer = null)
     {
         this.messageBroker = messageBroker;
         this.network = network;
         this.sessionIdentity = sessionIdentity;
         this.controllerIdProvider = controllerIdProvider;
         this.objectManager = objectManager;
+        this.sendCoalescer = sendCoalescer;
         messageBroker.Subscribe<NetworkCampaignAuthorityFreezeRequest>(Handle_FreezeRequest);
         messageBroker.Subscribe<NetworkCampaignAuthorityFreezeCanceled>(Handle_FreezeCanceled);
     }
@@ -52,8 +56,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
     private void ApplyFreezeRequest(NetworkCampaignAuthorityFreezeRequest request)
     {
         if (!sessionIdentity.TryGetConfirmedLease(out var lease) ||
-            !Matches(request, lease, controllerIdProvider.ControllerId) ||
-            !sessionIdentity.TryFreezeLocalAuthority(lease, request.HandoffSequence))
+            !Matches(request, lease, controllerIdProvider.ControllerId))
         {
             Logger.Warning("Ignored campaign authority freeze request {HandoffSequence} for controller {ControllerId}; the request did not match the active lease",
                 request.HandoffSequence, controllerIdProvider.ControllerId);
@@ -62,6 +65,20 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
 
         try
         {
+            if (sessionIdentity.IsLocallyFrozen(lease))
+            {
+                if (!sessionIdentity.TryFreezeLocalAuthority(lease, request.HandoffSequence)) return;
+            }
+            else
+            {
+                bool frozen = false;
+                if (!sessionIdentity.TryExecuteWithLease(lease, () =>
+                {
+                    sendCoalescer?.Flush(network);
+                    frozen = sessionIdentity.TryFreezeLocalAuthority(lease, request.HandoffSequence);
+                }) || !frozen) return;
+            }
+
             // Fence local simulation before flushing. The acknowledgement follows every already queued
             // authority delta on this reliable-ordered connection.
             network.FlushPendingMessages();
