@@ -280,13 +280,7 @@ internal class PartyComponentHandler : IHandler
 
                 using (new AllowedThread())
                 {
-                    if (partyComponent != null) partyComponent.MobileParty = mobileParty;
-                    mobileParty._partyComponent = partyComponent;
-
-                    // The type flags (IsMilitia/IsLordParty/IsCaravan/etc.) are derived from the
-                    // component, so recompute them from the component we just set; otherwise they
-                    // stay stale on the client.
-                    mobileParty.UpdatePartyComponentFlags();
+                    ApplyComponentBinding(Campaign.Current.CampaignObjectManager, mobileParty, partyComponent);
                 }
             }
             catch (Exception e)
@@ -294,6 +288,18 @@ internal class PartyComponentHandler : IHandler
                 Logger.Error(e, "Failed to apply {Message}", nameof(NetworkPartyComponentMobilePartyUpdated));
             }
         });
+    }
+
+    internal static void ApplyComponentBinding(CampaignObjectManager manager, MobileParty party, PartyComponent component)
+    {
+        if (component != null) component.MobileParty = party;
+        if (ReferenceEquals(party._partyComponent, component)) return;
+        // Match SetPartyComponent's native partition bookkeeping without replaying
+        // component Finish/Create/Initialize side effects on an observer.
+        manager.BeforePartyComponentChanged(party);
+        party._partyComponent = component;
+        party.UpdatePartyComponentFlags();
+        manager.AfterPartyComponentChanged(party);
     }
 
     private void Handle_PartyComponentLeaderChanged(MessagePayload<PartyComponentLeaderChanged> payload)

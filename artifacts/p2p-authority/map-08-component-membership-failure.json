@@ -1,0 +1,27 @@
+{
+  "runId": "231add56784d482087473430ef4ad0f1",
+  "sourceCommit": "11ca2d336",
+  "status": "failed_safe_pause_at_bandit_membership",
+  "rejection": [
+    "[(21300) 13:14:57 WRN GameInterface.Services.CampaignAuthority.CampaignSchedulerCheckpointService] Scheduler ticker _banditMobilePartyPartialHourlyAiEventTicker mismatch: source count=375 local count=374, source-only=45057, local-only=",
+    "[(21300) 13:14:57 WRN GameInterface.Services.CampaignAuthority.CampaignSchedulerCheckpointService] Rejected campaign scheduler checkpoint at ticker _banditMobilePartyPartialHourlyAiEventTicker; order, membership or cursor differs",
+    "[(21300) 13:14:57 WRN Coop.Core.Client.Services.Session.CampaignAuthorityHandoffBarrierClientHandler] Rejected campaign handoff barrier 1; native campaign scheduler did not match"
+  ],
+  "movement": [
+    "position=658.7773,277.1635|target=658.7773,279.1635|behavior=GoToPoint|settlement=town_ES1|encounter=town_ES1|time=StoppablePlay",
+    "position=658.7773,277.1635|target=658.7773,277.1635|behavior=Hold|settlement=none|encounter=none|time=StoppablePlay"
+  ],
+  "cleanup": [
+    {
+      "cleanupComplete": true,
+      "processAlive": false,
+      "processTreeAlive": false
+    },
+    {
+      "cleanupComplete": true,
+      "processAlive": false,
+      "processTreeAlive": false
+    }
+  ],
+  "accepted": false
+}
