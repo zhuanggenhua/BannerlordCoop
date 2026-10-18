@@ -1,5 +1,15 @@
 # Repository Guidelines
 
+## Authorized Single-Controller Workflow
+
+The user has authorized the current root Codex chat to coordinate parallel P2P work. Use the repository tooling and handoff contract in `tools/coordination`, and the workflow in `doc/automated-testing/agent-coordination.md`.
+
+- Check the current HEAD, task registry and accepted P2P evidence before assigning new work. Keep the accepted map and Mission scenarios as baselines; do not recreate already completed features.
+- Writing workers use separate registered Git worktrees and explicit absolute working directories. Only the coordinator writes the integration checkout. Workers inherit the coordinator model; an independent CLI session requires a verified matching parent model.
+- Workers commit scoped changes and provide test commands, exit codes and log hashes. The coordinator reviews, integrates and runs validation before closing a task as completed. A submitted commit or successful process exit is not sufficient.
+- Deployment and the entire live MCP scenario must run from the coordinator checkout through `tools/coordination/with-game-lock.mjs`. Hold the physical-installation lock through `stop_run` and confirmed cleanup. Worker builds pass `-p:ModName=` and do not launch or deploy games.
+- Interrupt obsolete workers, retain their evidence, and remove only coordinator-owned clean worktrees and branches after verified integration. Preserve pre-existing experiments. Do not create PRs or push without session authorization.
+
 A Mount & Blade II: Bannerlord co-op mod.
 
 ## Architecture & Sync Invariants
