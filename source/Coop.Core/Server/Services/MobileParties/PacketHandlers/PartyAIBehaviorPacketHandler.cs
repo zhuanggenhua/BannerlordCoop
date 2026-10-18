@@ -10,6 +10,8 @@ using GameInterface.Services.MobileParties.Messages.Behavior;
 using LiteNetLib;
 using GameInterface.Services.Players;
 using GameInterface.Services.CampaignAuthority;
+using TaleWorlds.CampaignSystem.Party;
+using static GameInterface.Services.ObjectManager.ObjectManager;
 using System.Collections.Generic;
 
 namespace Coop.Core.Server.Services.MobileParties.PacketHandlers;
@@ -160,7 +162,7 @@ internal class RequestMobilePartyBehaviorPacketHandler : IPacketHandler
         var data = payload.What.BehaviorUpdateData;
         if (data.ForcePosition || string.IsNullOrWhiteSpace(data.OriginControllerId) ||
             !players.TryGetPlayer(data.OriginControllerId, out var player) || player == null ||
-            player.MobilePartyId != data.MobilePartyId)
+            Compact(player.MobilePartyId, typeof(MobileParty)) != Compact(data.MobilePartyId, typeof(MobileParty)))
             return;
 
         RouteToRemoteAuthority(data, lease);

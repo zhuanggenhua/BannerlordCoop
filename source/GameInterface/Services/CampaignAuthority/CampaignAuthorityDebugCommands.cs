@@ -44,6 +44,7 @@ public static class CampaignAuthorityDebugCommands
             mainHero = Hero.MainHero?.StringId,
             mainParty = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty?.StringId,
             gameState = GameStateManager.Current?.ActiveState?.GetType().Name,
+            mapInputEnabled = SandBox.View.Map.MapScreen.Instance?.MapCameraView?.ProcessCameraInput,
             mainNavigation = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty == null ? null : new
             {
                 x = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty.Position.X,

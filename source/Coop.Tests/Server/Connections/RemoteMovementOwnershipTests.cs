@@ -1,4 +1,4 @@
-using Common.Messaging;
+﻿using Common.Messaging;
 using Common.Network;
 using Common.Network.Coalescing;
 using Common.PacketHandlers;
@@ -113,11 +113,13 @@ public class RemoteMovementOwnershipTests
             new NetworkPartyBehaviorUpdateData { MobilePartyId = 17 }), out _));
     }
 
-    [Fact]
-    public void ListenHostRoutesItsLocalPlayerBehaviorRequestToRemoteAuthority()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ListenHostRoutesItsLocalPlayerBehaviorRequestToRemoteAuthority(bool compactId)
     {
         var authorityPeer = ObjectHelper.SkipConstructor<NetPeer>();
-        var player = new Player("host-a", "hero-a", "party-a", "clan-a", "character-a");
+        var player = new Player("host-a", "hero-a", "MobileParty_party-a", "clan-a", "character-a");
         var players = new Mock<IPlayerManager>();
         players.Setup(manager => manager.TryGetPlayer("host-a", out player)).Returns(true);
         players.Setup(manager => manager.TryGetPeer("authority-b", out authorityPeer)).Returns(true);
@@ -130,7 +132,7 @@ public class RemoteMovementOwnershipTests
                 return false;
             });
         var wireMapper = new Mock<IPartyBehaviorWireMapper>();
-        var data = new PartyBehaviorUpdateData("party-a", default, null, default, default, default, default, default)
+        var data = new PartyBehaviorUpdateData(compactId ? "party-a" : "MobileParty_party-a", default, null, default, default, default, default, default)
         { OriginControllerId = "host-a" };
         var networkData = new NetworkPartyBehaviorUpdateData { MobilePartyId = 17 };
         wireMapper.Setup(mapper => mapper.TryToNetwork(data, out networkData)).Returns(true);
