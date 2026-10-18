@@ -50,7 +50,9 @@ public sealed class AuthorityLeaseDistributionHandler : IHandler
     {
         if (!InitializeLocalAuthorityController()) return;
         var lease = sessionIdentity.CurrentLease;
-        network.Send(payload.What.PlayerPeer,
+        // This is connection metadata required to validate the first world delta. A normal
+        // send is discarded by the pre-save Dropping phase, before replay buffering begins.
+        network.SendImmediate(payload.What.PlayerPeer,
             new NetworkAuthorityLeaseSnapshot(lease, sessionIdentity.RoomHostControllerId));
         Logger.Information("Sent campaign authority lease epoch {Epoch} for room {RoomId} to a joining player",
             lease.Epoch, lease.RoomId);
@@ -58,7 +60,7 @@ public sealed class AuthorityLeaseDistributionHandler : IHandler
 
     private bool InitializeLocalAuthorityController()
     {
-        if (ModInformation.IsListenAuthority &&
+        if (ModInformation.IsListenAuthority && !sessionIdentity.IsConfirmed &&
             !sessionIdentity.TrySetAuthorityControllerId(controllerIdProvider.ControllerId))
         {
             Logger.Warning("Could not bind ListenAuthority controller {ControllerId} to authority lease epoch {Epoch}",

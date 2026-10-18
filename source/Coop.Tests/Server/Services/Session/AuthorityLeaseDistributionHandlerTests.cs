@@ -1,20 +1,66 @@
 ﻿using Common;
 using Common.Messaging;
+using Common.Network;
+using Common.PacketHandlers;
+using Common.Serialization;
 using Common.Network.Session;
 using Common.Tests.Utils;
 using Coop.Core.Client.Services.Session;
 using Coop.Core.Server.Connections.Messages;
+using Coop.Core.Server.Connections;
 using Coop.Core.Server.Services.Session;
 using Coop.Tests.Mocks;
 using GameInterface.Services.Entity;
 using GameInterface.Services.GameState.Messages;
 using Xunit;
+using Moq;
+using System;
+using System.Collections.Generic;
 
 namespace Coop.Tests.Server.Services.Session;
 
 [Collection(ModInformationRoleCollection.Name)]
 public class AuthorityLeaseDistributionHandlerTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void InitialLeaseSurvivesTheRealPreSaveDroppingQueueWithoutRebindingTheWriter(bool alreadyMigrated)
+    {
+        var previousMode = ModInformation.SessionMode;
+        ModInformation.SessionMode = SessionMode.ListenAuthority;
+        try
+        {
+            var broker = new TestMessageBroker();
+            var network = new Mock<INetwork>();
+            var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
+            using var queue = new ConnectionMessageQueue(new Lazy<INetwork>(() => network.Object), broker, serializer);
+            var delivered = new List<IMessage>();
+            var peer = new TestNetwork().CreatePeer();
+            network.Setup(value => value.Send(peer, It.IsAny<IMessage>())).Callback<LiteNetLib.NetPeer, IMessage>((p, message) =>
+            {
+                if (!queue.TryHandleBroadcast(p, MessagePacket.Create(message, serializer))) delivered.Add(message);
+            });
+            network.Setup(value => value.SendImmediate(peer, It.IsAny<IMessage>()))
+                .Callback<LiteNetLib.NetPeer, IMessage>((_, message) => delivered.Add(message));
+            var identity = new SessionIdentity();
+            var expectedLease = new AuthorityLease("room", "authority-b", "controller-b", 7);
+            if (alreadyMigrated) Assert.True(identity.TryApply(expectedLease, "controller-a"));
+            var controller = new ControllerIdProvider();
+            controller.SetControllerId("controller-a");
+            using var handler = new AuthorityLeaseDistributionHandler(broker, network.Object, identity, controller);
+
+            broker.Publish(this, new PlayerConnected(peer));
+
+            var snapshot = Assert.IsType<NetworkAuthorityLeaseSnapshot>(Assert.Single(delivered));
+            Assert.Equal(identity.CurrentLease, snapshot.ToLease());
+            Assert.Equal(alreadyMigrated ? "controller-b" : "controller-a", snapshot.AuthorityControllerId);
+            if (alreadyMigrated) Assert.Equal(expectedLease, identity.CurrentLease);
+            network.Verify(value => value.Send(peer, It.IsAny<IMessage>()), Times.Never);
+        }
+        finally { ModInformation.SessionMode = previousMode; }
+    }
+
     [Fact]
     public void ListenAuthority_SendsItsLocalControllerInTheLeaseSnapshot()
     {
