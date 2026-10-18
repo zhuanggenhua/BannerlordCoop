@@ -5,6 +5,7 @@ using Coop.Core.Client.Services.Time.Handlers;
 using Coop.Core.Common.Network.Packets;
 using GameInterface.Services.Time.Interfaces;
 using Moq;
+using System;
 using Xunit;
 
 namespace Coop.Tests.Client.Services.Time;
@@ -34,13 +35,24 @@ public class CampaignTimePacketHandlerTests
         var broker = new TestMessageBroker();
         var packetManager = new Mock<IPacketManager>();
         var mapTimeTracker = new Mock<IMapTimeTrackerInterface>();
+        var identity = CreateConfirmedIdentity();
+        Func<bool> sampleStillCurrent = null;
+        mapTimeTracker
+            .Setup(m => m.SyncCampaignTime(It.IsAny<long>(), It.IsAny<float>(), It.IsAny<Func<bool>>()))
+            .Callback<long, float, Func<bool>>((_, _, isStillCurrent) => sampleStillCurrent = isStillCurrent);
         var handler = new CampaignTimePacketHandler(
-            broker, packetManager.Object, mapTimeTracker.Object, CreateConfirmedIdentity());
+            broker, packetManager.Object, mapTimeTracker.Object, identity);
         var packet = new CampaignTimePacket(123456L, -1, CurrentLease);
 
         handler.HandlePacket(null, packet);
 
-        mapTimeTracker.Verify(m => m.SyncCampaignTime(packet.ServerTicks, 0f), Times.Once);
+        mapTimeTracker.Verify(
+            m => m.SyncCampaignTime(packet.ServerTicks, 0f, It.IsAny<Func<bool>>()),
+            Times.Once);
+        Assert.NotNull(sampleStillCurrent);
+        Assert.True(sampleStillCurrent());
+        Assert.True(identity.TryApply(new AuthorityLease("room-a", "authority-paused", string.Empty, 3, isPaused: true)));
+        Assert.False(sampleStillCurrent());
         var sample = Assert.Single(broker.GetMessagesFromType<CampaignTimeSampleReceived>());
         Assert.Equal(-1, sample.JoinPacketsRemaining);
     }
@@ -81,7 +93,9 @@ public class CampaignTimePacketHandlerTests
 
         handler.HandlePacket(null, new CampaignTimePacket(123456L, -1, previousLease));
 
-        mapTimeTracker.Verify(m => m.SyncCampaignTime(It.IsAny<long>(), It.IsAny<float>()), Times.Never);
+        mapTimeTracker.Verify(
+            m => m.SyncCampaignTime(It.IsAny<long>(), It.IsAny<float>(), It.IsAny<Func<bool>>()),
+            Times.Never);
         Assert.Empty(broker.GetMessagesFromType<CampaignTimeSampleReceived>());
     }
 
@@ -99,7 +113,9 @@ public class CampaignTimePacketHandlerTests
 
         handler.HandlePacket(null, new CampaignTimePacket(123456L, -1, pausedLease));
 
-        mapTimeTracker.Verify(m => m.SyncCampaignTime(It.IsAny<long>(), It.IsAny<float>()), Times.Never);
+        mapTimeTracker.Verify(
+            m => m.SyncCampaignTime(It.IsAny<long>(), It.IsAny<float>(), It.IsAny<Func<bool>>()),
+            Times.Never);
         Assert.Empty(broker.GetMessagesFromType<CampaignTimeSampleReceived>());
     }
 

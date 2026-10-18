@@ -14,6 +14,7 @@ using LiteNetLib;
 using Moq;
 using System.Collections.Generic;
 using System.Linq;
+using System;
 using Xunit;
 
 namespace Coop.Tests.Server.Services.Time;
@@ -50,24 +51,35 @@ public sealed class CampaignAuthorityTimePacketRelayHandlerTests
 
         var packetManager = new Mock<IPacketManager>();
         var mapTime = new Mock<IMapTimeTrackerInterface>();
+        Func<bool> sampleStillCurrent = null;
+        mapTime
+            .Setup(value => value.ApplyAuthorityTimeSample(123456L, It.IsAny<Func<bool>>()))
+            .Callback<long, Func<bool>>((_, isStillCurrent) => sampleStillCurrent = isStillCurrent);
         var network = new Mock<INetwork>();
         CampaignTimePacket relayed = default;
         network.Setup(value => value.Send(observerPeer, It.IsAny<IPacket>()))
             .Callback<NetPeer, IPacket>((_, packet) => relayed = (CampaignTimePacket)packet);
 
+        var authorityContext = new CampaignAuthorityContext(identity, new ControllerIdProvider());
         using var handler = new CampaignAuthorityTimePacketRelayHandler(
             packetManager.Object,
             connections.Object,
             catchupQueue.Object,
             players.Object,
             network.Object,
-            new CampaignAuthorityContext(identity, new ControllerIdProvider()),
+            authorityContext,
             mapTime.Object);
 
         var sample = new CampaignTimePacket(123456L, -1, lease);
         handler.HandlePacket(authorityPeer, sample);
 
-        mapTime.Verify(value => value.ApplyAuthorityTimeSample(123456L), Times.Once);
+        mapTime.Verify(
+            value => value.ApplyAuthorityTimeSample(123456L, It.IsAny<Func<bool>>()),
+            Times.Once);
+        Assert.NotNull(sampleStillCurrent);
+        Assert.True(sampleStillCurrent());
+        Assert.True(identity.TryApply(new AuthorityLease("room-a", "authority-paused", string.Empty, 5, isPaused: true)));
+        Assert.False(sampleStillCurrent());
         Assert.True(relayed.Matches(lease));
         Assert.Equal(123456L, relayed.ServerTicks);
         Assert.Equal(17, relayed.JoinPacketsRemaining);
@@ -102,7 +114,9 @@ public sealed class CampaignAuthorityTimePacketRelayHandlerTests
             123456L, -1, new AuthorityLease("room-a", "authority-old", "controller-b", 3)));
         handler.HandlePacket(peer, new CampaignTimePacket(123456L, -1, currentLease));
 
-        mapTime.Verify(value => value.ApplyAuthorityTimeSample(It.IsAny<long>()), Times.Never);
+        mapTime.Verify(
+            value => value.ApplyAuthorityTimeSample(It.IsAny<long>(), It.IsAny<Func<bool>>()),
+            Times.Never);
         network.Verify(value => value.Send(It.IsAny<NetPeer>(), It.IsAny<IPacket>()), Times.Never);
     }
 }

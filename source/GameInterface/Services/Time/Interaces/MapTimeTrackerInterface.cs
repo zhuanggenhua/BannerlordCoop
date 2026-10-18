@@ -26,8 +26,14 @@ public interface IMapTimeTrackerInterface : IGameAbstraction
     /// <param name="oneWayLatencySeconds">The estimated time the sample spent travelling from server to client.</param>
     void SyncCampaignTime(long serverTicks, float oneWayLatencySeconds);
 
+    /// <summary>Queues a correction that is discarded if its authority lease is no longer current when applied.</summary>
+    void SyncCampaignTime(long serverTicks, float oneWayLatencySeconds, Func<bool> isStillCurrent);
+
     /// <summary>Applies an exact authority sample to the local campaign clock on the game thread.</summary>
     void ApplyAuthorityTimeSample(long authorityTicks);
+
+    /// <summary>Queues an exact clock sample that is discarded if its authority lease is no longer current.</summary>
+    void ApplyAuthorityTimeSample(long authorityTicks, Func<bool> isStillCurrent);
 
     /// <summary>
     /// Applies the pending server-time correction to the current client simulation frame.
@@ -79,12 +85,18 @@ internal class MapTimeTrackerInterface : IMapTimeTrackerInterface
         public long Ticks { get; }
         public float OneWayLatencySeconds { get; }
         public bool ApplyExactly { get; }
+        public Func<bool> IsStillCurrent { get; }
 
-        public ServerTimeSample(long ticks, float oneWayLatencySeconds, bool applyExactly = false)
+        public ServerTimeSample(
+            long ticks,
+            float oneWayLatencySeconds,
+            bool applyExactly = false,
+            Func<bool> isStillCurrent = null)
         {
             Ticks = ticks;
             OneWayLatencySeconds = oneWayLatencySeconds;
             ApplyExactly = applyExactly;
+            IsStillCurrent = isStillCurrent;
         }
     }
 
@@ -143,16 +155,28 @@ internal class MapTimeTrackerInterface : IMapTimeTrackerInterface
 
     public void SyncCampaignTime(long serverTicks, float oneWayLatencySeconds)
     {
+        SyncCampaignTime(serverTicks, oneWayLatencySeconds, isStillCurrent: null);
+    }
+
+    public void SyncCampaignTime(long serverTicks, float oneWayLatencySeconds, Func<bool> isStillCurrent)
+    {
         if (Volatile.Read(ref waitingForJoinBaseline)) return;
 
         // The game thread only needs the newest sample; queued historical samples add artificial latency.
-        Volatile.Write(ref latestServerTimeSample, new ServerTimeSample(serverTicks, oneWayLatencySeconds));
+        Volatile.Write(ref latestServerTimeSample,
+            new ServerTimeSample(serverTicks, oneWayLatencySeconds, isStillCurrent: isStillCurrent));
         QueueLatestServerTime();
     }
 
     public void ApplyAuthorityTimeSample(long authorityTicks)
     {
-        Volatile.Write(ref latestServerTimeSample, new ServerTimeSample(authorityTicks, 0f, applyExactly: true));
+        ApplyAuthorityTimeSample(authorityTicks, isStillCurrent: null);
+    }
+
+    public void ApplyAuthorityTimeSample(long authorityTicks, Func<bool> isStillCurrent)
+    {
+        Volatile.Write(ref latestServerTimeSample,
+            new ServerTimeSample(authorityTicks, 0f, applyExactly: true, isStillCurrent: isStillCurrent));
         QueueLatestServerTime();
     }
 
@@ -184,18 +208,23 @@ internal class MapTimeTrackerInterface : IMapTimeTrackerInterface
                 long maxServerProgressTicks = CampaignTime.Hours(6f).NumTicks;
                 if (maxServerProgressTicks <= 0L) return;
 
-                if (appliedSample.ApplyExactly)
+                bool sampleApplied = TryApplyIfCurrent(appliedSample.IsStillCurrent, () =>
                 {
-                    tracker._numTicks = appliedSample.Ticks;
-                    tracker._deltaTimeInTicks = 0L;
-                    campaign._dt = 0f;
-                    continue;
-                }
-
-                BeginCorrection(
-                    appliedSample.Ticks,
-                    maxServerProgressTicks,
-                    appliedSample.OneWayLatencySeconds);
+                    if (appliedSample.ApplyExactly)
+                    {
+                        tracker._numTicks = appliedSample.Ticks;
+                        tracker._deltaTimeInTicks = 0L;
+                        campaign._dt = 0f;
+                    }
+                    else
+                    {
+                        BeginCorrection(
+                            appliedSample.Ticks,
+                            maxServerProgressTicks,
+                            appliedSample.OneWayLatencySeconds);
+                    }
+                });
+                if (!sampleApplied) return;
             }
             while (ReferenceEquals(appliedSample, Volatile.Read(ref latestServerTimeSample)) == false);
         }
@@ -208,6 +237,13 @@ internal class MapTimeTrackerInterface : IMapTimeTrackerInterface
                 QueueLatestServerTime();
             }
         }
+    }
+
+    internal static bool TryApplyIfCurrent(Func<bool> isStillCurrent, Action apply)
+    {
+        if (isStillCurrent != null && !isStillCurrent()) return false;
+        apply();
+        return true;
     }
 
     public void ApplyClientSimulationTime(Campaign campaign, float realDt)

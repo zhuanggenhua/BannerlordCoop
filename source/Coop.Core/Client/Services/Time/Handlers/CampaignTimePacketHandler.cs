@@ -51,7 +51,11 @@ public class CampaignTimePacketHandler : IPacketHandler
         if (!sessionIdentity.TryGetConfirmedLease(out var lease) || !timePacket.Matches(lease)) return;
 
         UpdateOneWayLatencyEstimate(peer);
-        mapTimeTrackerInterface.SyncCampaignTime(timePacket.ServerTicks, oneWayLatencySeconds);
+        mapTimeTrackerInterface.SyncCampaignTime(
+            timePacket.ServerTicks,
+            oneWayLatencySeconds,
+            () => sessionIdentity.TryGetConfirmedLease(out var currentLease) &&
+                currentLease == lease && timePacket.Matches(currentLease));
         messageBroker.Publish(
             this,
             new CampaignTimeSampleReceived(timePacket.JoinPacketsRemaining));

@@ -53,7 +53,10 @@ public sealed class CampaignAuthorityTimePacketRelayHandler : IPacketHandler
             !players.TryGetPeer(player.ControllerId, out var currentPeer) || currentPeer != peer)
             return;
 
-        mapTimeTracker.ApplyAuthorityTimeSample(sample.ServerTicks);
+        mapTimeTracker.ApplyAuthorityTimeSample(
+            sample.ServerTicks,
+            () => authorityContext.TryGetCurrentLease(out var currentLease) &&
+                currentLease == lease && sample.Matches(currentLease));
 
         foreach (var connection in connections)
         {

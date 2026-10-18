@@ -1,10 +1,26 @@
 ﻿using GameInterface.Services.Time.Interfaces;
+using System;
 using Xunit;
 
 namespace GameInterface.Tests.Services.Time;
 
 public class MapTimeTrackerInterfaceTests
 {
+    [Fact]
+    public void TryApplyIfCurrent_DiscardsQueuedWorkAfterLeaseChanges()
+    {
+        bool leaseIsCurrent = true;
+        bool applied = false;
+
+        Assert.True(MapTimeTrackerInterface.TryApplyIfCurrent(() => leaseIsCurrent, () => applied = true));
+        Assert.True(applied);
+
+        leaseIsCurrent = false;
+        applied = false;
+        Assert.False(MapTimeTrackerInterface.TryApplyIfCurrent(() => leaseIsCurrent, () => applied = true));
+        Assert.False(applied);
+    }
+
     [Fact]
     public void BeginCorrection_FirstHeartbeatRequestsHardSync()
     {
