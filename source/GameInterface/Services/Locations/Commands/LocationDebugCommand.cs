@@ -34,7 +34,7 @@ public class LocationDebugCommand
 
         public string Description => "Enters the relevant state for co-op debugging.";
 
-        public CoopCommandSide Side => CoopCommandSide.Client;
+        public CoopCommandSide Side => CoopCommandSide.Both;
 
         public IExpectedArgs[] ExpectedArgs { get; } = new IExpectedArgs[]
         {
@@ -43,8 +43,8 @@ public class LocationDebugCommand
 
         public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
         {
-            if (ModInformation.IsServer)
-                return Failed("Run this command on a client.");
+            if (!ModInformation.IsClient && !ModInformation.IsListenAuthority)
+                return Failed("A local player is required.");
 
 
             if (TryResolveLocation(args[0], out var location, out var error) == false)
@@ -92,14 +92,14 @@ public class LocationDebugCommand
 
         public string Description => "Leaves the relevant state for co-op debugging.";
 
-        public CoopCommandSide Side => CoopCommandSide.Client;
+        public CoopCommandSide Side => CoopCommandSide.Both;
 
         public IExpectedArgs[] ExpectedArgs { get; } = System.Array.Empty<IExpectedArgs>();
 
         public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
         {
-            if (ModInformation.IsServer)
-                return Failed("Run this command on a client.");
+            if (!ModInformation.IsClient && !ModInformation.IsListenAuthority)
+                return Failed("A local player is required.");
 
 
             if (Mission.Current == null)
