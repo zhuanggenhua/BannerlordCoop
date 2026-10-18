@@ -17,7 +17,8 @@ A -> B -> A, native NPC daily training, critical world hashes and unique Tick.
 Writes JSONL, per-feature summary JSON and BMP screenshot references. Always
 requests stop_run and requires both owned process trees to be gone.
 No deployment, private IPC, XP setters, or retry of uncertain mutations.
---help and --self-test do not import the SDK, connect, deploy or launch games.
+--help and --self-test [recorded.jsonl] do not import the SDK, connect, deploy or
+launch games. The optional file replays recorded public MCP response wrappers.
 Self-test verifies offline parsing/assertion fixtures only, not live acceptance.`;
 
 const INSTANCES = ['server', 'client1'];
@@ -111,6 +112,28 @@ function criticalErrors(text) {
         duplicateIds: (text.match(/Duplicate id:|Generated duplicate id |Duplicate object handle:/gi) ?? []).length,
         aiBatch: (text.match(/(?:AI batch.*fail|Failed.*AI batch)/gi) ?? []).length,
     };
+}
+function assertClientLaunched(response) {
+    assert.equal(response.outcome, 'launched', JSON.stringify(response));
+    assert.equal(response.instance, 'client1');
+    assert.ok(response.run, 'start_client is missing its RunView');
+    assert.equal(response.run.error, null, JSON.stringify(response.run));
+}
+function logChunk(response) {
+    const chunk = response.result ?? response;
+    assert.equal(typeof chunk.text, 'string', 'Missing log chunk text');
+    assert.equal(typeof chunk.cursor, 'string', 'Missing log continuation cursor');
+    assert.equal(typeof chunk.reset, 'boolean'); assert.equal(typeof chunk.hasMore, 'boolean');
+    assert.ok(Number.isFinite(chunk.length) && chunk.length >= 0);
+    return chunk;
+}
+function assertStopped(response, expectedCount) {
+    assert.equal(response.state, 'stopped');
+    assert.ok(response.instances?.length > 0, 'Missing owned game instance cleanup receipt');
+    if (expectedCount !== undefined)
+        assert.equal(response.instances.length, expectedCount, 'Missing game instance cleanup receipt');
+    assert.ok(response.instances.every(value => value.cleanupComplete === true &&
+        value.processAlive === false && value.processTreeAlive === false));
 }
 function assertActors(states, initial) {
     for (let i = 0; i < states.length; i++) {
@@ -282,8 +305,7 @@ async function run(config) {
             const log = logState[instance];
             for (let page = 0; page < 1024; page++) {
                 const response = await call('read_logs', { run_id: runId, instance, cursor: log.cursor, max_bytes: 65536 });
-                const chunk = response.result ?? response;
-                assert.equal(typeof chunk.text, 'string', 'Missing log chunk text');
+                const chunk = logChunk(response);
                 if (chunk.reset) {
                     assert.ok(archived, 'Live log replaced or truncated; whole-run evidence is incomplete');
                     log.text = '';
@@ -428,7 +450,7 @@ async function run(config) {
         await waitState('server', 'readyForCampaignTests');
         await delay(1000); // A is loaded before a second game process is launched.
         const launched = await call('start_client', { run_id: runId, client_index: 1 }, true);
-        assert.equal(launched.error, null, JSON.stringify(launched));
+        assertClientLaunched(launched);
         await waitState('client1', 'readyToJoin', 180);
         const joined = await call('join_client', { run_id: runId, instance: 'client1' }, true);
         assert.equal(joined.ok, true); await waitState('client1', 'readyForCampaignTests');
@@ -541,11 +563,7 @@ async function run(config) {
         if (runId) {
             try {
                 const stopped = await call('stop_run', { run_id: runId }, true); summary.stopped = stopped;
-                assert.equal(stopped.state, 'stopped');
-                assert.ok(stopped.instances.length > 0, 'Missing owned game instance cleanup receipt');
-                if (initial) assert.equal(stopped.instances.length, 2, 'Missing second game cleanup receipt');
-                assert.ok(stopped.instances.every(value => value.cleanupComplete &&
-                    value.processAlive === false && value.processTreeAlive === false));
+                assertStopped(stopped, initial ? 2 : undefined);
                 summary.cleanupConfirmed = true;
             } catch (error) {
                 summary.cleanupError = { message: error.message, stack: error.stack }; process.exitCode = 1;
@@ -567,7 +585,7 @@ async function run(config) {
     }
 }
 
-function selfTest() {
+async function selfTest(recordedPath) {
     assert.deepEqual(jsonOutput('ready\nLIVE_TEST_JSON={"active":true}'), { active: true });
     assert.equal(field({ Cost: 12 }, 'cost'), 12);
     const parsed = memberStacks('## Lord\nMember roster:\nunit: number=4 wounded=1 xp=7 hero=False\nhero: number=1 wounded=0 xp=0 hero=True\nPrisoner roster:\nprisoner: number=3 wounded=0 xp=2 hero=False\n');
@@ -594,13 +612,37 @@ function selfTest() {
     assert.deepEqual(criticalErrors('Failed to run "Campaign.RealTick"\nDuplicate id: x\nFailed to tick mobile-party AI batch'),
         { realTick: 1, duplicateIds: 1, aiBatch: 1 });
     assert.throws(() => options(['--repo', 'r', '--unknown', 'x']));
+    // Recorded API shape: StartClientResult wraps RunView, LogChunk and stopped RunView are flat.
+    const launched = { outcome: 'launched', instance: 'client1', run: { error: null } };
+    assertClientLaunched(launched);
+    assertClientLaunched({ ...launched, error: null }); // Some server serializers retain this optional outer field.
+    assert.throws(() => assertClientLaunched({ ...launched, outcome: 'not-launched' }));
+    assert.throws(() => assertClientLaunched({ ...launched, run: { error: 'launch failed' } }));
+    const stopped = { state: 'stopped', instances: INSTANCES.map(name => ({ name,
+        processAlive: false, processTreeAlive: false, cleanupComplete: true })) };
+    assertStopped(stopped, 2);
+    assert.throws(() => assertStopped({ ...stopped, instances: [{ processAlive: true }] }));
+    assert.equal(logChunk({ text: 'log', cursor: 'opaque', reset: false, hasMore: false, length: 3 }).text, 'log');
+    assert.throws(() => logChunk({ text: 'log', hasMore: false }));
+    if (recordedPath) {
+        const replayed = { start_client: 0, stop_run: 0, read_logs: 0 };
+        for (const line of (await readFile(resolve(recordedPath), 'utf8')).split(/\r?\n/).filter(Boolean)) {
+            const entry = JSON.parse(line);
+            if (!entry.data) continue;
+            if (entry.name === 'start_client') { assertClientLaunched(entry.data); replayed.start_client++; }
+            if (entry.name === 'stop_run') { assertStopped(entry.data); replayed.stop_run++; }
+            if (entry.name === 'read_logs') { logChunk(entry.data); replayed.read_logs++; }
+        }
+        assert.ok(replayed.start_client > 0 && replayed.stop_run > 0, 'Recorded response wrappers are incomplete');
+        console.log(JSON.stringify({ offlineRecordedWrapperReplay: replayed, record: resolve(recordedPath) }));
+    }
     console.log('PASS offline parser/assertion self-test; no SDK, transport, game, or live scenario executed.');
 }
 
 try {
     const argv = process.argv.slice(2);
     if (argv.length === 1 && argv[0] === '--help') console.log(HELP);
-    else if (argv.length === 1 && argv[0] === '--self-test') selfTest();
+    else if (argv[0] === '--self-test' && argv.length <= 2) await selfTest(argv[1]);
     else await run(options(argv));
 } catch (error) {
     console.error(error.stack); process.exitCode = 1;
