@@ -3,6 +3,7 @@ using Common.Logging;
 using Common.Messaging;
 using Common.Util;
 using GameInterface.Policies;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Settlements.Messages;
 using HarmonyLib;
 using Serilog;
@@ -26,7 +27,10 @@ public class MobilePartyCachePatch
     {
         if (CallOriginalPolicy.IsOriginalAllowed()) return true;
 
-        if (ModInformation.IsClient)
+        bool authorityKnown = ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authority) && authority.IsAuthorityKnown;
+        if (authorityKnown && !CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
+
+        if (!authorityKnown && ModInformation.IsClient)
         {
             Logger.Error("Client created managed {name}", typeof(Settlement));
             return true;
@@ -54,7 +58,7 @@ public class MobilePartyCachePatch
     {
         if (CallOriginalPolicy.IsOriginalAllowed()) return true;
 
-        if (ModInformation.IsClient) return false;
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
 
         var partiesCache = __instance._partiesCache;
 
