@@ -430,11 +430,11 @@
     "difference": []
   },
   "rosterMovementE2E": {
-    "baselineCommit": "84ddab7b6c022383bbe3e39a6a4614c89b7116f9",
+    "baselineCommit": "c6d6fe47f59f1d9e76128216faf6d6b36949ad12",
     "filter": "FullyQualifiedName~Services.TroopRosters|FullyQualifiedName~MobilePartyMovementTests",
     "baseline": {
-      "log": "bannerlord-map13-roster-e2e-baseline84dd.log",
-      "sha256": "7F70376CC927DE4C95ECB07108AD64C4C389C003D376116DB0D020502E7DF1EE",
+      "log": "bannerlord-authority-e2e-origin-c6.log",
+      "sha256": "CDD522E1B2A5DA43B33B1D57873D56870F67171D3C8D5F25F28B5810D7A239B3",
       "passed": 60,
       "failed": 10,
       "total": 70,
@@ -470,7 +470,30 @@
         "E2E.Tests.Services.TroopRosters.TroopRosterZeroCountXpDeltaTests.UnownedRoster_EmptyingStackWithSurplusXp_IsRejected"
       ]
     },
-    "difference": []
+    "difference": [],
+    "intermediateBaseline": {
+      "commit": "84ddab7b6c022383bbe3e39a6a4614c89b7116f9",
+      "result": {
+        "log": "bannerlord-map13-roster-e2e-baseline84dd.log",
+        "sha256": "7F70376CC927DE4C95ECB07108AD64C4C389C003D376116DB0D020502E7DF1EE",
+        "passed": 60,
+        "failed": 10,
+        "total": 70,
+        "failureNames": [
+          "E2E.Tests.Services.TroopRosters.JoinRosterReplayTests.RetainedReplay_MatchesOriginalAtEveryConsumerAndAfterClearRepopulate",
+          "E2E.Tests.Services.TroopRosters.TroopRosterDeltaHandlerTests.Server_HeroServingInRoster_SyncsToClients",
+          "E2E.Tests.Services.TroopRosters.TroopRosterDeltaHandlerTests.Server_RemoveZeroCountHero_RecalculatesTotalsOnAllInstances",
+          "E2E.Tests.Services.TroopRosters.TroopRosterHeroDeltaTransferTests.AlreadyRemovedHero_NegativeDelta_IsRejectedWithoutChangingRoster",
+          "E2E.Tests.Services.TroopRosters.TroopRosterHeroDeltaTransferTests.AlreadyRemovedHero_RemovalIsPreservedInPackedDelta",
+          "E2E.Tests.Services.TroopRosters.TroopRosterHeroDeltaTransferTests.AlreadyRemovedHero_StaleTransfer_IsRejectedAtomically",
+          "E2E.Tests.Services.TroopRosters.TroopRosterHeroDeltaTransferTests.CompanionTransfer_MainToOtherParty_ViaDelta_SyncsRostersAndPartyBelongedTo",
+          "E2E.Tests.Services.TroopRosters.TroopRosterHeroDeltaTransferTests.PrisonerTransfer_MainToOtherParty_ViaDelta_SyncsRostersAndPartyBelongedToAsPrisoner",
+          "E2E.Tests.Services.TroopRosters.TroopRosterSyncTests.Server_TroopRoster_Properties",
+          "E2E.Tests.Services.TroopRosters.TroopRosterZeroCountXpDeltaTests.UnownedRoster_EmptyingStackWithSurplusXp_IsRejected"
+        ]
+      },
+      "difference": []
+    }
   },
   "liveRuns": [
     {

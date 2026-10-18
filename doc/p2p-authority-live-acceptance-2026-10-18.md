@@ -43,9 +43,9 @@ Mission Run02 中，两人实际进入原生酒馆 Mission 后确认暂停 epoch
 | 主 Mod Debug，禁止自动部署 | 0 错误，60 警告 | 构建成功，警告仍保留 |
 | GameInterface 全量 | 2734 通过，0 失败 | 包含本轮调度、异步清空、路由、编号、经验和 Mission 入口测试 |
 | Coop 全量 | 1360 通过，195 失败 | 与独立 `8d05c0d1d` 基线的 195 个失败名称逐项一致；基线 1333 通过 |
-| TroopRoster / MobilePartyMovement E2E 子集 | 60 通过，10 失败，共 70 | 与独立构建 `84ddab7b6` 基线的 10 个失败名称逐项一致，不是整个 E2E 测试集 |
+| TroopRoster / MobilePartyMovement E2E 子集 | 60 通过，10 失败，共 70 | 与独立构建的本轮原始起点 `c6d6fe47f` 的 10 个失败名称逐项一致，也与中间基线 `84ddab7b6` 一致；不是整个 E2E 测试集 |
 
-过程中另一次 Coop 全量曾出现 `SteamTunnelHostTests.Stop_RemovesEveryRelayEndpointIdentity`，当时为 196 失败；单独重跑和后续全量均通过该例。该间歇结果保留在决策记录，最终基线对比没有隐藏它。新增 scheduler wire-format 两例、交接/冻结/availability 协议 31 例及分阶段补充测试已在相应功能提交前运行。最终全量结果不代表所有测试项目都已执行。
+过程中另一次 Coop 全量曾出现 `SteamTunnelHostTests.Stop_RemovesEveryRelayEndpointIdentity`，当时为 196 失败；单独重跑和后续全量均通过该例。该间歇结果保留在决策记录，最终基线对比没有隐藏它。新增 scheduler wire-format 两例、交接/冻结/availability 协议 31 例及分阶段补充测试已在相应功能提交前运行。收尾审计补充了独立原始起点 E2E 构建，避免把中间基线可能已经引入的失败误归为旧问题。最终全量结果不代表所有测试项目都已执行。
 
 可从仓库根目录运行以下命令。主 Mod 使用空 `ModName` 禁止构建钩子自动部署，其他两条同样显式携带该参数。
 
