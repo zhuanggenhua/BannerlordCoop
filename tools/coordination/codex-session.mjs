@@ -1,7 +1,7 @@
 import { isAbsolute, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawn } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, statSync, writeFileSync, writeSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync, writeSync } from 'node:fs';
 import { StringDecoder } from 'node:string_decoder';
 
 const handoffSchemaPath = fileURLToPath(new URL('./handoff.schema.json', import.meta.url));
@@ -21,15 +21,35 @@ function validateOptions(options) {
     if (options.resumeSessionId !== undefined && !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(options.resumeSessionId)) {
         throw new TypeError('resumeSessionId must be an exact session UUID; --last is prohibited.');
     }
+    if (options.writeTask !== undefined && typeof options.writeTask !== 'boolean') {
+        throw new TypeError('writeTask must be an explicit boolean.');
+    }
+    if (options.writeTask) {
+        if (typeof options.gitCommonDir !== 'string' || !isAbsolute(options.gitCommonDir)) {
+            throw new TypeError('A writeTask requires an explicit absolute gitCommonDir from the coordinator.');
+        }
+        const actual = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+            cwd: options.cwd, encoding: 'utf8', windowsHide: true, shell: false, timeout: 10_000,
+        }).trim();
+        const canonical = path => process.platform === 'win32' ? realpathSync(path).toLowerCase() : realpathSync(path);
+        if (canonical(actual) !== canonical(options.gitCommonDir)) {
+            throw new TypeError('gitCommonDir must match the assigned cwd Git common directory.');
+        }
+    } else if (options.gitCommonDir !== undefined) {
+        throw new TypeError('gitCommonDir is only permitted for an explicit writeTask.');
+    }
 }
 
 export function buildExecArgs(options) {
     validateOptions(options);
     const args = [
-        'exec', '--json', '--cd', options.cwd, '--model', options.model,
+        '--ask-for-approval', 'never', 'exec', '--json',
+        '--sandbox', options.writeTask ? 'workspace-write' : 'read-only',
+        '--cd', options.cwd, '--model', options.model,
         '--output-last-message', join(options.outputDir, 'final.json'),
         '--output-schema', handoffSchemaPath,
     ];
+    if (options.writeTask) args.push('--add-dir', options.gitCommonDir);
     if (options.resumeSessionId) args.push('resume', options.resumeSessionId);
     return [...args, '-'];
 }
@@ -154,6 +174,8 @@ export async function runCodexSession(options) {
     const receipt = {
         schemaVersion: 1, state: 'starting', cwd: options.cwd, model: options.model,
         verifiedParentModel: options.verifiedParentModel, resumeSessionId: options.resumeSessionId ?? null,
+        writeTask: options.writeTask ?? false, sandbox: options.writeTask ? 'workspace-write' : 'read-only',
+        gitCommonDir: options.gitCommonDir ?? null, approvalPolicy: 'never',
         executable, args: [...executableArgs, ...args], pid: null, threadId: null,
         startedAt: new Date().toISOString(), finishedAt: null, exitCode: null, signal: null,
         paths, errors: [], handoff: null, requiresCoordinatorReview: true,

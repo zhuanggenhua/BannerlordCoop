@@ -13,7 +13,9 @@ const baseOptions = { cwd: resolve('.'), outputDir: resolve('session-output'), m
 
 test('builds separate cwd, verified model, JSONL and schema arguments without a shell prompt', () => {
     const args = buildExecArgs(baseOptions);
-    assert.equal(args[0], 'exec');
+    assert.deepEqual(args.slice(0, 3), ['--ask-for-approval', 'never', 'exec']);
+    assert.equal(args[args.indexOf('--sandbox') + 1], 'read-only');
+    assert.ok(!args.includes('--add-dir'));
     assert.equal(args[args.indexOf('--cd') + 1], baseOptions.cwd);
     assert.equal(args[args.indexOf('--model') + 1], baseOptions.verifiedParentModel);
     assert.ok(args.includes('--json'));
@@ -112,6 +114,36 @@ function fixtureOptions(mode, overrides = {}) {
 }
 
 function loadJson(path) { return JSON.parse(readFileSync(path, 'utf8')); }
+
+test('write tasks explicitly grant the matching Git common directory and never its source parent', () => {
+    const args = buildExecArgs({ ...baseOptions, cwd: repository, writeTask: true, gitCommonDir: commonDirectory });
+    assert.equal(args[args.indexOf('--sandbox') + 1], 'workspace-write');
+    assert.equal(args[args.indexOf('--add-dir') + 1], commonDirectory);
+    assert.equal(args.filter(arg => arg === '--add-dir').length, 1);
+    assert.ok(!args.includes(dirname(commonDirectory)));
+    assert.ok(!args.includes('--dangerously-bypass-approvals-and-sandbox'));
+});
+
+test('rejects missing or unrelated write grants before a worker can spawn', async () => {
+    for (const invalid of [
+        { writeTask: true }, { writeTask: true, gitCommonDir: 'relative' },
+        { writeTask: true, gitCommonDir: dirname(commonDirectory) },
+        { gitCommonDir: commonDirectory }, { writeTask: 'true' },
+    ]) {
+        const options = fixtureOptions('completed', invalid);
+        await assert.rejects(runCodexSession(options), /gitCommonDir|writeTask/);
+        assert.equal(existsSync(options.outputDir), false);
+    }
+});
+
+test('persists the requested write sandbox and noninteractive approval policy in a fake transport receipt', async () => {
+    const result = await runCodexSession(fixtureOptions('completed', { writeTask: true, gitCommonDir: commonDirectory }));
+    assert.equal(result.state, 'completed');
+    assert.equal(result.writeTask, true);
+    assert.equal(result.sandbox, 'workspace-write');
+    assert.equal(result.gitCommonDir, commonDirectory);
+    assert.equal(result.approvalPolicy, 'never');
+});
 
 test('spawns a CLI in the assigned cwd, sends stdin, and persists a reviewable completed receipt', async () => {
     const options = fixtureOptions('completed');
