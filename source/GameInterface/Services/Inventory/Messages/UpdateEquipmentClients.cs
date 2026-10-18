@@ -1,4 +1,5 @@
 ﻿using Common.Messaging;
+using GameInterface.Services.Inventory.Data;
 using ProtoBuf;
 using System.Collections.Generic;
 

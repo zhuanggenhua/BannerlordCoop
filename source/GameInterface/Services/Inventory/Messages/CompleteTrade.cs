@@ -3,7 +3,6 @@ using GameInterface.Services.Inventory.Data;
 using ProtoBuf;
 using System.Collections.Generic;
 using System.Threading;
-using TaleWorlds.Core;
 
 namespace GameInterface.Services.Inventory.Messages;
 
@@ -20,9 +19,9 @@ internal readonly struct CompleteTrade : ICommand
     [ProtoMember(3)]
     public readonly string ToItemRosterId;
     [ProtoMember(4)]
-    public readonly ItemRosterElement[] FromItemRosterData;
+    public readonly ItemRosterElementData[] FromItemRosterData;
     [ProtoMember(5)]
-    public readonly ItemRosterElement[] ToItemRosterData;
+    public readonly ItemRosterElementData[] ToItemRosterData;
     [ProtoMember(6)]
     public readonly Dictionary<string, EquipmentData[]> CharacterIdEquipmentsData;
     [ProtoMember(7)]
@@ -49,9 +48,9 @@ internal readonly struct CompleteTrade : ICommand
     public readonly string CurrentSettlementComponentId;
 
     [ProtoMember(18)]
-    public readonly (ItemRosterElementData, int)[] BoughtItems;
+    public readonly TradeItemData[] BoughtItems;
     [ProtoMember(19)]
-    public readonly (ItemRosterElementData, int)[] SoldItems;
+    public readonly TradeItemData[] SoldItems;
     [ProtoMember(20)]
     public readonly string ForceTransferId;
 
@@ -59,8 +58,8 @@ internal readonly struct CompleteTrade : ICommand
         string fromItemRosterId,
         bool isFromItemRosterNull,
         string toItemRosterId,
-        ItemRosterElement[] fromItemRosterData,
-        ItemRosterElement[] toItemRosterData,
+        ItemRosterElementData[] fromItemRosterData,
+        ItemRosterElementData[] toItemRosterData,
         Dictionary<string, EquipmentData[]> characterIdEquipmentsData,
         bool isTrading,
         bool canGainXpFromDiscarding,
@@ -73,8 +72,8 @@ internal readonly struct CompleteTrade : ICommand
         string currentMobilePartyId,
         bool isSettlementComponentNull,
         string currentSettlementComponentId,
-        (ItemRosterElementData, int)[] boughtItems,
-        (ItemRosterElementData, int)[] soldItems,
+        TradeItemData[] boughtItems,
+        TradeItemData[] soldItems,
         string forceTransferId = null)
     {
         RequestId = Interlocked.Increment(ref nextRequestId);
@@ -82,8 +81,8 @@ internal readonly struct CompleteTrade : ICommand
         IsFromItemRosterNull = isFromItemRosterNull;
         ToItemRosterId = toItemRosterId;
         // The local authority does not serialize this request before the UI resets its preview.
-        FromItemRosterData = fromItemRosterData == null ? null : (ItemRosterElement[])fromItemRosterData.Clone();
-        ToItemRosterData = toItemRosterData == null ? null : (ItemRosterElement[])toItemRosterData.Clone();
+        FromItemRosterData = fromItemRosterData == null ? null : (ItemRosterElementData[])fromItemRosterData.Clone();
+        ToItemRosterData = toItemRosterData == null ? null : (ItemRosterElementData[])toItemRosterData.Clone();
         CharacterIdEquipmentsData = characterIdEquipmentsData;
         IsTrading = isTrading;
         CanGainXpFromDiscarding = canGainXpFromDiscarding;

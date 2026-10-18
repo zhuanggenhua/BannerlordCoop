@@ -1,6 +1,7 @@
 ﻿using ProtoBuf;
-using TaleWorlds.Core;
 using static TaleWorlds.Core.Equipment;
+
+namespace GameInterface.Services.Inventory.Data;
 
 [ProtoContract(SkipConstructor = true)]
 internal readonly struct EquipmentData
@@ -9,11 +10,11 @@ internal readonly struct EquipmentData
     public readonly EquipmentType EquipmentType;
 
     [ProtoMember(2)]
-    public readonly EquipmentElement[] ItemSlots;
+    public readonly EquipmentSlotData[] ItemSlots;
 
     public EquipmentData(
         EquipmentType equipmentType,
-        EquipmentElement[] itemSlots)
+        EquipmentSlotData[] itemSlots)
     {
         EquipmentType = equipmentType;
         ItemSlots = itemSlots;

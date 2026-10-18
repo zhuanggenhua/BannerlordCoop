@@ -1,8 +1,6 @@
 ﻿using Common.Messaging;
 using ProtoBuf;
-using System;
-using System.Collections.Generic;
-using TaleWorlds.Core;
+using GameInterface.Services.Inventory.Data;
 
 namespace GameInterface.Services.Inventory.TradeSkills.Messages;
 
@@ -13,18 +11,18 @@ internal readonly struct NetworkUpdateTradeData : ICommand
     public readonly string PlayerHeroId;
 
     [ProtoMember(2)]
-    public readonly List<ValueTuple<ItemRosterElement, int>> PurchasedItems;
+    public readonly TradeItemData[] PurchasedItems;
 
     [ProtoMember(3)]
-    public readonly List<ValueTuple<ItemRosterElement, int>> SoldItems;
+    public readonly TradeItemData[] SoldItems;
 
     [ProtoMember(4)]
     public readonly bool IsTrading;
 
     public NetworkUpdateTradeData(
         string playerHeroId,
-        List<(ItemRosterElement, int)> purchasedItems,
-        List<(ItemRosterElement, int)> soldItems,
+        TradeItemData[] purchasedItems,
+        TradeItemData[] soldItems,
         bool isTrading)
     {
         PlayerHeroId = playerHeroId;

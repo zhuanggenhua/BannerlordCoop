@@ -3,6 +3,8 @@ using Common.Logging;
 using Common.Messaging;
 using Common.Network;
 using Common.Util;
+using GameInterface.Services.CampaignAuthority;
+using GameInterface.Services.Entity;
 using GameInterface.Services.GameDebug.Messages;
 using GameInterface.Services.Inventory.Data;
 using GameInterface.Services.Inventory.Interfaces;
@@ -11,11 +13,14 @@ using GameInterface.Services.ObjectManager;
 using GameInterface.Services.Villages.Interfaces;
 using GameInterface.Services.Workshops.Messages;
 using GameInterface.Services.Players;
+using GameInterface.Services.Players.Data;
 using HarmonyLib;
 using Helpers;
 using LiteNetLib;
 using Serilog;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
@@ -36,6 +41,13 @@ internal class TradeHandler : IHandler
     private readonly INetwork network;
     private readonly IVillageHostileActionInterface villageHostileActionInterface;
     private readonly IPlayerManager players;
+    private readonly ICampaignAuthorityContext authorityContext;
+    private readonly IControllerIdProvider controllerIdProvider;
+    private readonly object authorityCommandGate = new();
+    private AuthorityLease authorityCommandLease;
+    private long nextAuthorityCommandSequence;
+    private AuthorityLease lastAuthorityCommandLease;
+    private long lastAuthorityCommandSequence;
     private sealed class CommitCursor { public long LastRequest; }
     private readonly ConditionalWeakTable<object, CommitCursor> commits = new();
 
@@ -55,7 +67,9 @@ internal class TradeHandler : IHandler
         IObjectManager objectManager,
         INetwork network,
         IVillageHostileActionInterface villageHostileActionInterface,
-        IPlayerManager players)
+        IPlayerManager players,
+        ICampaignAuthorityContext authorityContext = null,
+        IControllerIdProvider controllerIdProvider = null)
     {
         this.inventoryLogicInterface = inventoryLogicInterface;
         this.messageBroker = messageBroker;
@@ -63,9 +77,12 @@ internal class TradeHandler : IHandler
         this.network = network;
         this.villageHostileActionInterface = villageHostileActionInterface;
         this.players = players;
+        this.authorityContext = authorityContext;
+        this.controllerIdProvider = controllerIdProvider;
 
         messageBroker.Subscribe<TradeAttempted>(Handle_TradeAttempted);
         messageBroker.Subscribe<CompleteTrade>(Handle_CompleteTrade);
+        messageBroker.Subscribe<NetworkCampaignAuthorityCompleteTradeCommand>(Handle_AuthorityCompleteTrade);
         messageBroker.Subscribe<UpdateEquipmentClients>(Handle_UpdateEquipmentClients);
     }
 
@@ -73,7 +90,15 @@ internal class TradeHandler : IHandler
     {
         messageBroker.Unsubscribe<TradeAttempted>(Handle_TradeAttempted);
         messageBroker.Unsubscribe<CompleteTrade>(Handle_CompleteTrade);
+        messageBroker.Unsubscribe<NetworkCampaignAuthorityCompleteTradeCommand>(Handle_AuthorityCompleteTrade);
         messageBroker.Unsubscribe<UpdateEquipmentClients>(Handle_UpdateEquipmentClients);
+        lock (authorityCommandGate)
+        {
+            authorityCommandLease = default;
+            nextAuthorityCommandSequence = 0;
+            lastAuthorityCommandLease = default;
+            lastAuthorityCommandSequence = 0;
+        }
     }
 
     private void Handle_TradeAttempted(MessagePayload<TradeAttempted> payload)
@@ -101,22 +126,28 @@ internal class TradeHandler : IHandler
         if (what.CurrentSettlementComponent is not null && 
             !objectManager.TryGetIdWithLogging(what.CurrentSettlementComponent, out currentSettlementComponentId)) return;
 
-        var boughtItems = ResolveTradeItemIds(what.BoughtItems);
-        var soldItems = ResolveTradeItemIds(what.SoldItems);
+        if (!TryResolveItemRosterData(what.FromRoster, out var fromRosterData) ||
+            !TryResolveItemRosterData(what.ToRoster, out var toRosterData))
+            return;
+
+        if (!TryResolveTradeItemIds(what.BoughtItems, out var boughtItems) ||
+            !TryResolveTradeItemIds(what.SoldItems, out var soldItems))
+            return;
 
         if (what.CanGainXpFromDiscarding)
         {
-            soldItems = ResolveLeftLootIds(what.FromRoster);
+            if (!TryResolveLeftLootIds(what.FromRoster, out soldItems)) return;
         }
 
-        var characterIdEquipmentsData = ResolveCharacterIdEquipmentsData(what.OwnerParty, what.InitialCharacterEquipment);
+        if (!TryResolveCharacterIdEquipmentsData(what.OwnerParty, what.InitialCharacterEquipment, out var characterIdEquipmentsData))
+            return;
 
         var message = new CompleteTrade(
             fromRosterId,
             fromRosterId is null,
             toRosterId,
-            what.FromRoster._data,
-            what.ToRoster._data,
+            fromRosterData,
+            toRosterData,
             characterIdEquipmentsData,
             what.IsTrading,
             what.CanGainXpFromDiscarding,
@@ -139,7 +170,7 @@ internal class TradeHandler : IHandler
 
     internal void DispatchCompleteTrade(CompleteTrade message)
     {
-        if (ModInformation.IsListenAuthority)
+        if (CampaignSimulationAuthorityPolicy.CanRunWorldSimulation() || ModInformation.IsListenAuthority)
             // DoneLogic still has to reset its preview. Apply the frozen commit after it returns.
             GameThread.EnqueueSafe(() => messageBroker.Publish(this, message), context: "ListenAuthority.TradeCommit");
         else
@@ -153,86 +184,231 @@ internal class TradeHandler : IHandler
 
         GameThread.RunSafe(() =>
         {
-            if (ModInformation.IsServer && peer != null &&
-                (!players.ValidateCurrentPartySender(peer, message.OwnerPartyId) ||
-                 !players.ValidateHeroSender(peer, message.HeroId))) return;
-            ItemRoster fromRoster = null;
-            if (!message.IsFromItemRosterNull && !objectManager.TryGetObjectWithLogging<ItemRoster>(message.FromItemRosterId, out fromRoster)) return;
+            if (TryRouteToRemoteAuthority(message, peer)) return;
+            ApplyCompleteTrade(message, peer, requiredLease: null, authorityCommand: false);
+        }, context: nameof(TradeHandler));
+    }
 
-            if (!objectManager.TryGetObjectWithLogging<ItemRoster>(message.ToItemRosterId, out var toRoster)) return;
-            if (!objectManager.TryGetObjectWithLogging<Hero>(message.HeroId, out var hero)) return;
-            if (!objectManager.TryGetObjectWithLogging<MobileParty>(message.OwnerPartyId, out var ownerParty)) return;
-            if (!objectManager.TryGetObjectWithLogging<Hero>(message.InitialHeroId, out var initialHero)) return;
-            if (peer != null && !ReferenceEquals(toRoster, ownerParty.ItemRoster)) return;
+    private bool TryRouteToRemoteAuthority(CompleteTrade message, NetPeer peer)
+    {
+        if (authorityContext?.IsAuthorityKnown != true) return false;
+        if (!authorityContext.TryGetCurrentLease(out var lease) || !lease.IsValid || lease.IsPaused)
+            return true;
+        if (authorityContext.TryGetLocalAuthorityLease(out var localLease) && localLease == lease)
+            return false;
 
-            SettlementComponent currentSettlementComponent = null;
-            if (!message.IsSettlementComponentNull &&
-                !objectManager.TryGetObjectWithLogging<SettlementComponent>(message.CurrentSettlementComponentId, out currentSettlementComponent)) return;
+        // Non-trading warehouse transfers remain owned by the room host's saved session state.
+        if (message.IsManagingWarehouse && !message.IsTrading) return false;
+        if (!ModInformation.IsServer) return true;
 
-            MobileParty currentMobileParty = null;
-            if (message.CurrentMobilePartyId != null && !objectManager.TryGetObjectWithLogging<MobileParty>(message.CurrentMobilePartyId, out currentMobileParty)) return;
+        string originControllerId;
+        Player player;
+        if (peer != null)
+        {
+            if (!players.ValidateCurrentPartySender(peer, message.OwnerPartyId) ||
+                !players.ValidateHeroSender(peer, message.HeroId) ||
+                !players.TryGetPlayer(peer, out player))
+                return true;
 
-            var boughtItems = ResolveTradeItems(message.BoughtItems);
-            var soldItems = ResolveTradeItems(message.SoldItems);
-            ResolveCharacterEquipmentsData(message.CharacterIdEquipmentsData, out var characterEquipmentsData);
+            originControllerId = player.ControllerId;
+        }
+        else if (ModInformation.IsListenAuthority && controllerIdProvider != null &&
+                 players.TryGetPlayer(controllerIdProvider.ControllerId, out player))
+        {
+            originControllerId = player.ControllerId;
+            if (!PlayerOwnsTrade(player, message)) return true;
+        }
+        else
+        {
+            return true;
+        }
 
-            if (ModInformation.IsServer && !message.IsTrading)
+        // Validate ownership and consume any one-use village transfer token at the room host
+        // before forwarding. The authority command sequence fences the remote apply.
+        if (peer != null && !PlayerOwnsTrade(player, message)) return true;
+        if (!TryBeginCommit((object)peer ?? this, message.RequestId)) return true;
+
+        if (!message.IsTrading && message.ForceTransferId != null &&
+            !TryValidateForceTransfer(message, peer))
+            return true;
+
+        if (TryRouteToAuthority(message, originControllerId, lease)) return true;
+
+        logger.Warning(
+            "Could not route trade commit {RequestId} from controller {ControllerId} to campaign authority {AuthorityControllerId}",
+            message.RequestId,
+            originControllerId,
+            lease.AuthorityControllerId);
+        return true;
+    }
+
+    internal bool TryRouteToAuthority(CompleteTrade message, string originControllerId, AuthorityLease lease)
+    {
+        if (!ModInformation.IsServer || authorityContext == null || !lease.IsValid || lease.IsPaused ||
+            string.IsNullOrWhiteSpace(originControllerId) ||
+            !authorityContext.TryGetCurrentLease(out var currentLease) || currentLease != lease ||
+            authorityContext.TryGetLocalAuthorityLease(out var localLease) && localLease == lease ||
+            !players.TryGetPeer(lease.AuthorityControllerId, out var authorityPeer) || authorityPeer == null)
+            return false;
+
+        long sequence;
+        lock (authorityCommandGate)
+        {
+            if (authorityCommandLease != lease)
             {
-                if (message.ForceTransferId != null)
-                {
-                    if (!TryValidateForceTransfer(message, peer))
-                        return;
-                }
-                else if (villageHostileActionInterface.HasPendingForceTransferForParty(message.OwnerPartyId))
-                {
-                    // Attribution missed (see ForceTransferScreenTracker): the cap cannot
-                    // be enforced on this commit. Logged so live runs prove attribution
-                    // works; still applied under the trusted-client model.
-                    logger.Warning(
-                        "ForceTransfer loot commit without attribution while a pool is pending (Party={PartyId})",
-                        message.OwnerPartyId);
-                }
+                authorityCommandLease = lease;
+                nextAuthorityCommandSequence = 0;
             }
 
-            var fromItemRosterData = message.FromItemRosterData;
-            var toItemRosterData = message.ToItemRosterData;
-            var totalAmount = message.TotalAmount;
-            if (!TryBeginCommit(peer, message.RequestId)) return;
+            if (nextAuthorityCommandSequence == long.MaxValue)
+                throw new System.InvalidOperationException("Campaign authority trade-command sequence space is exhausted.");
 
-            // Undo any purchases that are no longer present in the roster
-            // When looting, taken items are treated as bought items. Don't need to manage changed rosters in these cases
-            if (fromRoster != null)
+            sequence = ++nextAuthorityCommandSequence;
+        }
+
+        network.Send(authorityPeer, new NetworkCampaignAuthorityCompleteTradeCommand(
+            lease,
+            sequence,
+            originControllerId,
+            message));
+        return true;
+    }
+
+    private void Handle_AuthorityCompleteTrade(MessagePayload<NetworkCampaignAuthorityCompleteTradeCommand> payload)
+    {
+        var command = payload.What;
+        if (authorityContext == null ||
+            !authorityContext.TryGetLocalAuthorityLease(out var lease) || !command.Matches(lease) ||
+            !players.TryGetPlayer(command.OriginControllerId, out var player) ||
+            !PlayerOwnsTrade(player, command.Trade) || players.IsReservedController(player.ControllerId) ||
+            !TryAdvanceAuthorityCommandSequence(lease, command.Sequence))
+            return;
+
+        GameThread.RunSafe(() =>
+        {
+            // A lease or player registration may change while this command waits for the game thread.
+            if (!authorityContext.TryGetLocalAuthorityLease(out var currentLease) || currentLease != lease ||
+                !players.TryGetPlayer(command.OriginControllerId, out var currentPlayer) ||
+                !PlayerOwnsTrade(currentPlayer, command.Trade) ||
+                players.IsReservedController(currentPlayer.ControllerId))
+                return;
+
+            ApplyCompleteTrade(command.Trade, peer: null, requiredLease: lease, authorityCommand: true);
+        }, context: nameof(TradeHandler));
+    }
+
+    internal bool TryAdvanceAuthorityCommandSequence(AuthorityLease lease, long sequence)
+    {
+        lock (authorityCommandGate)
+        {
+            if (lastAuthorityCommandLease != lease)
             {
-                totalAmount = ReconcilePurchases(fromRoster, fromItemRosterData, toItemRosterData, boughtItems, totalAmount);
+                lastAuthorityCommandLease = lease;
+                lastAuthorityCommandSequence = 0;
             }
 
-            // Update rosters with new data
-            if (toRoster != null) inventoryLogicInterface.UpdateRosterWithData(toRoster, toItemRosterData);
-            if (fromRoster != null) inventoryLogicInterface.UpdateRosterWithData(fromRoster, fromItemRosterData);
-            else if (message.IsManagingWarehouse)
+            if (sequence <= 0 || sequence <= lastAuthorityCommandSequence) return false;
+            lastAuthorityCommandSequence = sequence;
+            return true;
+        }
+    }
+
+    internal static bool PlayerOwnsTrade(Player player, CompleteTrade message) =>
+        player != null && player.HeroId == message.HeroId && player.MobilePartyId == message.OwnerPartyId;
+
+    private void ApplyCompleteTrade(
+        CompleteTrade message,
+        NetPeer peer,
+        AuthorityLease? requiredLease,
+        bool authorityCommand)
+    {
+        if (requiredLease.HasValue &&
+            (authorityContext == null ||
+             !authorityContext.TryGetLocalAuthorityLease(out var localLease) ||
+             localLease != requiredLease.Value))
+            return;
+
+        if (ModInformation.IsServer && peer != null &&
+            (!players.ValidateCurrentPartySender(peer, message.OwnerPartyId) ||
+             !players.ValidateHeroSender(peer, message.HeroId))) return;
+
+        ItemRoster fromRoster = null;
+        if (!message.IsFromItemRosterNull && !objectManager.TryGetObjectWithLogging<ItemRoster>(message.FromItemRosterId, out fromRoster)) return;
+
+        if (!objectManager.TryGetObjectWithLogging<ItemRoster>(message.ToItemRosterId, out var toRoster)) return;
+        if (!objectManager.TryGetObjectWithLogging<Hero>(message.HeroId, out var hero)) return;
+        if (!objectManager.TryGetObjectWithLogging<MobileParty>(message.OwnerPartyId, out var ownerParty)) return;
+        if (!objectManager.TryGetObjectWithLogging<Hero>(message.InitialHeroId, out var initialHero)) return;
+        if (peer != null && !ReferenceEquals(toRoster, ownerParty.ItemRoster)) return;
+
+        SettlementComponent currentSettlementComponent = null;
+        if (!message.IsSettlementComponentNull &&
+            !objectManager.TryGetObjectWithLogging<SettlementComponent>(message.CurrentSettlementComponentId, out currentSettlementComponent)) return;
+
+        MobileParty currentMobileParty = null;
+        if (message.CurrentMobilePartyId != null && !objectManager.TryGetObjectWithLogging<MobileParty>(message.CurrentMobilePartyId, out currentMobileParty)) return;
+
+        if (!TryResolveTradeItems(message.BoughtItems, out var boughtItems) ||
+            !TryResolveTradeItems(message.SoldItems, out var soldItems) ||
+            !TryResolveCharacterEquipmentsData(message.CharacterIdEquipmentsData, out var characterEquipmentsData))
+            return;
+
+        if (ModInformation.IsServer && !message.IsTrading)
+        {
+            if (message.ForceTransferId != null && !authorityCommand)
             {
-                // Manage warehouse rosters separately as they involve more complicated logic
-                MessageBroker.Instance.Publish(this, new WarehouseRosterManaged(payload.Who as NetPeer, hero, currentSettlementComponent.Settlement, fromItemRosterData));
+                if (!TryValidateForceTransfer(message, peer)) return;
             }
+            else if (message.ForceTransferId == null && villageHostileActionInterface.HasPendingForceTransferForParty(message.OwnerPartyId))
+            {
+                // Attribution missed (see ForceTransferScreenTracker): the cap cannot
+                // be enforced on this commit. Logged so live runs prove attribution
+                // works; still applied under the trusted-client model.
+                logger.Warning(
+                    "ForceTransfer loot commit without attribution while a pool is pending (Party={PartyId})",
+                    message.OwnerPartyId);
+            }
+        }
 
-            // Update hero equipment with new data
-            inventoryLogicInterface.UpdateEquipmentWithData(ownerParty, characterEquipmentsData, initialHero);
-            network.SendAll(new UpdateEquipmentClients(message.CharacterIdEquipmentsData, message.OwnerPartyId, message.InitialHeroId));
+        if (!TryResolveItemRosterData(message.FromItemRosterData, out var fromItemRosterData) ||
+            !TryResolveItemRosterData(message.ToItemRosterData, out var toItemRosterData))
+            return;
+        var totalAmount = message.TotalAmount;
+        if (!authorityCommand && !TryBeginCommit(peer, message.RequestId)) return;
 
-            inventoryLogicInterface.ApplyDoneLogic(
-                fromRoster,
-                toRoster,
-                message.IsTrading,
-                message.CanGainXpFromDiscarding,
-                hero,
-                totalAmount,
-                message.MerchantGold,
-                currentMobileParty,
-                currentSettlementComponent,
-                boughtItems,
-                soldItems
-            );
-        });
+        // Undo any purchases that are no longer present in the roster
+        // When looting, taken items are treated as bought items. Don't need to manage changed rosters in these cases
+        if (fromRoster != null)
+        {
+            totalAmount = ReconcilePurchases(fromRoster, fromItemRosterData, toItemRosterData, boughtItems, totalAmount);
+        }
+
+        // Update rosters with new data
+        if (toRoster != null) inventoryLogicInterface.UpdateRosterWithData(toRoster, toItemRosterData);
+        if (fromRoster != null) inventoryLogicInterface.UpdateRosterWithData(fromRoster, fromItemRosterData);
+        else if (message.IsManagingWarehouse)
+        {
+            // Manage warehouse rosters separately as they involve more complicated logic
+            MessageBroker.Instance.Publish(this, new WarehouseRosterManaged(peer, hero, currentSettlementComponent.Settlement, fromItemRosterData));
+        }
+
+        // Update hero equipment with new data
+        inventoryLogicInterface.UpdateEquipmentWithData(ownerParty, characterEquipmentsData, initialHero);
+        network.SendAll(new UpdateEquipmentClients(message.CharacterIdEquipmentsData, message.OwnerPartyId, message.InitialHeroId));
+
+        inventoryLogicInterface.ApplyDoneLogic(
+            fromRoster,
+            toRoster,
+            message.IsTrading,
+            message.CanGainXpFromDiscarding,
+            hero,
+            totalAmount,
+            message.MerchantGold,
+            currentMobileParty,
+            currentSettlementComponent,
+            boughtItems,
+            soldItems
+        );
     }
 
     private bool TryValidateForceTransfer(CompleteTrade message, NetPeer peer)
@@ -252,7 +428,12 @@ internal class TradeHandler : IHandler
                 message.OwnerPartyId,
                 message.ForceTransferId);
         }
-        else if (!VillageHostileActionInterface.TryValidateSuppliesTakeAndRemainder(pool.SuppliesItems, message.BoughtItems, message.SoldItems, leftRemainder, out var error))
+        else if (!VillageHostileActionInterface.TryValidateSuppliesTakeAndRemainder(
+                     pool.SuppliesItems,
+                     message.BoughtItems.Select(item => (item.Element, item.TotalPrice)),
+                     message.SoldItems.Select(item => (item.Element, item.TotalPrice)),
+                     leftRemainder,
+                     out var error))
         {
             // The pool is deliberately left intact: a rejection must not mutate
             // pool state, so a false positive never destroys the reward.
@@ -326,6 +507,41 @@ internal class TradeHandler : IHandler
         return true;
     }
 
+    internal bool TryResolveLeftRemainder(ItemRosterElementData[] leftRosterData, out List<(string itemId, string modifierId, int amount)> remainder, out string error)
+    {
+        remainder = new List<(string itemId, string modifierId, int amount)>();
+        error = null;
+        if (leftRosterData == null) return true;
+
+        for (int i = 0; i < leftRosterData.Length; i++)
+        {
+            var element = leftRosterData[i];
+            string itemId = element.ItemObjectData.ItemObjectId;
+            if (string.IsNullOrWhiteSpace(itemId) ||
+                !objectManager.TryGetObject<ItemObject>(itemId, out _))
+            {
+                error = $"left remainder element [{i}/{leftRosterData.Length}] has an unknown item id '{itemId ?? "<null>"}'";
+                return false;
+            }
+
+            string modifierId = null;
+            if (!element.ItemObjectData.ItemModifierNull)
+            {
+                modifierId = element.ItemObjectData.ItemModifierId;
+                if (string.IsNullOrWhiteSpace(modifierId) ||
+                    !objectManager.TryGetObject<ItemModifier>(modifierId, out _))
+                {
+                    error = $"left remainder element [{i}/{leftRosterData.Length}] has an unknown item modifier id '{modifierId ?? "<null>"}'";
+                    return false;
+                }
+            }
+
+            remainder.Add((itemId, modifierId, element.Amount));
+        }
+
+        return true;
+    }
+
     private void Handle_UpdateEquipmentClients(MessagePayload<UpdateEquipmentClients> obj)    {
         GameThread.RunSafe(() =>
         {
@@ -334,7 +550,7 @@ internal class TradeHandler : IHandler
                 if (!objectManager.TryGetObjectWithLogging<MobileParty>(obj.What.MobilePartyId, out var mobileParty)) return;
                 if (!objectManager.TryGetObjectWithLogging<Hero>(obj.What.InitialHeroId, out var initialHero)) return;
 
-                ResolveCharacterEquipmentsData(obj.What.CharacterIdEquipmentsData, out var characterEquipmentsData);
+                if (!TryResolveCharacterEquipmentsData(obj.What.CharacterIdEquipmentsData, out var characterEquipmentsData)) return;
                 inventoryLogicInterface.UpdateEquipmentWithData(mobileParty, characterEquipmentsData, initialHero);
             }
         });
@@ -375,54 +591,110 @@ internal class TradeHandler : IHandler
         return totalAmount;
     }
 
-    private (ItemRosterElementData, int)[] ResolveTradeItemIds(
-        IEnumerable<(ItemRosterElement, int)> items)
+    private bool TryResolveTradeItemIds(
+        IEnumerable<(ItemRosterElement, int)> items,
+        out TradeItemData[] resolvedItems)
     {
-        var resolvedItems = new List<(ItemRosterElementData, int)>();
-
-        foreach (var (item, count) in items)
+        var result = new List<TradeItemData>();
+        foreach (var (item, totalPrice) in items ?? Enumerable.Empty<(ItemRosterElement, int)>())
         {
-            if (TryResolveItemRosterId(item, out var resolvedItem))
+            if (!TryResolveItemRosterId(item, out var resolvedItem))
             {
-                resolvedItems.Add((resolvedItem, count));
+                resolvedItems = Array.Empty<TradeItemData>();
+                return false;
             }
+
+            result.Add(new TradeItemData(resolvedItem, totalPrice));
         }
 
-        return resolvedItems.ToArray();
+        resolvedItems = result.ToArray();
+        return true;
     }
 
-    internal (ItemRosterElementData, int)[] ResolveLeftLootIds(ItemRoster items)
+    internal bool TryResolveLeftLootIds(ItemRoster items, out TradeItemData[] resolvedItems)
     {
-        var resolvedItems = new List<(ItemRosterElementData, int)>();
-
+        var result = new List<TradeItemData>();
         for (int i = 0; i < items.Count; i++)
         {
-            if (TryResolveItemRosterId(items[i], out var resolvedItem))
+            if (!TryResolveItemRosterId(items[i], out var resolvedItem))
             {
-                resolvedItems.Add((resolvedItem, items[i].Amount));
+                resolvedItems = Array.Empty<TradeItemData>();
+                return false;
             }
+
+            result.Add(new TradeItemData(resolvedItem, items[i].Amount));
         }
 
-        return resolvedItems.ToArray();
+        resolvedItems = result.ToArray();
+        return true;
     }
 
-    private List<(ItemRosterElement, int)> ResolveTradeItems(
-        IEnumerable<(ItemRosterElementData, int)> items)
+    private bool TryResolveTradeItems(
+        IEnumerable<TradeItemData> items,
+        out List<(ItemRosterElement, int)> resolvedItems)
     {
-        var resolvedItems = new List<(ItemRosterElement, int)>();
-
-        if (items == null)
-            return resolvedItems;
-
-        foreach (var (itemData, count) in items)
+        var result = new List<(ItemRosterElement, int)>();
+        foreach (var tradeItem in items ?? Enumerable.Empty<TradeItemData>())
         {
-            if (TryResolveItemRosterElement(itemData, out var item))
+            if (!TryResolveItemRosterElement(tradeItem.Element, out var item))
             {
-                resolvedItems.Add((item, count));
+                resolvedItems = new List<(ItemRosterElement, int)>();
+                return false;
+            }
+
+            result.Add((item, tradeItem.TotalPrice));
+        }
+
+        resolvedItems = result;
+        return true;
+    }
+
+    private bool TryResolveItemRosterData(ItemRoster roster, out ItemRosterElementData[] data)
+    {
+        if (roster == null)
+        {
+            data = null;
+            return true;
+        }
+
+        var result = new List<ItemRosterElementData>();
+        foreach (var element in roster._data)
+        {
+            if (element.EquipmentElement.Item == null && element.Amount == 0) continue;
+            if (element.EquipmentElement.Item == null || !TryResolveItemRosterId(element, out var resolved))
+            {
+                logger.Error("Could not serialize an occupied trade roster slot for network commit");
+                data = Array.Empty<ItemRosterElementData>();
+                return false;
+            }
+
+            result.Add(resolved);
+        }
+
+        data = result.ToArray();
+        return true;
+    }
+
+    private bool TryResolveItemRosterData(ItemRosterElementData[] data, out ItemRosterElement[] elements)
+    {
+        if (data == null)
+        {
+            elements = null;
+            return true;
+        }
+
+        var result = new ItemRosterElement[data.Length];
+        for (int i = 0; i < data.Length; i++)
+        {
+            if (!TryResolveItemRosterElement(data[i], out result[i]))
+            {
+                elements = Array.Empty<ItemRosterElement>();
+                return false;
             }
         }
 
-        return resolvedItems;
+        elements = result;
+        return true;
     }
 
     private bool TryResolveItemRosterElement(ItemRosterElementData data, out ItemRosterElement result)
@@ -479,16 +751,19 @@ internal class TradeHandler : IHandler
         return true;
     }
 
-    private Dictionary<string, EquipmentData[]> ResolveCharacterIdEquipmentsData(MobileParty party, CharacterObject initialCharacter)
+    private bool TryResolveCharacterIdEquipmentsData(
+        MobileParty party,
+        CharacterObject initialCharacter,
+        out Dictionary<string, EquipmentData[]> characterIdEquipmentsData)
     {
-        var characterIdEquipmentsData = new Dictionary<string, EquipmentData[]>();
+        characterIdEquipmentsData = new Dictionary<string, EquipmentData[]>();
         bool initialCharacterInParty = false;
 
         for (int i = 0; i < party.MemberRoster.Count; i++)
         {
             var character = party.MemberRoster.GetElementCopyAtIndex(i).Character;
 
-            AddHeroEquipmentData(characterIdEquipmentsData, character);
+            if (!TryAddHeroEquipmentData(characterIdEquipmentsData, character)) return false;
 
             if (character == initialCharacter)
             {
@@ -498,49 +773,105 @@ internal class TradeHandler : IHandler
 
         if (!initialCharacterInParty)
         {
-            AddHeroEquipmentData(characterIdEquipmentsData, initialCharacter);
+            if (!TryAddHeroEquipmentData(characterIdEquipmentsData, initialCharacter)) return false;
         }
 
-        return characterIdEquipmentsData;
+        return true;
     }
 
-    private void AddHeroEquipmentData(Dictionary<string, EquipmentData[]> characterIdEquipmentsData, CharacterObject character)
+    private bool TryAddHeroEquipmentData(Dictionary<string, EquipmentData[]> characterIdEquipmentsData, CharacterObject character)
     {
-        if (!character.IsHero) return;
+        if (!character.IsHero) return true;
 
-        if (!objectManager.TryGetIdWithLogging(character.HeroObject, out var heroId)) return;
+        if (!objectManager.TryGetIdWithLogging(character.HeroObject, out var heroId)) return false;
 
-        characterIdEquipmentsData[heroId] = new EquipmentData[]
-        {
-            new EquipmentData(character.FirstBattleEquipment._equipmentType, character.FirstBattleEquipment._itemSlots),
-            new EquipmentData(character.FirstCivilianEquipment._equipmentType, character.FirstCivilianEquipment._itemSlots),
-            new EquipmentData(character.FirstStealthEquipment._equipmentType, character.FirstStealthEquipment._itemSlots)
-        };
+        if (!TryResolveEquipmentData(character.FirstBattleEquipment, out var battle) ||
+            !TryResolveEquipmentData(character.FirstCivilianEquipment, out var civilian) ||
+            !TryResolveEquipmentData(character.FirstStealthEquipment, out var stealth))
+            return false;
+
+        characterIdEquipmentsData[heroId] = new[] { battle, civilian, stealth };
+        return true;
     }
 
-    private void ResolveCharacterEquipmentsData(Dictionary<string, EquipmentData[]> characterIdEquipmentsData, out Dictionary<CharacterObject, Equipment[]> characterEquipmentsData)
+    private bool TryResolveEquipmentData(Equipment equipment, out EquipmentData data)
+    {
+        var slots = new EquipmentSlotData[Equipment.EquipmentSlotLength];
+        for (int i = 0; i < slots.Length; i++)
+        {
+            var element = equipment._itemSlots[i];
+            if (element.Item == null) continue;
+
+            if (!objectManager.TryGetId(element.Item, out var itemId))
+            {
+                logger.Error("Could not serialize equipment item {ItemId} for campaign trade", element.Item.StringId);
+                data = default;
+                return false;
+            }
+
+            string modifierId = null;
+            if (element.ItemModifier != null && !objectManager.TryGetId(element.ItemModifier, out modifierId))
+            {
+                logger.Error("Could not serialize equipment modifier {ModifierId} for campaign trade", element.ItemModifier.StringId);
+                data = default;
+                return false;
+            }
+
+            slots[i] = new EquipmentSlotData(new ItemObjectData(
+                itemId,
+                modifierId,
+                itemModifierNull: element.ItemModifier == null));
+        }
+
+        data = new EquipmentData(equipment._equipmentType, slots);
+        return true;
+    }
+
+    private bool TryResolveCharacterEquipmentsData(
+        Dictionary<string, EquipmentData[]> characterIdEquipmentsData,
+        out Dictionary<CharacterObject, Equipment[]> characterEquipmentsData)
     {
         characterEquipmentsData = new();
-        foreach (KeyValuePair<string, EquipmentData[]> characterIdEquipment in characterIdEquipmentsData)
+        foreach (KeyValuePair<string, EquipmentData[]> characterIdEquipment in characterIdEquipmentsData ?? new Dictionary<string, EquipmentData[]>())
         {
-            if (!objectManager.TryGetObjectWithLogging<Hero>(characterIdEquipment.Key, out var hero)) continue;
+            if (characterIdEquipment.Value == null || characterIdEquipment.Value.Length != 3 ||
+                !objectManager.TryGetObjectWithLogging<Hero>(characterIdEquipment.Key, out var hero)) return false;
 
             var character = hero.CharacterObject;
             characterEquipmentsData[character] = new Equipment[3];
             for (int i = 0; i < 3; i++)
             {
-                characterEquipmentsData[character][i] = ResolveEquipmentData(characterIdEquipment.Value[i]);
+                if (!TryResolveEquipmentData(characterIdEquipment.Value[i], out characterEquipmentsData[character][i])) return false;
             }
         }
+
+        return true;
     }
     
-    private Equipment ResolveEquipmentData(EquipmentData equipmentData)
+    private bool TryResolveEquipmentData(EquipmentData equipmentData, out Equipment equipment)
     {
-        Equipment equipment = new(equipmentData.EquipmentType);
-        for (int i = 0; i < Equipment.EquipmentSlotLength; i++)
+        equipment = null;
+        if (equipmentData.ItemSlots == null || equipmentData.ItemSlots.Length != Equipment.EquipmentSlotLength) return false;
+
+        equipment = new Equipment(equipmentData.EquipmentType);
+        for (int i = 0; i < equipmentData.ItemSlots.Length; i++)
         {
-            equipment._itemSlots[i] = equipmentData.ItemSlots[i];
+            var slot = equipmentData.ItemSlots[i];
+            if (!slot.HasItem)
+            {
+                equipment._itemSlots[i] = default;
+                continue;
+            }
+
+            if (!objectManager.TryGetObject<ItemObject>(slot.ItemObjectData.ItemObjectId, out var itemObject)) return false;
+
+            ItemModifier itemModifier = null;
+            if (!slot.ItemObjectData.ItemModifierNull &&
+                !objectManager.TryGetObject(slot.ItemObjectData.ItemModifierId, out itemModifier)) return false;
+
+            equipment._itemSlots[i] = new EquipmentElement(itemObject, itemModifier);
         }
-        return equipment;
+
+        return true;
     }
 }

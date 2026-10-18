@@ -166,14 +166,14 @@ public class TradeHandlerTests
         Assert.True(roster._data.Length > roster.Count);
         using var handler = CreateHandler(objectManager.Object);
 
-        var resolved = handler.ResolveLeftLootIds(roster);
+        Assert.True(handler.TryResolveLeftLootIds(roster, out var resolved));
 
         Assert.Equal(itemCount, resolved.Length);
         for (int i = 0; i < itemCount; i++)
         {
-            Assert.Equal($"ItemObject_discard_item_{i}", resolved[i].Item1.ItemObjectData.ItemObjectId);
-            Assert.Equal(i + 1, resolved[i].Item1.Amount);
-            Assert.Equal(i + 1, resolved[i].Item2);
+            Assert.Equal($"ItemObject_discard_item_{i}", resolved[i].Element.ItemObjectData.ItemObjectId);
+            Assert.Equal(i + 1, resolved[i].Element.Amount);
+            Assert.Equal(i + 1, resolved[i].TotalPrice);
         }
         objectManager.VerifyAll();
     }
@@ -195,13 +195,14 @@ public class TradeHandlerTests
         objectManager.Setup(m => m.TryGetId(thick, out thickId)).Returns(true);
         using var handler = CreateHandler(objectManager.Object);
 
-        var resolved = Assert.Single(handler.ResolveLeftLootIds(roster));
+        Assert.True(handler.TryResolveLeftLootIds(roster, out var resolvedItems));
+        var resolved = Assert.Single(resolvedItems);
 
-        Assert.Equal(shieldId, resolved.Item1.ItemObjectData.ItemObjectId);
-        Assert.Equal(thickId, resolved.Item1.ItemObjectData.ItemModifierId);
-        Assert.False(resolved.Item1.ItemObjectData.ItemModifierNull);
-        Assert.Equal(3, resolved.Item1.Amount);
-        Assert.Equal(3, resolved.Item2);
+        Assert.Equal(shieldId, resolved.Element.ItemObjectData.ItemObjectId);
+        Assert.Equal(thickId, resolved.Element.ItemObjectData.ItemModifierId);
+        Assert.False(resolved.Element.ItemObjectData.ItemModifierNull);
+        Assert.Equal(3, resolved.Element.Amount);
+        Assert.Equal(3, resolved.TotalPrice);
         objectManager.VerifyAll();
     }
 
@@ -216,7 +217,8 @@ public class TradeHandlerTests
         objectManager.Setup(m => m.TryGetId(item, out itemId)).Returns(false);
         using var handler = CreateHandler(objectManager.Object);
 
-        Assert.Empty(handler.ResolveLeftLootIds(roster));
+        Assert.False(handler.TryResolveLeftLootIds(roster, out var resolved));
+        Assert.Empty(resolved);
 
         objectManager.Verify(m => m.TryGetId(item, out itemId), Times.Once);
     }

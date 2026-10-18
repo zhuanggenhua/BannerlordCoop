@@ -1,6 +1,7 @@
 using Common.Logging;
 using Common.Network;
 using GameInterface.CoopSessionData;
+using GameInterface.Services.Inventory.Data;
 using GameInterface.Services.Inventory.TradeSkills.Data;
 using GameInterface.Services.Inventory.TradeSkills.Messages;
 using GameInterface.Services.ObjectManager;
@@ -70,8 +71,48 @@ public class SessionTradePlayerDataInterface : ISessionTradePlayerDataInterface
             //CampaignEventDispatcher.Instance.OnPlayerTradeProfit(gainedXp);
         }
 
-        // Update client trade data
-        network.SendAll(new NetworkUpdateTradeData(playerHeroId, purchasedItems, soldItems, isTrading));
+        // Update client trade data. TaleWorlds item structs are not wire serializable,
+        // so send stable registry IDs instead of the live ItemRosterElement values.
+        if (!TrySerializeTradeItems(purchasedItems, out var purchasedItemData) ||
+            !TrySerializeTradeItems(soldItems, out var soldItemData))
+        {
+            Logger.Error("Could not serialize player trade-skill inventory update for hero {HeroId}", playerHeroId);
+            return;
+        }
+
+        network.SendAll(new NetworkUpdateTradeData(playerHeroId, purchasedItemData, soldItemData, isTrading));
+    }
+
+    private bool TrySerializeTradeItems(
+        List<ValueTuple<ItemRosterElement, int>> items,
+        out TradeItemData[] serializedItems)
+    {
+        var result = new List<TradeItemData>();
+        foreach (var (element, totalPrice) in items ?? new List<ValueTuple<ItemRosterElement, int>>())
+        {
+            if (element.EquipmentElement.Item == null ||
+                !objectManager.TryGetId(element.EquipmentElement.Item, out var itemId))
+            {
+                serializedItems = Array.Empty<TradeItemData>();
+                return false;
+            }
+
+            string modifierId = null;
+            var modifier = element.EquipmentElement.ItemModifier;
+            if (modifier != null && !objectManager.TryGetId(modifier, out modifierId))
+            {
+                serializedItems = Array.Empty<TradeItemData>();
+                return false;
+            }
+
+            var itemData = new ItemRosterElementData(
+                new ItemObjectData(itemId, modifierId, itemModifierNull: modifier == null),
+                element.Amount);
+            result.Add(new TradeItemData(itemData, totalPrice));
+        }
+
+        serializedItems = result.ToArray();
+        return true;
     }
 
     public void UpdatePlayerTradeRumors(string playerHeroId, List<TradeRumorData> tradeRumorsData, Dictionary<string, long> enteredSettlements)

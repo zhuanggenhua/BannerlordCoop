@@ -2,6 +2,7 @@ using Common;
 using Common.Messaging;
 using Common.Network;
 using GameInterface.Services.Inventory.Handlers;
+using GameInterface.Services.Inventory.Data;
 using GameInterface.Services.Inventory.Interfaces;
 using GameInterface.Services.Inventory.Messages;
 using GameInterface.Services.ObjectManager;
@@ -24,12 +25,12 @@ public class ListenAuthorityTradeTests
         var item = new ItemObject("grain");
         var roster = new ItemRoster();
         roster.AddToCounts(item, 3);
-        var commit = new CompleteTrade(null, false, null, roster._data, roster._data, null,
+        var rosterData = new[] { new ItemRosterElementData(new ItemObjectData("item-grain", null, true), 3) };
+        var commit = new CompleteTrade(null, false, null, rosterData, rosterData, null,
             true, false, false, null, null, 0, 0, null, null, true, null, null, null);
         roster.Clear();
         Assert.Equal(0, roster.GetItemNumber(item));
-        ObjectHelper.SkipConstructor<InventoryLogicInterface>().UpdateRosterWithData(roster, commit.ToItemRosterData);
-        Assert.Equal(3, roster.GetItemNumber(item));
+        Assert.Equal(3, commit.ToItemRosterData[0].Amount);
         Assert.NotSame(commit.FromItemRosterData, commit.ToItemRosterData);
     }
     [Fact]

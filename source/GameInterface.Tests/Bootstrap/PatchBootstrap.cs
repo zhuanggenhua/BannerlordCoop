@@ -4,6 +4,7 @@ using Common.Network;
 using Common.Serialization;
 using Coop.Core.Common.Configuration;
 using Coop.Tests.Mocks;
+using GameInterface.Services.CampaignAuthority;
 using System;
 using System.Threading;
 
@@ -37,6 +38,9 @@ internal class PatchBootstrap : IDisposable
         builder.RegisterType<NetworkConfig>().As<INetworkConfig>().SingleInstance();
         builder.RegisterType<SerializableTypeMapper>().As<ISerializableTypeMapper>().SingleInstance();
         builder.RegisterModule<GameInterfaceModule>();
+        // Production composition registers this in Coop.Core.CommonModule; patch tests
+        // load GameInterfaceModule directly, so provide the same campaign role service.
+        builder.RegisterType<CampaignAuthorityContext>().As<ICampaignAuthorityContext>().InstancePerLifetimeScope();
         Container = builder.Build();
 
         // This will not allow changing of the container in ContainerProvider until containerLock is disposed
