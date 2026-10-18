@@ -20,6 +20,8 @@ A Mount & Blade II: Bannerlord co-op mod.
 
 The opt-in P1-A `ListenAuthority` mode keeps the single native Campaign and its original local player. It composes authority services with a registered local actor, without a second process or loopback CoopClient. `IsServer` still means world authority; it does not imply absence of a local player. Do not run local already-applied actions through remote request handlers. Remote admission and background Mission simulation are outside P1-A. See `doc/listen-authority-p1a.md` for the verified scope and remaining work.
 
+That paragraph describes the original fixed-authority P1-A scope. The later dynamic P2P session keeps the room host and current campaign writer separate: A can remain the transport host while B holds the confirmed world lease. Use the current, confirmed, unfrozen authority lease for world writes. `ModInformation.IsServer` alone does not identify that writer. Check `doc/p2p-authority-live-acceptance-2026-10-18.md` and the task registry for the accepted migration scenarios and remaining role conversions.
+
 ### AllowedThread Is for Applying Received Messages, Not the Server
 
 `AllowedThread` makes every Harmony patch stand down on the current thread. Its purpose is the **receive path**: a handler applying a network message re-runs vanilla code and must not re-trigger the patches that would re-announce or block it.
