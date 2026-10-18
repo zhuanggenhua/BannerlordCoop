@@ -6,6 +6,7 @@ using E2E.Tests.Environment.Instance;
 using E2E.Tests.Util;
 using GameInterface.Services.MapEventParties;
 using GameInterface.Services.Party.Data;
+using GameInterface.Services.Inventory.Data;
 using GameInterface.Services.Party.Messages;
 using GameInterface.Services.PlayerCaptivityService.Messages;
 using GameInterface.Services.Players;
@@ -679,7 +680,7 @@ public abstract class MapEventTestBase : IDisposable
                 {
                     new TroopRosterElementData(prisonerCharacterId, -1, 0, 0),
                 }),
-                captorParty.ItemRoster.ToArray(),
+                SerializeItemRoster(captorParty.ItemRoster),
                 new UpgradedTroopHistoryData(new()),
                 null,
                 null,
@@ -689,7 +690,8 @@ public abstract class MapEventTestBase : IDisposable
                 true,
                 captorParty.Position,
                 PartyScreenHelper.PartyScreenMode.Normal,
-                Server.Resolve<ITroopRosterInterface>().PackTroopRosterOrderData(captorParty.MemberRoster));
+                Server.Resolve<ITroopRosterInterface>().PackTroopRosterOrderData(captorParty.MemberRoster),
+                authorityLease: TestEnvironment.CampaignAuthorityLease);
 
             Server.Resolve<IMessageBroker>().Publish(this, message);
         }, disabledMethods);
@@ -714,6 +716,28 @@ public abstract class MapEventTestBase : IDisposable
                 party.PrisonRoster._totalHeroes += count;
             }
         });
+    }
+
+    private ItemRosterElementData[] SerializeItemRoster(ItemRoster roster)
+    {
+        var serialized = new List<ItemRosterElementData>();
+        foreach (var element in roster._data)
+        {
+            if (element.EquipmentElement.Item == null && element.Amount == 0) continue;
+            Assert.NotNull(element.EquipmentElement.Item);
+            Assert.True(Server.ObjectManager.TryGetId(element.EquipmentElement.Item, out string itemId));
+
+            string modifierId = null;
+            var modifier = element.EquipmentElement.ItemModifier;
+            if (modifier != null)
+                Assert.True(Server.ObjectManager.TryGetId(modifier, out modifierId));
+
+            serialized.Add(new ItemRosterElementData(
+                new ItemObjectData(itemId, modifierId, itemModifierNull: modifier == null),
+                element.Amount));
+        }
+
+        return serialized.ToArray();
     }
 
     /// <summary>

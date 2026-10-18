@@ -2,6 +2,7 @@
 using Common.Network;
 using Common.Util;
 using GameInterface.Services.Entity;
+using GameInterface.Services.Inventory.Data;
 using GameInterface.Services.MapEventParties;
 using GameInterface.Services.ObjectManager;
 using GameInterface.Services.Party.Data;
@@ -247,7 +248,7 @@ public class PlayerCaptivityReleasePositionTests
             EmptyRosterData(),
             EmptyRosterData(),
             EmptyRosterData(),
-            Array.Empty<ItemRosterElement>(),
+            new[] { new ItemRosterElementData(new ItemObjectData("ItemObject_trade_goods", null, true), 7) },
             new UpgradedTroopHistoryData(new List<UpgradedTroopHistoryElementData>()),
             string.Empty,
             string.Empty,
@@ -276,6 +277,8 @@ public class PlayerCaptivityReleasePositionTests
 
         AssertPosition(releasePosition, result.ReleaserPartyPosition);
         Assert.Equal("town_ES1", result.DonationSettlementId);
+        Assert.Equal("ItemObject_trade_goods", Assert.Single(result.RightOwnerPartyItemRosterData).ItemObjectData.ItemObjectId);
+        Assert.Equal(7, Assert.Single(result.RightOwnerPartyItemRosterData).Amount);
     }
 
     private void SetupObject<T>(string id, T obj)

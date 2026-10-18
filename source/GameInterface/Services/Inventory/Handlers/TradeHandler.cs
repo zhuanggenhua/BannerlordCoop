@@ -10,6 +10,7 @@ using GameInterface.Services.Inventory.Data;
 using GameInterface.Services.Inventory.Interfaces;
 using GameInterface.Services.Inventory.Messages;
 using GameInterface.Services.ObjectManager;
+using GameInterface.Services.ItemRosters;
 using GameInterface.Services.Villages.Interfaces;
 using GameInterface.Services.Workshops.Messages;
 using GameInterface.Services.Players;
@@ -43,6 +44,7 @@ internal class TradeHandler : IHandler
     private readonly IPlayerManager players;
     private readonly ICampaignAuthorityContext authorityContext;
     private readonly IControllerIdProvider controllerIdProvider;
+    private readonly ISessionIdentity sessionIdentity;
     private readonly object authorityCommandGate = new();
     private AuthorityLease authorityCommandLease;
     private long nextAuthorityCommandSequence;
@@ -69,7 +71,8 @@ internal class TradeHandler : IHandler
         IVillageHostileActionInterface villageHostileActionInterface,
         IPlayerManager players,
         ICampaignAuthorityContext authorityContext = null,
-        IControllerIdProvider controllerIdProvider = null)
+        IControllerIdProvider controllerIdProvider = null,
+        ISessionIdentity sessionIdentity = null)
     {
         this.inventoryLogicInterface = inventoryLogicInterface;
         this.messageBroker = messageBroker;
@@ -79,6 +82,7 @@ internal class TradeHandler : IHandler
         this.players = players;
         this.authorityContext = authorityContext;
         this.controllerIdProvider = controllerIdProvider;
+        this.sessionIdentity = sessionIdentity;
 
         messageBroker.Subscribe<TradeAttempted>(Handle_TradeAttempted);
         messageBroker.Subscribe<CompleteTrade>(Handle_CompleteTrade);
@@ -139,6 +143,10 @@ internal class TradeHandler : IHandler
             if (!TryResolveLeftLootIds(what.FromRoster, out soldItems)) return;
         }
 
+        AuthorityLease authorityLease = default;
+        if (authorityContext != null && authorityContext.TryGetCurrentLease(out var currentLease))
+            authorityLease = currentLease;
+
         if (!TryResolveCharacterIdEquipmentsData(what.OwnerParty, what.InitialCharacterEquipment, out var characterIdEquipmentsData))
             return;
 
@@ -162,10 +170,52 @@ internal class TradeHandler : IHandler
             currentSettlementComponentId,
             boughtItems,
             soldItems,
-            what.ForceTransferId
+            what.ForceTransferId,
+            authorityLease
         );
 
+        ScheduleLocalMarketRosterCommit(message);
         DispatchCompleteTrade(message);
+    }
+
+    private void ScheduleLocalMarketRosterCommit(CompleteTrade message)
+    {
+        if (message.IsFromItemRosterNull || string.IsNullOrWhiteSpace(message.FromItemRosterId) ||
+            message.FromItemRosterData == null)
+            return;
+
+        // DoneLogic resets the preview after publishing TradeAttempted. Reapply only this replica's
+        // settlement shop stock after that reset; the authority command carries the shared party-side result.
+        GameThread.EnqueueSafe(() =>
+        {
+            if (!objectManager.TryGetObject<ItemRoster>(message.FromItemRosterId, out var marketRoster) ||
+                !SettlementMarketRosterPolicy.IsLocalMarketRoster(marketRoster) ||
+                !TryResolveItemRosterData(message.FromItemRosterData, out var marketElements))
+                return;
+
+            ApplyLocalMarketRosterUpdate(
+                inventoryLogicInterface,
+                marketRoster,
+                marketElements,
+                isClient: ModInformation.IsClient);
+        }, context: "LocalMarketRosterCommit");
+    }
+
+    internal static void ApplyLocalMarketRosterUpdate(
+        IInventoryLogicInterface inventoryLogic,
+        ItemRoster marketRoster,
+        ItemRosterElement[] marketElements,
+        bool isClient)
+    {
+        if (isClient)
+        {
+            using (new AllowedThread())
+                inventoryLogic.UpdateRosterWithData(marketRoster, marketElements);
+        }
+        else
+        {
+            inventoryLogic.UpdateRosterWithData(marketRoster, marketElements);
+        }
     }
 
     internal void DispatchCompleteTrade(CompleteTrade message)
@@ -194,6 +244,7 @@ internal class TradeHandler : IHandler
         if (authorityContext?.IsAuthorityKnown != true) return false;
         if (!authorityContext.TryGetCurrentLease(out var lease) || !lease.IsValid || lease.IsPaused)
             return true;
+        if (!message.MatchesAuthorityLease(lease)) return true;
         if (authorityContext.TryGetLocalAuthorityLease(out var localLease) && localLease == lease)
             return false;
 
@@ -245,6 +296,7 @@ internal class TradeHandler : IHandler
     internal bool TryRouteToAuthority(CompleteTrade message, string originControllerId, AuthorityLease lease)
     {
         if (!ModInformation.IsServer || authorityContext == null || !lease.IsValid || lease.IsPaused ||
+            !message.MatchesAuthorityLease(lease) ||
             string.IsNullOrWhiteSpace(originControllerId) ||
             !authorityContext.TryGetCurrentLease(out var currentLease) || currentLease != lease ||
             authorityContext.TryGetLocalAuthorityLease(out var localLease) && localLease == lease ||
@@ -278,6 +330,7 @@ internal class TradeHandler : IHandler
     {
         var command = payload.What;
         if (authorityContext == null ||
+            !CampaignAuthorityCommandSenderValidator.IsRoomHost(payload.Who as NetPeer, players, sessionIdentity) ||
             !authorityContext.TryGetLocalAuthorityLease(out var lease) || !command.Matches(lease) ||
             !players.TryGetPlayer(command.OriginControllerId, out var player) ||
             !PlayerOwnsTrade(player, command.Trade) || players.IsReservedController(player.ControllerId) ||
@@ -322,6 +375,11 @@ internal class TradeHandler : IHandler
         AuthorityLease? requiredLease,
         bool authorityCommand)
     {
+        if (authorityContext?.IsAuthorityKnown == true &&
+            (!authorityContext.TryGetCurrentLease(out var currentLease) ||
+             !message.MatchesAuthorityLease(currentLease)))
+            return;
+
         if (requiredLease.HasValue &&
             (authorityContext == null ||
              !authorityContext.TryGetLocalAuthorityLease(out var localLease) ||
@@ -373,19 +431,21 @@ internal class TradeHandler : IHandler
         if (!TryResolveItemRosterData(message.FromItemRosterData, out var fromItemRosterData) ||
             !TryResolveItemRosterData(message.ToItemRosterData, out var toItemRosterData))
             return;
+        bool localMarketRoster = SettlementMarketRosterPolicy.IsLocalMarketRoster(fromRoster);
         var totalAmount = message.TotalAmount;
         if (!authorityCommand && !TryBeginCommit(peer, message.RequestId)) return;
 
         // Undo any purchases that are no longer present in the roster
         // When looting, taken items are treated as bought items. Don't need to manage changed rosters in these cases
-        if (fromRoster != null)
+        if (fromRoster != null && !localMarketRoster)
         {
             totalAmount = ReconcilePurchases(fromRoster, fromItemRosterData, toItemRosterData, boughtItems, totalAmount);
         }
 
         // Update rosters with new data
         if (toRoster != null) inventoryLogicInterface.UpdateRosterWithData(toRoster, toItemRosterData);
-        if (fromRoster != null) inventoryLogicInterface.UpdateRosterWithData(fromRoster, fromItemRosterData);
+        if (fromRoster != null && !localMarketRoster)
+            inventoryLogicInterface.UpdateRosterWithData(fromRoster, fromItemRosterData);
         else if (message.IsManagingWarehouse)
         {
             // Manage warehouse rosters separately as they involve more complicated logic
@@ -397,7 +457,7 @@ internal class TradeHandler : IHandler
         network.SendAll(new UpdateEquipmentClients(message.CharacterIdEquipmentsData, message.OwnerPartyId, message.InitialHeroId));
 
         inventoryLogicInterface.ApplyDoneLogic(
-            fromRoster,
+            localMarketRoster ? null : fromRoster,
             toRoster,
             message.IsTrading,
             message.CanGainXpFromDiscarding,

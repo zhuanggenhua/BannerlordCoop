@@ -16,6 +16,7 @@ using GameInterface.AutoSync;
 using GameInterface.Services.MapEvents;
 using GameInterface.Services.MapEvents.PlayerPartyInteractions;
 using GameInterface.Services.Players;
+using GameInterface.Services.Players.Data;
 using GameInterface.Tests.Bootstrap;
 using GameInterface.Utils;
 using HarmonyLib;
@@ -37,6 +38,11 @@ public class E2ETestEnvironment : IDisposable
 {
     public IEnumerable<EnvironmentInstance> Clients => IntegrationEnvironment.Clients;
     public EnvironmentInstance Server => IntegrationEnvironment.Server;
+    /// <summary>
+    /// Lease established by the server fixture. E2E helpers that construct a client-originated
+    /// campaign command directly use this to model the lease snapshot a joined client receives.
+    /// </summary>
+    public AuthorityLease CampaignAuthorityLease => Server.Resolve<ISessionIdentity>().CurrentLease;
 
     private TestEnvironment IntegrationEnvironment { get; }
     
@@ -138,6 +144,40 @@ public class E2ETestEnvironment : IDisposable
                 playerManager.IsConnected(player),
                 $"Player '{controllerId}' was not connected to the supplied client peer.");
         });
+    }
+
+    /// <summary>
+    /// Registers a test hero as a connected client so server commands exercise the same sender and
+    /// party-ownership checks as a real joined player.
+    /// </summary>
+    public void RegisterAndConnectPlayer(EnvironmentInstance client, string controllerId, string heroId)
+    {
+        Server.Call(() =>
+        {
+            var playerManager = Server.Resolve<IPlayerManager>();
+            if (playerManager.TryGetPlayer(controllerId, out var existing))
+            {
+                Assert.Equal(heroId, existing.HeroId);
+                return;
+            }
+
+            Assert.True(Server.ObjectManager.TryGetObject<Hero>(heroId, out var hero));
+            Assert.NotNull(hero.PartyBelongedTo);
+            Assert.NotNull(hero.Clan);
+            Assert.NotNull(hero.CharacterObject);
+            Assert.True(Server.ObjectManager.TryGetId(hero.PartyBelongedTo, out var partyId));
+            Assert.True(Server.ObjectManager.TryGetId(hero.Clan, out var clanId));
+            Assert.True(Server.ObjectManager.TryGetId(hero.CharacterObject, out var characterId));
+
+            Assert.True(playerManager.AddPlayer(new Player(
+                controllerId,
+                heroId,
+                partyId,
+                clanId,
+                characterId)));
+        });
+
+        ConnectRegisteredPlayer(client, controllerId);
     }
 
     public void Dispose()

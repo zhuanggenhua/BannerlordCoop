@@ -1,4 +1,5 @@
 ﻿using Common.Messaging;
+using Common;
 using GameInterface.Services.Inventory.Data;
 using ProtoBuf;
 using System.Collections.Generic;
@@ -12,6 +13,14 @@ internal readonly struct CompleteTrade : ICommand
     private static long nextRequestId;
     [ProtoMember(21)]
     public readonly long RequestId;
+    [ProtoMember(22)]
+    public readonly string RoomId;
+    [ProtoMember(23)]
+    public readonly string AuthorityId;
+    [ProtoMember(24)]
+    public readonly string AuthorityControllerId;
+    [ProtoMember(25)]
+    public readonly long Epoch;
     [ProtoMember(1)]
     public readonly string FromItemRosterId;
     [ProtoMember(2)]
@@ -74,7 +83,8 @@ internal readonly struct CompleteTrade : ICommand
         string currentSettlementComponentId,
         TradeItemData[] boughtItems,
         TradeItemData[] soldItems,
-        string forceTransferId = null)
+        string forceTransferId = null,
+        AuthorityLease authorityLease = default)
     {
         RequestId = Interlocked.Increment(ref nextRequestId);
         FromItemRosterId = fromItemRosterId;
@@ -98,5 +108,14 @@ internal readonly struct CompleteTrade : ICommand
         BoughtItems = boughtItems;
         SoldItems = soldItems;
         ForceTransferId = forceTransferId;
+        RoomId = authorityLease.RoomId;
+        AuthorityId = authorityLease.AuthorityId;
+        AuthorityControllerId = authorityLease.AuthorityControllerId;
+        Epoch = authorityLease.Epoch;
     }
+
+    public bool MatchesAuthorityLease(AuthorityLease lease) =>
+        lease.IsValid && !lease.IsPaused &&
+        RoomId == lease.RoomId && AuthorityId == lease.AuthorityId &&
+        AuthorityControllerId == lease.AuthorityControllerId && Epoch == lease.Epoch;
 }

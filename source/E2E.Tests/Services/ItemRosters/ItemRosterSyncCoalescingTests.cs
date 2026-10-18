@@ -1,9 +1,15 @@
 ﻿using Common.Network;
 using Common.Network.Coalescing;
+using E2E.Tests.Environment;
 using E2E.Tests.Environment.Instance;
 using E2E.Tests.Util;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
+using System.Linq;
+using TaleWorlds.Library;
 using Xunit.Abstractions;
 
 namespace E2E.Tests.Services.ItemRosters
@@ -96,6 +102,59 @@ namespace E2E.Tests.Services.ItemRosters
             {
                 Resolve(client, out var roster, out var item);
                 Assert.Equal(2, GetCount(roster, item));
+            }
+        }
+
+        [Fact]
+        public void SettlementMarketStockStaysLocal()
+        {
+            const string marketRosterObjectId = "ItemRoster_market_roster_policy_test";
+            uint marketRosterHandle = Server.Resolve<TestNetworkRouter>()
+                .GetOrCreateFixtureHandle(marketRosterObjectId);
+
+            foreach (var client in Clients)
+            {
+                client.Call(() =>
+                {
+                    var settlement = GameObjectCreator.CreateInitializedObject<Settlement>();
+                    var settlements = Campaign.Current.CampaignObjectManager.Settlements.ToList();
+                    settlements.Add(settlement);
+                    Campaign.Current.CampaignObjectManager.Settlements = new MBReadOnlyList<Settlement>(settlements);
+                    if (client.ObjectManager.TryGetId(settlement.ItemRoster, out _))
+                        Assert.True(client.ObjectManager.Remove(settlement.ItemRoster));
+                    Assert.True(client.ObjectManager.AddExisting(marketRosterObjectId, settlement.ItemRoster, marketRosterHandle));
+                    Assert.True(client.ObjectManager.TryGetObject<ItemObject>(ItemId, out var item));
+
+                    settlement.ItemRoster.AddToCounts(new EquipmentElement(item), 7);
+                    Assert.Equal(7, GetCount(settlement.ItemRoster, item));
+                });
+            }
+
+            Server.Call(() =>
+            {
+                var settlement = GameObjectCreator.CreateInitializedObject<Settlement>();
+                var settlements = Campaign.Current.CampaignObjectManager.Settlements.ToList();
+                settlements.Add(settlement);
+                Campaign.Current.CampaignObjectManager.Settlements = new MBReadOnlyList<Settlement>(settlements);
+                if (Server.ObjectManager.TryGetId(settlement.ItemRoster, out _))
+                    Assert.True(Server.ObjectManager.Remove(settlement.ItemRoster));
+                Assert.True(Server.ObjectManager.AddExisting(marketRosterObjectId, settlement.ItemRoster, marketRosterHandle));
+                Assert.True(Server.ObjectManager.TryGetObject<ItemObject>(ItemId, out var item));
+
+                settlement.ItemRoster.AddToCounts(new EquipmentElement(item), 4);
+                Assert.Equal(4, GetCount(settlement.ItemRoster, item));
+            });
+
+            FlushCoalescer();
+
+            foreach (var client in Clients)
+            {
+                client.Call(() =>
+                {
+                    Assert.True(client.ObjectManager.TryGetObject<ItemRoster>(marketRosterObjectId, out var marketRoster));
+                    Assert.True(client.ObjectManager.TryGetObject<ItemObject>(ItemId, out var item));
+                    Assert.Equal(7, GetCount(marketRoster, item));
+                });
             }
         }
 

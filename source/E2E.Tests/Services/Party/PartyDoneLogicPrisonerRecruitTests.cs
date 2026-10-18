@@ -4,6 +4,7 @@ using E2E.Tests.Environment.Instance;
 using E2E.Tests.Util;
 using GameInterface.Services.MapEventParties;
 using GameInterface.Services.Party.Data;
+using GameInterface.Services.Inventory.Data;
 using GameInterface.Services.Party.Messages;
 using GameInterface.Services.TroopRosters.Data;
 using TaleWorlds.CampaignSystem;
@@ -19,6 +20,7 @@ namespace E2E.Tests.Services.Party;
 /// </summary>
 public class PartyDoneLogicPrisonerRecruitTests : IDisposable
 {
+    private const string TestControllerId = "party-recruit-test-client";
     private E2ETestEnvironment TestEnvironment { get; }
     private EnvironmentInstance Server => TestEnvironment.Server;
     private EnvironmentInstance Client => TestEnvironment.Clients.Single();
@@ -151,7 +153,7 @@ public class PartyDoneLogicPrisonerRecruitTests : IDisposable
             EmptyRosterData(),
             new TroopRosterData(memberDeltas.ToArray()),
             new TroopRosterData(prisonerDeltas.ToArray()),
-            Array.Empty<ItemRosterElement>(),
+            Array.Empty<ItemRosterElementData>(),
             new UpgradedTroopHistoryData(new List<UpgradedTroopHistoryElementData>()),
             leftPartyId: null,
             leftPrisonerRosterId: null,
@@ -162,7 +164,8 @@ public class PartyDoneLogicPrisonerRecruitTests : IDisposable
             default,
             Helpers.PartyScreenHelper.PartyScreenMode.Normal,
             new TroopRosterOrderData(new()),
-            applyReleasedAndTakenPrisonerActions: true);
+            applyReleasedAndTakenPrisonerActions: true,
+            authorityLease: TestEnvironment.CampaignAuthorityLease);
     }
 
     private static IEnumerable<FlattenedTroop> Troops(string characterId, int count, int firstSeed)
@@ -176,6 +179,7 @@ public class PartyDoneLogicPrisonerRecruitTests : IDisposable
 
     private void Send(NetworkCompleteDoneLogic message)
     {
+        TestEnvironment.RegisterAndConnectPlayer(Client, TestControllerId, message.MainHeroId);
         Client.Call(() => Client.Resolve<INetwork>().SendAll(message));
         TestEnvironment.FlushCoalescer();
     }

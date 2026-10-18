@@ -4,6 +4,7 @@ using Common.Network.Coalescing;
 using Coop.Core.Server.Services.ItemRosters.Messages;
 using GameInterface.Services.ItemObjects;
 using GameInterface.Services.ItemRosters.Messages;
+using GameInterface.Services.ItemRosters;
 using GameInterface.Services.ObjectManager;
 using TaleWorlds.CampaignSystem.Roster;
 using TaleWorlds.Core;
@@ -43,6 +44,9 @@ public class ItemRosterMessageHandler : IHandler
     public void Handle(MessagePayload<ItemRosterUpdated> payload)
     {
         var message = payload.What;
+
+        if (SettlementMarketRosterPolicy.IsLocalMarketRoster(message.Instance))
+            return;
 
         if (!objectManager.TryGetHandle(message.Instance, out var itemRosterId)) return;
         if (!TryGetItemHandle(message.Item, out var itemId)) return;
@@ -88,6 +92,12 @@ public class ItemRosterMessageHandler : IHandler
         var message = payload.What;
 
         if (!objectManager.TryGetHandle(message.ItemRoster, out var itemRosterId)) return;
+
+        if (SettlementMarketRosterPolicy.IsLocalMarketRoster(message.ItemRoster))
+        {
+            coalescer.DropInstance(itemRosterId);
+            return;
+        }
 
         // A clear supersedes this roster's pending updates; drop them so the clear isn't trailed by a stale update.
         coalescer.DropInstance(itemRosterId);

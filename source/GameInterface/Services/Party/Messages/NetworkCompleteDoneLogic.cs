@@ -1,4 +1,6 @@
 ﻿using Common.Messaging;
+using Common;
+using GameInterface.Services.Inventory.Data;
 using GameInterface.Services.MapEventParties;
 using GameInterface.Services.Party.Data;
 using GameInterface.Services.TroopRosters.Data;
@@ -6,12 +8,14 @@ using Helpers;
 using ProtoBuf;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.Core;
+using System.Threading;
 
 namespace GameInterface.Services.Party.Messages;
 
 [ProtoContract(SkipConstructor = true)]
 internal readonly struct NetworkCompleteDoneLogic : ICommand
 {
+    private static long nextRequestId;
     [ProtoMember(1)]
     public readonly string MainHeroId;
 
@@ -37,7 +41,7 @@ internal readonly struct NetworkCompleteDoneLogic : ICommand
     public readonly TroopRosterData RightPrisonerRosterData;
 
     [ProtoMember(9)]
-    public readonly ItemRosterElement[] RightOwnerPartyItemRosterData;
+    public readonly ItemRosterElementData[] RightOwnerPartyItemRosterData;
 
     [ProtoMember(10)]
     public readonly UpgradedTroopHistoryData UpgradedTroopHistoryIds;
@@ -81,6 +85,17 @@ internal readonly struct NetworkCompleteDoneLogic : ICommand
     [ProtoMember(23)]
     public readonly string ForceTransferId;
 
+    [ProtoMember(24)]
+    public readonly long RequestId;
+    [ProtoMember(25)]
+    public readonly string RoomId;
+    [ProtoMember(26)]
+    public readonly string AuthorityId;
+    [ProtoMember(27)]
+    public readonly string AuthorityControllerId;
+    [ProtoMember(28)]
+    public readonly long Epoch;
+
     public NetworkCompleteDoneLogic(
         string mainHeroId,
         FlattenedTroop[] releasedPrisonersRoster,
@@ -90,7 +105,7 @@ internal readonly struct NetworkCompleteDoneLogic : ICommand
         TroopRosterData leftPrisonerRosterData,
         TroopRosterData rightMemberRosterData,
         TroopRosterData rightPrisonerRosterData,
-        ItemRosterElement[] rightOwnerPartyItemRosterData,
+        ItemRosterElementData[] rightOwnerPartyItemRosterData,
         UpgradedTroopHistoryData upgradedTroopHistoryIds,
         string leftPartyId,
         string leftPrisonerRosterId,
@@ -104,7 +119,9 @@ internal readonly struct NetworkCompleteDoneLogic : ICommand
         bool applyReleasedAndTakenPrisonerActions = false,
         string donationSettlementId = null,
         FlattenedTroop[] donatedPrisonersRoster = null,
-        string forceTransferId = null)
+        string forceTransferId = null,
+        long requestId = 0,
+        AuthorityLease authorityLease = default)
     {
         MainHeroId = mainHeroId;
         ReleasedPrisonersRoster = releasedPrisonersRoster;
@@ -114,7 +131,9 @@ internal readonly struct NetworkCompleteDoneLogic : ICommand
         LeftPrisonerRosterData = leftPrisonerRosterData;
         RightMemberRosterData = rightMemberRosterData;
         RightPrisonerRosterData = rightPrisonerRosterData;
-        RightOwnerPartyItemRosterData = rightOwnerPartyItemRosterData;
+        RightOwnerPartyItemRosterData = rightOwnerPartyItemRosterData == null
+            ? null
+            : (ItemRosterElementData[])rightOwnerPartyItemRosterData.Clone();
         UpgradedTroopHistoryIds = upgradedTroopHistoryIds;
         LeftPartyId = leftPartyId;
         LeftPrisonerRosterId = leftPrisonerRosterId;
@@ -129,5 +148,15 @@ internal readonly struct NetworkCompleteDoneLogic : ICommand
         DonationSettlementId = donationSettlementId;
         DonatedPrisonersRoster = donatedPrisonersRoster;
         ForceTransferId = forceTransferId;
+        RequestId = requestId > 0 ? requestId : Interlocked.Increment(ref nextRequestId);
+        RoomId = authorityLease.RoomId;
+        AuthorityId = authorityLease.AuthorityId;
+        AuthorityControllerId = authorityLease.AuthorityControllerId;
+        Epoch = authorityLease.Epoch;
     }
+
+    public bool MatchesAuthorityLease(AuthorityLease lease) =>
+        lease.IsValid && !lease.IsPaused &&
+        RoomId == lease.RoomId && AuthorityId == lease.AuthorityId &&
+        AuthorityControllerId == lease.AuthorityControllerId && Epoch == lease.Epoch;
 }

@@ -3,6 +3,7 @@ using Common.Messaging;
 using Common.Network;
 using Common.PacketHandlers;
 using Common.Serialization;
+using Common.Util;
 using Coop.Tests.Mocks;
 using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Inventory.Data;
@@ -101,6 +102,24 @@ public sealed class CampaignAuthorityTradeRoutingTests
             CreateTrade(partyId: "party-b")));
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void LocalMarketRosterCommitUsesAllowedThreadOnlyOnClients(bool isClient)
+    {
+        var roster = new ItemRoster();
+        var elements = Array.Empty<ItemRosterElement>();
+        var inventory = new Mock<IInventoryLogicInterface>();
+        bool calledAllowed = false;
+        inventory.Setup(logic => logic.UpdateRosterWithData(roster, elements))
+            .Callback(() => calledAllowed = AllowedThread.IsThisThreadAllowed());
+
+        TradeHandler.ApplyLocalMarketRosterUpdate(inventory.Object, roster, elements, isClient);
+
+        Assert.Equal(isClient, calledAllowed);
+        Assert.False(AllowedThread.IsThisThreadAllowed());
+    }
+
     [Fact]
     public void AuthorityTradeCommandRoundTripsThroughTheMessageWireFormat()
     {
@@ -183,7 +202,8 @@ public sealed class CampaignAuthorityTradeRoutingTests
         isSettlementComponentNull: true,
         currentSettlementComponentId: null,
         boughtItems: new[] { new TradeItemData(CreateItemData("trade_goods", 2), 300) },
-        soldItems: new[] { new TradeItemData(CreateItemData("trade_goods", 1), 180) });
+        soldItems: new[] { new TradeItemData(CreateItemData("trade_goods", 1), 180) },
+        authorityLease: CurrentLease);
 
     private static ItemRosterElementData CreateItemData(string itemId, int amount) =>
         new(new ItemObjectData($"ItemObject_{itemId}", "ItemModifier_fine"), amount);

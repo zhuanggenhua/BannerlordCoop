@@ -4,6 +4,7 @@ using E2E.Tests.Environment.Instance;
 using E2E.Tests.Util;
 using GameInterface.Services.MapEventParties;
 using GameInterface.Services.Party.Data;
+using GameInterface.Services.Inventory.Data;
 using GameInterface.Services.Party.Messages;
 using GameInterface.Services.TroopRosters.Data;
 using System;
@@ -21,6 +22,7 @@ namespace E2E.Tests.Services.Party;
 
 public class PartyDoneLogicPrisonerDonationTests : IDisposable
 {
+    private const string TestControllerId = "party-donation-test-client";
     private E2ETestEnvironment TestEnvironment { get; }
     private EnvironmentInstance Server => TestEnvironment.Server;
     private EnvironmentInstance Client => TestEnvironment.Clients.Single();
@@ -192,7 +194,7 @@ public class PartyDoneLogicPrisonerDonationTests : IDisposable
             settlementDelta,
             EmptyRosterData(),
             playerDelta,
-            Array.Empty<ItemRosterElement>(),
+            Array.Empty<ItemRosterElementData>(),
             new UpgradedTroopHistoryData(new List<UpgradedTroopHistoryElementData>()),
             leftPartyId: null,
             leftPrisonerRosterId: null,
@@ -205,11 +207,13 @@ public class PartyDoneLogicPrisonerDonationTests : IDisposable
             new TroopRosterOrderData(new()),
             applyReleasedAndTakenPrisonerActions: false,
             donationSettlementId: fixture.SettlementId,
-            donatedPrisonersRoster: donatedPrisoners);
+            donatedPrisonersRoster: donatedPrisoners,
+            authorityLease: TestEnvironment.CampaignAuthorityLease);
     }
 
     private void Send(NetworkCompleteDoneLogic message)
     {
+        TestEnvironment.RegisterAndConnectPlayer(Client, TestControllerId, message.MainHeroId);
         Client.Call(() => Client.Resolve<INetwork>().SendAll(message));
         TestEnvironment.FlushCoalescer();
     }
