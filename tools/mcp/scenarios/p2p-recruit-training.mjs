@@ -22,12 +22,15 @@ Writes JSONL, per-feature summary JSON and BMP screenshot references. Always
 requests stop_run and requires both owned process trees to be gone.
 No deployment, private IPC, XP setters, or retry of uncertain mutations.
 --help and --self-test [recorded.jsonl] do not import the SDK, connect, deploy or
-launch games. The optional file replays recorded public MCP response wrappers.
+launch games. The optional file replays public MCP JSONL or an NPC registration receipt.
 Self-test verifies offline parsing/assertion fixtures only, not live acceptance.`;
 
 const INSTANCES = ['server', 'client1'];
 const CRITICAL_KEYS = ['partyIdentityHash', 'rosterCountsHash', 'rosterXpHash',
     'volunteerHash', 'heroGoldHash', 'nextHandle'];
+const PLAYER_CRITICAL_KEYS = ['gold', 'troops', 'wounded', 'heroId', 'clanId', 'characterId',
+    'partyId', 'partyStringId', 'heroStringId', 'settlementId', 'x', 'y', 'registeredPlayers',
+    'heroRegistrations', 'partyRegistrations', 'clanRegistrations'];
 const REQUIRED_COMMANDS = ['coop.debug.authority.state', 'coop.debug.authority.world_state',
     'coop.debug.authority.availability', 'coop.debug.authority.allocation_probe',
     'coop.debug.authority.training_daily', 'coop.debug.recruitment.inspect',
@@ -199,6 +202,24 @@ function assertSettlementReplicas(inspections, controller, settlement) {
         return player;
     });
 }
+function assertPlayerReplicas(pair) {
+    assert.equal(pair.length, 2, 'Expected two player-state viewpoints');
+    const [left, right] = pair.map(rows => {
+        assert.equal(rows.length, 2, 'Expected two player states per viewpoint');
+        const players = new Map(rows.map(row => [row.controllerId, row]));
+        assert.equal(players.size, 2, 'Duplicate controller in player states');
+        return players;
+    });
+    assert.deepEqual([...left.keys()].sort(), [...right.keys()].sort());
+    for (const [controller, expected] of left) {
+        const actual = right.get(controller);
+        for (const key of PLAYER_CRITICAL_KEYS) {
+            assert.ok(Object.hasOwn(expected, key) && Object.hasOwn(actual, key),
+                `Missing player-state field ${controller}/${key}`);
+            assert.equal(actual[key], expected[key], `Player-state mismatch: ${controller}/${key}`);
+        }
+    }
+}
 function assertActors(states, initial) {
     for (let i = 0; i < states.length; i++) {
         assert.equal(states[i].mainHero, initial[i].mainHero, `${INSTANCES[i]} native MainHero changed`);
@@ -317,6 +338,7 @@ async function run(config) {
             const entries = [];
             for (const actor of initial) {
                 const entry = await playerState(instance, actor.controller);
+                assert.equal(entry.controllerId, actor.controller);
                 assert.equal(entry.active, true); assert.equal(entry.partyRegistrations, 1);
                 assert.equal(entry.heroRegistrations, 1); assert.equal(entry.clanRegistrations, 1);
                 assert.equal(entry.registeredPlayers, 2);
@@ -628,8 +650,8 @@ async function run(config) {
             // B must leave its native town menu; A may remain inside as an observer for recruit 4.
             if ((await inspect('client1')).settlement) {
                 await command('client1', 'coop.debug.siege.leave_settlement', [], true);
-                await poll('B leaves native settlement', async () => assert.equal((await inspect('client1')).settlement, null));
             }
+            await settlementReplicas('client1', null, 'B leaves native settlement on both replicas');
             return tickForFiveSeconds('client1');
         });
         await feature('B-to-A-XP-and-number-continuity', async () => {
@@ -648,9 +670,13 @@ async function run(config) {
             assertTraining(callback.before, callback.after, true); await syncNpc(trainedNpc, callback.after);
             return { npc: trainedNpc, callback, worlds: await stableWorld('A daily training world') };
         });
-        await feature('final-critical-world-and-actors', async () => ({
-            states: await awaitWriter(initial[0].controller), worlds: await pause(), registrations: await registrations(),
-        }));
+        await feature('final-critical-world-and-actors', async () => {
+            const states = await awaitWriter(initial[0].controller), worlds = await pause();
+            const players = await poll('final critical player replicas', async () => {
+                const values = await registrations(); assertPlayerReplicas(values); return values;
+            });
+            return { states, worlds, registrations: players };
+        });
     } catch (error) {
         summary.failed = { message: error.message, stack: error.stack };
         await emit({ phase: 'scenario_failure', ...summary.failed }); process.exitCode = 1;
@@ -752,9 +778,33 @@ async function selfTest(recordedPath) {
     assert.equal(logChunk({ text: 'log', cursor: 'opaque', reset: false, hasMore: false, length: 3 }).text, 'log');
     assert.throws(() => logChunk({ text: 'log', hasMore: false }));
     if (recordedPath) {
+        const recordedText = await readFile(resolve(recordedPath), 'utf8');
+        let receipt;
+        try { receipt = JSON.parse(recordedText); } catch {}
+        if (Array.isArray(receipt?.registrations)) {
+            const rows = receipt.registrations;
+            assert.equal(rows.length, 4, 'Expected four recorded native player states');
+            const viewpoints = [...new Set(rows.map(row => row.localControllerId))];
+            assert.equal(viewpoints.length, 2);
+            const pair = viewpoints.map(controller => rows.filter(row => row.localControllerId === controller));
+            assertPlayerReplicas(pair);
+            const rejected = ['settlementId', 'x', 'y', 'gold', 'troops'];
+            for (const key of rejected) {
+                const changed = JSON.parse(JSON.stringify(pair));
+                changed[1][0][key] = key === 'settlementId' ? 'stale_recorded_settlement' : changed[1][0][key] + 1;
+                assert.throws(() => assertPlayerReplicas(changed), undefined, `Accepted changed ${key}`);
+            }
+            const localOnly = JSON.parse(JSON.stringify(pair));
+            localOnly[1][0].items = [{ id: 'local_shop_item' }];
+            assertPlayerReplicas(localOnly);
+            console.log(JSON.stringify({ offlineNativePlayerReplay: { runId: receipt.runId, rows: rows.length,
+                criticalFields: PLAYER_CRITICAL_KEYS, rejected }, record: resolve(recordedPath) }));
+            console.log('PASS offline native player-state replay/assertions; no SDK, transport, game, or live scenario executed.');
+            return;
+        }
         const replayed = { start_client: 0, stop_run: 0, read_logs: 0, recruitmentInspect: 0,
             nativeRecruitmentCart: 0, nativeMap: 0, campaignReadyWhileMission: 0 };
-        for (const line of (await readFile(resolve(recordedPath), 'utf8')).split(/\r?\n/).filter(Boolean)) {
+        for (const line of recordedText.split(/\r?\n/).filter(Boolean)) {
             const entry = JSON.parse(line);
             if (!entry.data) continue;
             if (entry.name === 'start_client') { assertClientLaunched(entry.data); replayed.start_client++; }
