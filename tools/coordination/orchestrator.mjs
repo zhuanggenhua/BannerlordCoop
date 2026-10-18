@@ -8,7 +8,8 @@ import { fileURLToPath } from 'node:url';
 const digest = data => crypto.createHash('sha256').update(data).digest('hex');
 const json = file => JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
 const same = (a, b) => JSON.stringify([...a].sort()) === JSON.stringify([...b].sort());
-const writing = task => !task.readOnly && ['created', 'assigned', 'needs_fix', 'interrupt_requested'].includes(task.status);
+const writing = task => !task.readOnly && !task.integration && ['created', 'assigned', 'needs_fix', 'interrupt_requested'].includes(task.status);
+const occupiesSlot = task => task.agentId && ['assigned', 'interrupt_requested'].includes(task.status);
 const canonical = value => fs.realpathSync.native(path.resolve(value));
 const within = (root, value) => {
   const relative = path.relative(root, value);
@@ -129,22 +130,29 @@ export class Coordinator {
     });
   }
 
-  create({ id, stream, scope, readOnly = false, scopeAuthorization, objective }) {
+  create({ id, stream, scope, readOnly = false, scopeAuthorization, objective, followupOf }) {
     return this.transaction(state => {
       this.coordinator(state);
       this.clean(this.repo);
       if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(id ?? '')) throw new Error('id must be a short lowercase slug');
       if (state.tasks[id]) throw new Error('task id already registered');
+      const parent = followupOf ? state.tasks[followupOf] : null;
+      if (followupOf && (!parent?.integration || parent.status !== 'needs_fix')) throw new Error('follow-up requires an integrated task awaiting repair');
+      stream ??= parent?.stream;
+      scope ??= parent?.scope;
+      scopeAuthorization ??= parent?.scopeAuthorization;
+      objective ??= parent ? `Repair failed integration verification for ${parent.id}` : undefined;
       const definition = state.workstreams.find(item => item.id === stream);
       if (!definition) throw new Error('unknown workstream');
       if (objective !== undefined) requireText(objective, 'objective');
-      if (objective && objective !== definition.next && !scopeAuthorization?.trim()) throw new Error('independent objective requires scopeAuthorization');
+      if (objective && objective !== definition.next && !scopeAuthorization?.trim() && !parent) throw new Error('independent objective requires scopeAuthorization');
       if (this.finished(state, stream) && !scopeAuthorization?.trim()) throw new Error('current backlog item already completed; register an independent task explicitly');
       const taskScope = scopes(scope ?? definition.scope);
+      if (parent && taskScope.some(value => !parent.scope.some(allowed => covers(allowed, value)))) throw new Error('follow-up scope exceeds original task scope');
       if (!readOnly && !taskScope.length) throw new Error('writing task requires scope');
       if (taskScope.some(value => !definition.scope.some(allowed => covers(allowed.replace(/\/+$/, ''), value))) && !scopeAuthorization?.trim()) throw new Error('scope exceeds workstream; coordinator scopeAuthorization required');
       const blocked = definition.dependencies.filter(dependency => !this.finished(state, dependency));
-      if (!readOnly && blocked.length && !scopeAuthorization?.trim()) throw new Error(`dependencies incomplete: ${blocked.join(', ')}`);
+      if (!readOnly && blocked.length && !scopeAuthorization?.trim() && !parent) throw new Error(`dependencies incomplete: ${blocked.join(', ')}`);
       const active = Object.values(state.tasks).filter(writing);
       if (!readOnly && active.length >= state.maxWorkers) throw new Error('three writing workers already reserved');
       if (!readOnly && active.some(task => overlaps(task.scope, taskScope))) throw new Error('scope overlaps an active writer');
@@ -153,7 +161,7 @@ export class Coordinator {
       if (!within(state.managedRoot, worktree) || fs.existsSync(worktree)) throw new Error('worktree directory already exists or is unsafe');
       if (this.git(['branch', '--list', branch])) throw new Error('branch already exists');
       const baseCommit = this.git(['rev-parse', 'HEAD']);
-      const task = { id, stream, objective: objective ?? definition.next, queueItem: definition.next, independent: Boolean(scopeAuthorization?.trim()), scope: taskScope, readOnly, scopeAuthorization, worktree, branch, baseCommit, status: 'created', modelPolicy: 'inherit-parent', createdAt: new Date().toISOString(), registeredBy: 'codex-coordination' };
+      const task = { id, stream, objective: objective ?? definition.next, queueItem: definition.next, independent: Boolean(scopeAuthorization?.trim()) || Boolean(parent), followupOf, scope: taskScope, readOnly, scopeAuthorization, worktree, branch, baseCommit, status: 'created', owner: 'coordinator', modelPolicy: 'inherit-parent', createdAt: new Date().toISOString(), registeredBy: 'codex-coordination' };
       this.git(['worktree', 'add', '-b', branch, worktree, baseCommit]);
       try {
         for (const relative of ['mb2', 'source/packages']) {
@@ -163,6 +171,10 @@ export class Coordinator {
         }
       } catch (error) { task.setupWarning = error.message; }
       state.tasks[id] = task;
+      if (parent) {
+        parent.followups = [...(parent.followups ?? []), id];
+        parent.nextAction = `Review, integrate and verify follow-up ${id}; then rerun verify --id ${parent.id} on the clean coordinator HEAD.`;
+      }
       return { state, value: task };
     });
   }
@@ -179,11 +191,16 @@ export class Coordinator {
       const task = this.task(state, id);
       requireText(agentId, 'agentId');
       if (!['native', 'cli'].includes(adapter)) throw new Error('adapter must be native or cli');
+      if (task.integration) throw new Error('integrated task remains coordinator-owned; create --followup-of for worker changes');
       if (!['created', 'needs_fix', 'interrupted'].includes(task.status)) throw new Error('task is not assignable');
+      const occupied = Object.values(state.tasks).filter(other => other.id !== id && occupiesSlot(other));
+      if (occupied.length >= state.maxWorkers) throw new Error('three worker slots already occupied');
+      if (occupied.some(other => other.agentId === agentId)) throw new Error('worker agent already reserved');
       const others = Object.values(state.tasks).filter(other => other.id !== id && writing(other));
       if (!task.readOnly && (others.length >= state.maxWorkers || others.some(other => overlaps(other.scope, task.scope) || other.agentId === agentId || other.worktree === task.worktree))) throw new Error('worker, directory or scope already reserved');
       if (canonical(task.worktree) !== task.worktree) throw new Error('worktree resolves outside registered directory');
       task.agentId = agentId;
+      task.owner = agentId;
       task.adapter = adapter;
       task.status = 'assigned';
       task.prompt = `Task ${id}: ${task.objective}. Work only in ${task.worktree}, branch ${task.branch}, base ${task.baseCommit}. Scope: ${task.scope.join(', ')}. Model: inherit parent. No deployment, games, push or PR. Compile with -p:ModName=. Commit verified work; submit handoff.schema.json with actual tests, exit codes and log hashes. Native agent calls are performed by the root chat, not this Node process.`;
@@ -270,6 +287,8 @@ export class Coordinator {
         if (commits.length) this.git(['cherry-pick', ...commits]);
         task.integration = { previousHead, head: this.git(['rev-parse', 'HEAD']), commits, at: new Date().toISOString() };
         task.status = 'integrated';
+        task.owner = 'coordinator';
+        task.nextAction = `Run actual coordinator verification with verify --id ${id}.`;
       } catch (error) {
         let abortError;
         try { this.git(['cherry-pick', '--abort']); } catch (abort) { abortError = abort.message; }
@@ -283,7 +302,7 @@ export class Coordinator {
   verify(id, { command, timeoutMs = 600000 }) {
     return this.transaction(state => {
       const task = this.task(state, id);
-      if (!['integrated', 'verified'].includes(task.status)) throw new Error('verification requires integration');
+      if (!task.integration || !['integrated', 'verified', 'needs_fix'].includes(task.status)) throw new Error('verification requires integration');
       this.clean(this.repo);
       if (!Array.isArray(command) || !command.length || command.some(value => typeof value !== 'string' || !value)) throw new Error('actual test command array required');
       if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 3600000) throw new Error('timeout must be 1..3600000 ms');
@@ -297,9 +316,14 @@ export class Coordinator {
       fs.mkdirSync(path.dirname(log), { recursive: true });
       const content = `$ ${JSON.stringify(command)}\nHEAD ${head}\n${result.stdout ?? ''}${result.stderr ?? ''}${result.error?.stack ?? ''}\nexitCode=${result.status}\n`;
       fs.writeFileSync(log, content);
+      task.verificationHistory ??= [];
+      if (task.verification && !task.verificationHistory.some(receipt => receipt.log === task.verification.log)) task.verificationHistory.push(task.verification);
       task.verification = { head, command, exitCode: result.status, log, sha256: digest(content), at: new Date().toISOString() };
+      task.verificationHistory.push(task.verification);
       task.status = result.status === 0 && !result.error ? 'verified' : 'needs_fix';
       try { this.clean(this.repo); } catch (error) { task.status = 'needs_fix'; task.verification.dirtyError = error.message; }
+      task.owner = 'coordinator';
+      task.nextAction = task.status === 'verified' ? `Close task ${id}, then clean its verified worktree.` : `Create a repair task with create --followup-of ${id}; integrate its reviewed fix, then rerun verify --id ${id} on the clean coordinator HEAD.`;
       return { state, value: task };
     });
   }
@@ -319,7 +343,7 @@ export class Coordinator {
   interrupt(id, { reason, agentStatus } = {}) {
     return this.transaction(state => {
       const task = this.task(state, id);
-      if (['closed', 'integrated', 'verified'].includes(task.status)) throw new Error('task no longer has a writing worker');
+      if (task.integration || ['closed', 'integrated', 'verified'].includes(task.status)) throw new Error('task no longer has a writing worker');
       requireText(reason, 'interrupt reason');
       if (agentStatus && !['idle', 'completed', 'interrupted'].includes(agentStatus)) throw new Error('invalid agent stop receipt');
       task.status = agentStatus ? 'interrupted' : 'interrupt_requested';
@@ -349,6 +373,7 @@ export class Coordinator {
 const help = `Usage: node tools/coordination/orchestrator.mjs --root <repo> <command> [options]
 Commands: init | status | next | create | assign | submit | review | integrate | verify | close | interrupt | cleanup
 create --id slug --stream authority [--scope path] [--read-only] [--scope-authorization coordinator-reason] [--objective text]
+create --id fix-slug --followup-of failed-integrated-task [--scope narrower-path]
 assign --id slug --agent native-agent-id [--adapter native|cli]
 submit --id slug --handoff absolute-handoff.json
 review --id slug --reviewer independent-agent-id --decision pass|needs_fix --notes text
@@ -377,7 +402,7 @@ export function main(args = process.argv.slice(2)) {
   const command = positional[0];
   let result;
   if (['init', 'status', 'next'].includes(command)) result = board[command]();
-  else if (command === 'create') result = board.create({ id: options.id, stream: options.stream, scope: options.scope.length ? options.scope : undefined, readOnly: options.readOnly, scopeAuthorization: options['scope-authorization'], objective: options.objective });
+  else if (command === 'create') result = board.create({ id: options.id, stream: options.stream, scope: options.scope.length ? options.scope : undefined, readOnly: options.readOnly, scopeAuthorization: options['scope-authorization'], objective: options.objective, followupOf: options['followup-of'] });
   else if (command === 'assign') result = board.assign(options.id, { agentId: options.agent, adapter: options.adapter });
   else if (command === 'submit') result = board.submit(options.id, json(path.resolve(requireText(options.handoff, 'handoff file'))));
   else if (command === 'review') result = board.review(options.id, { reviewerId: options.reviewer, decision: options.decision, notes: options.notes });

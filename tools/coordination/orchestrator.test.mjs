@@ -90,6 +90,17 @@ test('writer budget, dependencies and native agent ownership are enforced', t =>
   assert.match(board.status().tasks.authority.prompt, /inherit parent/);
 });
 
+test('read-only workers share three slots and release them only after observed stop', t => {
+  const { board } = fixture(t);
+  for (const id of ['read-one', 'read-two', 'read-three', 'read-four']) board.create({ id, stream: 'review', readOnly: true, scope: [] });
+  for (const id of ['read-one', 'read-two', 'read-three']) board.assign(id, { agentId: `/root/${id}`, adapter: id === 'read-two' ? 'cli' : 'native' });
+  assert.throws(() => board.assign('read-four', { agentId: '/root/read-four' }), /three worker slots/);
+  board.interrupt('read-one', { reason: 'Coordinator requested native agent interruption' });
+  assert.throws(() => board.assign('read-four', { agentId: '/root/read-four' }), /three worker slots/);
+  board.interrupt('read-one', { reason: 'Observed native agent idle after interrupt', agentStatus: 'idle' });
+  assert.equal(board.assign('read-four', { agentId: '/root/read-four' }).status, 'assigned');
+});
+
 test('cross-process lock refuses concurrent state mutation', t => {
   const { board } = fixture(t);
   fs.writeFileSync(board.lockFile, JSON.stringify({ pid: process.pid }));
@@ -190,6 +201,55 @@ test('failed coordinator test records its actual nonzero exit and prevents compl
   assert.equal(failed.verification.exitCode, 7);
   assert.match(fs.readFileSync(failed.verification.log, 'utf8'), /real failure/);
   assert.throws(() => board.close(task.id), /post-integration/);
+});
+
+test('failed integrated verification recovers through a linked fix without reopening the original worker', t => {
+  const { board, directory, repo } = fixture(t);
+  const { task, handoff } = workerResult(board, directory);
+  board.submit(task.id, handoff);
+  approve(board, task.id);
+  board.integrate(task.id);
+  const command = [process.execPath, '-e', "require('node:assert/strict').equal(require('node:fs').readFileSync('source/authority/result.txt','utf8'),'repaired change\\n');console.log('repair verified');"];
+  const failed = board.verify(task.id, { command });
+  assert.equal(failed.status, 'needs_fix');
+  assert.equal(failed.owner, 'coordinator');
+  assert.match(failed.nextAction, /--followup-of implementation/);
+  assert.throws(() => board.assign(task.id, { agentId: '/root/reopened' }), /coordinator-owned/);
+  assert.throws(() => board.submit(task.id, handoff), /new follow-up task/);
+  assert.throws(() => board.interrupt(task.id, { reason: 'invalid worker reopen' }), /no longer has a writing worker/);
+  const originalHandoff = JSON.stringify(failed.handoff);
+  assert.throws(() => board.create({ id: 'bad-fix', followupOf: task.id, scope: ['source/checkpoint'] }), /exceeds original/);
+  const fix = board.create({ id: 'repair', followupOf: task.id });
+  assert.equal(fix.baseCommit, git(repo, 'rev-parse', 'HEAD'));
+  assert.equal(fix.followupOf, task.id);
+  assert.equal(fix.independent, true);
+  assert.deepEqual(board.status().tasks[task.id].followups, [fix.id]);
+  board.assign(fix.id, { agentId: '/root/repair' });
+  fs.writeFileSync(path.join(fix.worktree, handoff.changedFiles[0]), 'repaired change\n');
+  git(fix.worktree, 'add', '.');
+  git(fix.worktree, 'commit', '-m', 'Repair failed integration expectation');
+  const result = spawnSync(command[0], command.slice(1), { cwd: fix.worktree, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  const log = path.join(directory, 'repair.log');
+  fs.writeFileSync(log, result.stdout + result.stderr);
+  board.submit(fix.id, { ...handoff, taskId: fix.id, baseCommit: fix.baseCommit, commit: git(fix.worktree, 'rev-parse', 'HEAD'), tests: [{ command: JSON.stringify(command), exitCode: result.status, log, sha256: createHash('sha256').update(fs.readFileSync(log)).digest('hex') }], evidence: [log] });
+  approve(board, fix.id);
+  board.integrate(fix.id);
+  board.verify(fix.id, { command });
+  board.close(fix.id);
+  board.cleanup(fix.id);
+  const recovered = board.verify(task.id, { command });
+  assert.equal(recovered.status, 'verified');
+  assert.equal(recovered.verificationHistory.length, 2);
+  assert.equal(recovered.verificationHistory[0].exitCode, 1);
+  assert.equal(recovered.verificationHistory[1].exitCode, 0);
+  assert.equal(JSON.stringify(recovered.handoff), originalHandoff);
+  assert.equal(git(task.worktree, 'rev-parse', 'HEAD'), handoff.commit);
+  board.close(task.id);
+  board.cleanup(task.id);
+  assert.equal(board.status().tasks[task.id].status, 'closed');
+  assert.equal(fs.existsSync(task.worktree), false);
+  assert.equal(fs.existsSync(failed.verification.log), true);
 });
 
 test('interrupt retains writer reservation until the root reports actual agent stop', t => {
