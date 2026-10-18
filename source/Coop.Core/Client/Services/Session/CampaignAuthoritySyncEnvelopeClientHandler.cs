@@ -79,7 +79,7 @@ public sealed class CampaignAuthoritySyncEnvelopeClientHandler : IHandler
         }
 
         // Lease snapshots and envelopes share this queue, so the preceding epoch finishes first.
-        messageBroker.Publish(payload.Who, innerMessage);
+        messageBroker.PublishRuntime(payload.Who, innerMessage);
     }
 
     private bool TryAdvanceWatermark(NetworkCampaignAuthoritySyncEnvelope envelope)

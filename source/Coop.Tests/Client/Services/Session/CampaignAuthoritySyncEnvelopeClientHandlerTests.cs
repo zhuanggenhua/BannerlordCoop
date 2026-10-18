@@ -16,9 +16,26 @@ namespace Coop.Tests.Client.Services.Session;
 public class CampaignAuthoritySyncEnvelopeClientHandlerTests
 {
     [Fact]
+    public void DeliversGenericObjectCreationToConcreteProductionBrokerSubscribers()
+    {
+        var broker = new MessageBroker();
+        var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
+        var identity = new SessionIdentity();
+        Assert.True(identity.TryApply(new AuthorityLease("room", "authority", "host", 2), "host"));
+        var received = new System.Collections.Generic.List<uint>();
+        broker.Subscribe<global::GameInterface.Registry.Auto.NetworkCreateInstance<TaleWorlds.CampaignSystem.MapEvents.MapEvent>>(
+            payload => received.Add(payload.What.InstanceHandle));
+        using var handler = new CampaignAuthoritySyncEnvelopeClientHandler(broker, identity, serializer);
+        var message = new global::GameInterface.Registry.Auto.NetworkCreateInstance<TaleWorlds.CampaignSystem.MapEvents.MapEvent>("Created_1119", 45029);
+        broker.Publish(this, new NetworkCampaignAuthoritySyncEnvelope("room", "authority", "host", 2, 1, serializer.Serialize(message)));
+        GameThread.Run(() => { }, blocking: true);
+        Assert.Equal(new[] { 45029u }, received);
+    }
+
+    [Fact]
     public void LeaseTransitionsPreserveFinalOldEpochDeltaAndFirstNewEpochDeltaInApplyOrder()
     {
-        var broker = new TestMessageBroker();
+        var broker = new MessageBroker();
         var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
         var identity = new SessionIdentity();
         Assert.True(identity.TryApply(new AuthorityLease("room-a", "authority-a", "host", 4), "host"));
@@ -58,7 +75,7 @@ public class CampaignAuthoritySyncEnvelopeClientHandlerTests
     public void AppliesRemoteAuthorityPartyBehaviorDeltaUnderConfirmedLease()
     {
         _ = new SurrogateCollection();
-        var messageBroker = new TestMessageBroker();
+        var messageBroker = new MessageBroker();
         var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
         var identity = new SessionIdentity();
         Assert.True(identity.TryApply(new AuthorityLease("room-a", "authority-b", "guest", 2), "host"));
@@ -86,7 +103,7 @@ public class CampaignAuthoritySyncEnvelopeClientHandlerTests
     [Fact]
     public void AppliesOnlyCurrentLeaseEnvelopesAndRejectsReplays()
     {
-        var messageBroker = new TestMessageBroker();
+        var messageBroker = new MessageBroker();
         var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
         var identity = new SessionIdentity();
         Assert.True(identity.TryApply(new AuthorityLease("room-a", "authority-a", "host", 4), "host"));

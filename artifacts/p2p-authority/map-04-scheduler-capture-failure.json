@@ -1,0 +1,551 @@
+{
+  "runId": "a9983b8419e743a1b411c82ec0d49071",
+  "sourceCommit": "e89a547",
+  "status": "failed_paused_before_remote_activation",
+  "initialLeaseDelivery": "passed",
+  "failure": "Source scheduler capture dereferenced missing readonly serial scratch list after save restoration",
+  "instances": [
+    {
+      "name": "server",
+      "identity": {
+        "pid": 23688,
+        "startedUtc": "2026-10-18T03:59:08.0212752Z",
+        "role": "server",
+        "platformId": "LocalA",
+        "runToken": "a9983b8419e743a1b411c82ec0d49071"
+      },
+      "processAlive": true,
+      "status": {
+        "protocolVersion": 1,
+        "uiCapability": "bounded-ui-layers-v1",
+        "pid": 23688,
+        "role": "server",
+        "platformId": "LocalA",
+        "runToken": "a9983b8419e743a1b411c82ec0d49071",
+        "buildVersion": "0.1.7+e89a54702cd9ee6660d17f2be05f91424b5c085a",
+        "assemblyMvid": "6059e0bb-e3ca-48cd-bd48-8363e6f20bd4",
+        "loadedAssemblies": [
+          {
+            "name": "Common",
+            "version": "1.0.0.0",
+            "mvid": "b95d11db-ddcb-48dd-b213-a13fc6120a3f",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Common.dll"
+          },
+          {
+            "name": "Coop",
+            "version": "1.0.0.0",
+            "mvid": "6059e0bb-e3ca-48cd-bd48-8363e6f20bd4",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.dll"
+          },
+          {
+            "name": "Coop.Core",
+            "version": "1.0.0.0",
+            "mvid": "a4caf901-46ca-4513-af32-cb31101082ae",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Core.dll"
+          },
+          {
+            "name": "Coop.Steam",
+            "version": "1.0.0.0",
+            "mvid": "92061c16-6640-4e1c-89ef-7e72acfb0938",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Steam.dll"
+          },
+          {
+            "name": "GameInterface",
+            "version": "1.0.0.0",
+            "mvid": "3929bd5a-7f50-4970-8cd8-e3be7a784c9b",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\GameInterface.dll"
+          },
+          {
+            "name": "Missions",
+            "version": "1.0.0.0",
+            "mvid": "72ca5f2b-72cc-4583-872c-3b2d2beb33e4",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Missions.dll"
+          }
+        ],
+        "processStartedUtc": "2026-10-18T03:59:08.0212752Z",
+        "logPath": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\bin\\Win64_Shipping_Client\\Coop_server.log",
+        "gameThreadInitialized": true,
+        "gameThreadQueueDepth": 1,
+        "commandRegistryReady": true,
+        "activeState": "TaleWorlds.CampaignSystem.GameState.MapState",
+        "topScreen": "SandBox.View.Map.MapScreen",
+        "activeMenu": null,
+        "campaignLoaded": true,
+        "requestedSaveName": "P1B_DirectIP_Recruit",
+        "loadedCampaignId": "RVLgBrkkFApz",
+        "loadedSaveNameConfirmed": false,
+        "missionActive": false,
+        "coopRunning": true,
+        "coopState": "Coop.Core.Server.States.ServerRunningState",
+        "registeredPlayers": 2,
+        "registeredPlayerCount": 2,
+        "connectedPlayerCount": 2,
+        "registeredControllerIds": [
+          "LocalA",
+          "testclient1"
+        ],
+        "connectedControllerIds": [
+          "LocalA",
+          "testclient1"
+        ],
+        "deferredClientJoinEnabled": false,
+        "readyForClientJoin": false,
+        "deferredClientJoinAttempted": false,
+        "readyForCampaignTests": true,
+        "readyForMissionTests": false
+      },
+      "error": null,
+      "processTreeAlive": true,
+      "cleanupComplete": false
+    },
+    {
+      "name": "client1",
+      "identity": {
+        "pid": 28624,
+        "startedUtc": "2026-10-18T03:59:56.2534244Z",
+        "role": "client",
+        "platformId": "testclient1",
+        "runToken": "a9983b8419e743a1b411c82ec0d49071"
+      },
+      "processAlive": true,
+      "status": {
+        "protocolVersion": 1,
+        "uiCapability": "bounded-ui-layers-v1",
+        "pid": 28624,
+        "role": "client",
+        "platformId": "testclient1",
+        "runToken": "a9983b8419e743a1b411c82ec0d49071",
+        "buildVersion": "0.1.7+e89a54702cd9ee6660d17f2be05f91424b5c085a",
+        "assemblyMvid": "6059e0bb-e3ca-48cd-bd48-8363e6f20bd4",
+        "loadedAssemblies": [
+          {
+            "name": "Common",
+            "version": "1.0.0.0",
+            "mvid": "b95d11db-ddcb-48dd-b213-a13fc6120a3f",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Common.dll"
+          },
+          {
+            "name": "Coop",
+            "version": "1.0.0.0",
+            "mvid": "6059e0bb-e3ca-48cd-bd48-8363e6f20bd4",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.dll"
+          },
+          {
+            "name": "Coop.Core",
+            "version": "1.0.0.0",
+            "mvid": "a4caf901-46ca-4513-af32-cb31101082ae",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Core.dll"
+          },
+          {
+            "name": "Coop.Steam",
+            "version": "1.0.0.0",
+            "mvid": "92061c16-6640-4e1c-89ef-7e72acfb0938",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Steam.dll"
+          },
+          {
+            "name": "GameInterface",
+            "version": "1.0.0.0",
+            "mvid": "3929bd5a-7f50-4970-8cd8-e3be7a784c9b",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\GameInterface.dll"
+          },
+          {
+            "name": "Missions",
+            "version": "1.0.0.0",
+            "mvid": "72ca5f2b-72cc-4583-872c-3b2d2beb33e4",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Missions.dll"
+          }
+        ],
+        "processStartedUtc": "2026-10-18T03:59:56.2534244Z",
+        "logPath": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\bin\\Win64_Shipping_Client\\Coop_client.log",
+        "gameThreadInitialized": true,
+        "gameThreadQueueDepth": 0,
+        "commandRegistryReady": true,
+        "activeState": "TaleWorlds.CampaignSystem.GameState.MapState",
+        "topScreen": "SandBox.View.Map.MapScreen",
+        "activeMenu": null,
+        "campaignLoaded": true,
+        "requestedSaveName": null,
+        "loadedCampaignId": "RVLgBrkkFApz",
+        "loadedSaveNameConfirmed": false,
+        "missionActive": false,
+        "coopRunning": true,
+        "coopState": "Coop.Core.Client.States.CampaignState",
+        "registeredPlayers": 2,
+        "registeredPlayerCount": null,
+        "connectedPlayerCount": null,
+        "registeredControllerIds": null,
+        "connectedControllerIds": null,
+        "deferredClientJoinEnabled": true,
+        "readyForClientJoin": false,
+        "deferredClientJoinAttempted": true,
+        "readyForCampaignTests": true,
+        "readyForMissionTests": false
+      },
+      "error": null,
+      "processTreeAlive": true,
+      "cleanupComplete": false,
+      "startupPopup": {
+        "outcome": "not_applicable"
+      }
+    }
+  ],
+  "initialStates": [
+    {
+      "controller": "LocalA",
+      "roomHost": "LocalA",
+      "lease": {
+        "RoomId": "12430e28a93142139f164f78880ca6d2",
+        "AuthorityId": "5c9a7827537c4994a8591704fdac2edf",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 3,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "localAuthority": true,
+      "frozen": false,
+      "yielded": false,
+      "campaign": "RVLgBrkkFApz",
+      "worldTicks": 5031,
+      "hours": 2186083.4815998888,
+      "mainHero": "main_hero",
+      "mainParty": "player_party",
+      "gameState": "MapState"
+    },
+    {
+      "controller": "testclient1",
+      "roomHost": "LocalA",
+      "lease": {
+        "RoomId": "12430e28a93142139f164f78880ca6d2",
+        "AuthorityId": "5c9a7827537c4994a8591704fdac2edf",
+        "AuthorityControllerId": "LocalA",
+        "Epoch": 3,
+        "IsPaused": false,
+        "IsValid": true
+      },
+      "localAuthority": false,
+      "frozen": false,
+      "yielded": false,
+      "campaign": "RVLgBrkkFApz",
+      "worldTicks": 0,
+      "hours": 2186083.4815998888,
+      "mainHero": "Player",
+      "mainParty": "Player",
+      "gameState": "MapState"
+    }
+  ],
+  "partySamples": [
+    {
+      "instance": "server",
+      "state": {
+        "mode": "ListenAuthority",
+        "localControllerId": "LocalA",
+        "mainHeroId": "main_hero",
+        "mainPartyId": "player_party",
+        "campaignId": "RVLgBrkkFApz",
+        "hours": 2186084.6003436944,
+        "registeredPlayers": 2,
+        "controllerId": "LocalA",
+        "heroId": "Hero_main_hero",
+        "heroStringId": "main_hero",
+        "clanId": "Clan_player_faction",
+        "characterId": "CharacterObject_main_hero",
+        "gold": 1000,
+        "partyId": "MobileParty_player_party",
+        "partyStringId": "player_party",
+        "x": 660.7773,
+        "y": 278.1635,
+        "troops": 1,
+        "settlementId": null,
+        "items": [],
+        "wounded": 0,
+        "heroRegistrations": 1,
+        "partyRegistrations": 1,
+        "clanRegistrations": 1,
+        "connected": true,
+        "active": true,
+        "mapEvent": "none",
+        "visual": true
+      }
+    },
+    {
+      "instance": "client1",
+      "state": {
+        "mode": "RemoteReplica",
+        "localControllerId": "testclient1",
+        "mainHeroId": "Player",
+        "mainPartyId": "Player",
+        "campaignId": "RVLgBrkkFApz",
+        "hours": 2186084.5639760555,
+        "registeredPlayers": 2,
+        "controllerId": "LocalA",
+        "heroId": "Hero_main_hero",
+        "heroStringId": "main_hero",
+        "clanId": "Clan_player_faction",
+        "characterId": "CharacterObject_main_hero",
+        "gold": 1000,
+        "partyId": "MobileParty_player_party",
+        "partyStringId": "player_party",
+        "x": 660.7773,
+        "y": 278.1635,
+        "troops": 1,
+        "settlementId": null,
+        "items": [],
+        "wounded": 0,
+        "heroRegistrations": 1,
+        "partyRegistrations": 1,
+        "clanRegistrations": 1,
+        "connected": false,
+        "active": true,
+        "mapEvent": "none",
+        "visual": true
+      }
+    },
+    {
+      "instance": "server",
+      "state": {
+        "mode": "ListenAuthority",
+        "localControllerId": "LocalA",
+        "mainHeroId": "main_hero",
+        "mainPartyId": "player_party",
+        "campaignId": "RVLgBrkkFApz",
+        "hours": 2186084.6749365553,
+        "registeredPlayers": 2,
+        "controllerId": "testclient1",
+        "heroId": "Hero_Player",
+        "heroStringId": "Player",
+        "clanId": "Clan_Player",
+        "characterId": "CharacterObject_Player",
+        "gold": 920,
+        "partyId": "MobileParty_Player",
+        "partyStringId": "Player",
+        "x": 658.7773,
+        "y": 277.1635,
+        "troops": 5,
+        "settlementId": null,
+        "items": [],
+        "wounded": 0,
+        "heroRegistrations": 1,
+        "partyRegistrations": 1,
+        "clanRegistrations": 1,
+        "connected": true,
+        "active": false,
+        "mapEvent": "none",
+        "visual": false
+      }
+    },
+    {
+      "instance": "client1",
+      "state": {
+        "mode": "RemoteReplica",
+        "localControllerId": "testclient1",
+        "mainHeroId": "Player",
+        "mainPartyId": "Player",
+        "campaignId": "RVLgBrkkFApz",
+        "hours": 2186084.6036621667,
+        "registeredPlayers": 2,
+        "controllerId": "testclient1",
+        "heroId": "Hero_Player",
+        "heroStringId": "Player",
+        "clanId": "Clan_Player",
+        "characterId": "CharacterObject_Player",
+        "gold": 920,
+        "partyId": "MobileParty_Player",
+        "partyStringId": "Player",
+        "x": 658.7773,
+        "y": 277.1635,
+        "troops": 5,
+        "settlementId": null,
+        "items": [],
+        "wounded": 0,
+        "heroRegistrations": 1,
+        "partyRegistrations": 1,
+        "clanRegistrations": 1,
+        "connected": false,
+        "active": false,
+        "mapEvent": "none",
+        "visual": true
+      }
+    }
+  ],
+  "captures": [
+    {
+      "complete": false,
+      "captureId": "fc805eb63e38444d95adb955d608916d",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\a9983b8419e743a1b411c82ec0d49071\\server-d8723bbb0773407fa1ec7cc9ad995240.bmp",
+      "response": {
+        "version": 1,
+        "id": "eebbd0f9c2be44988240f96a6b14f1f8",
+        "ok": true,
+        "process": {
+          "pid": 23688,
+          "role": "server",
+          "platformId": "LocalA",
+          "runToken": "a9983b8419e743a1b411c82ec0d49071",
+          "processStartedUtc": "2026-10-18T03:59:08.0212752Z"
+        },
+        "result": {
+          "captureId": "fc805eb63e38444d95adb955d608916d",
+          "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\a9983b8419e743a1b411c82ec0d49071\\server-d8723bbb0773407fa1ec7cc9ad995240.bmp",
+          "exists": true,
+          "isBmp": true,
+          "headerValid": true,
+          "stable": true,
+          "complete": true,
+          "length": 11059254,
+          "declaredLength": 11059254,
+          "lengthMatchesHeader": true,
+          "width": 2560,
+          "height": 1440,
+          "bitsPerPixel": 24,
+          "lastWriteUtc": "2026-10-18T04:01:01.8503414Z",
+          "captureRequestedUtc": "2026-10-18T04:01:01.6644097Z",
+          "captureRequestEngineFrame": 6219,
+          "observationUtc": "2026-10-18T04:01:02.1840554Z",
+          "observationEngineFrame": 6238,
+          "observationCount": 2,
+          "maximumObservations": 120,
+          "captureDeadlineUtc": "2026-10-18T04:02:01.6644097Z",
+          "sha256": "0712d84dbd3c808a52be14664559f7cd1a72b8b65d029db2ea917cb08111e718",
+          "basicQualityPassed": true,
+          "qualityVerdict": "NonUniformPixelData",
+          "qualityReason": "The BMP contains non-uniform pixel data; semantic visual correctness was not evaluated.",
+          "qualityScope": "basic_pixel_sanity_only",
+          "semanticVisualCorrectnessEvaluated": false
+        },
+        "error": null
+      },
+      "error": {
+        "code": "capture_evidence_failed",
+        "message": "PNG exceeds 8 MiB image limit.",
+        "outcomeUncertain": true
+      }
+    },
+    {
+      "complete": false,
+      "captureId": "4e65616054bf4e1b889d3781bdcc53f0",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\a9983b8419e743a1b411c82ec0d49071\\client1-eecc000b40654c60bc4316f85be273b5.bmp",
+      "response": {
+        "version": 1,
+        "id": "9693ff2d1549441e9c362c680681db2c",
+        "ok": true,
+        "process": {
+          "pid": 28624,
+          "role": "client",
+          "platformId": "testclient1",
+          "runToken": "a9983b8419e743a1b411c82ec0d49071",
+          "processStartedUtc": "2026-10-18T03:59:56.2534244Z"
+        },
+        "result": {
+          "captureId": "4e65616054bf4e1b889d3781bdcc53f0",
+          "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\a9983b8419e743a1b411c82ec0d49071\\client1-eecc000b40654c60bc4316f85be273b5.bmp",
+          "exists": true,
+          "isBmp": true,
+          "headerValid": true,
+          "stable": true,
+          "complete": true,
+          "length": 11059254,
+          "declaredLength": 11059254,
+          "lengthMatchesHeader": true,
+          "width": 2560,
+          "height": 1440,
+          "bitsPerPixel": 24,
+          "lastWriteUtc": "2026-10-18T04:01:03.041624Z",
+          "captureRequestedUtc": "2026-10-18T04:01:02.7756258Z",
+          "captureRequestEngineFrame": 1298,
+          "observationUtc": "2026-10-18T04:01:03.4144876Z",
+          "observationEngineFrame": 1314,
+          "observationCount": 2,
+          "maximumObservations": 120,
+          "captureDeadlineUtc": "2026-10-18T04:02:02.7756258Z",
+          "sha256": "9d90d2c4fa97c9ed58deb5576a1756ccc69669278a18d5e8d263aae693c1cc2d",
+          "basicQualityPassed": true,
+          "qualityVerdict": "NonUniformPixelData",
+          "qualityReason": "The BMP contains non-uniform pixel data; semantic visual correctness was not evaluated.",
+          "qualityScope": "basic_pixel_sanity_only",
+          "semanticVisualCorrectnessEvaluated": false
+        },
+        "error": null
+      },
+      "error": {
+        "code": "capture_evidence_failed",
+        "message": "PNG exceeds 8 MiB image limit.",
+        "outcomeUncertain": true
+      }
+    }
+  ],
+  "nativeBmpViewsInspected": true,
+  "mapEventMissingClientErrors": 25,
+  "acceptedRunNineMatchingErrors": 0,
+  "cleanup": {
+    "runId": "a9983b8419e743a1b411c82ec0d49071",
+    "profile": "local",
+    "artifactDirectory": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\a9983b8419e743a1b411c82ec0d49071",
+    "state": "stopped",
+    "error": null,
+    "instances": [
+      {
+        "name": "server",
+        "identity": {
+          "pid": 23688,
+          "startedUtc": "2026-10-18T03:59:08.0212752Z",
+          "role": "server",
+          "platformId": "LocalA",
+          "runToken": "a9983b8419e743a1b411c82ec0d49071"
+        },
+        "processAlive": false,
+        "status": null,
+        "error": null,
+        "processTreeAlive": false,
+        "cleanupComplete": true
+      },
+      {
+        "name": "client1",
+        "identity": {
+          "pid": 28624,
+          "startedUtc": "2026-10-18T03:59:56.2534244Z",
+          "role": "client",
+          "platformId": "testclient1",
+          "runToken": "a9983b8419e743a1b411c82ec0d49071"
+        },
+        "processAlive": false,
+        "status": null,
+        "error": null,
+        "processTreeAlive": false,
+        "cleanupComplete": true,
+        "startupPopup": {
+          "outcome": "not_applicable"
+        }
+      }
+    ],
+    "preflight": {
+      "allowed": true,
+      "code": "ready",
+      "message": "Read-only estimate, not a memory reservation or guarantee. Existing processes are already included in committed bytes.",
+      "newProcesses": 1,
+      "estimatedBytesPerProcess": 8589934592,
+      "reserveBytes": 2147483648,
+      "estimatedRequiredBytes": 10737418240,
+      "commit": {
+        "committedBytes": 22637674496,
+        "limitBytes": 72859316224
+      },
+      "bridge": {
+        "path": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.dll",
+        "mvid": "6059e0bb-e3ca-48cd-bd48-8363e6f20bd4",
+        "protocol": "1",
+        "capabilities": "staged-ui-capture-v1"
+      }
+    },
+    "clientAttempts": {
+      "1": "launched"
+    },
+    "requestedSave": {
+      "name": "P1B_DirectIP_Recruit",
+      "bytes": 5525958,
+      "lastWriteUtc": "2026-10-17T19:22:13.9723499Z",
+      "sessionSidecarPresent": true
+    },
+    "clientLaunchErrors": {}
+  },
+  "artifacts": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\a9983b8419e743a1b411c82ec0d49071"
+}

@@ -1,4 +1,4 @@
-using Common;
+﻿using Common;
 using Common.Messaging;
 using Common.Network;
 using Common.Network.Session;
@@ -26,7 +26,7 @@ public class CampaignAuthoritySyncRelayServerHandlerTests
     public void RelaysAuthorityPartyBehaviorDeltaForCurrentRemoteLease()
     {
         _ = new SurrogateCollection();
-        var messageBroker = new TestMessageBroker();
+        var messageBroker = new MessageBroker();
         var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
         var identity = new SessionIdentity();
         Assert.True(identity.TryApply(new AuthorityLease("room-a", "authority-b", "guest", 2), "host"));
@@ -53,6 +53,7 @@ public class CampaignAuthoritySyncRelayServerHandlerTests
             "room-a", "authority-b", "guest", 2, 1, serializer.Serialize(delta));
 
         messageBroker.Publish(guestPeer, envelope);
+        GameThread.Run(() => { }, blocking: true);
 
         Assert.Equal(42u, applied.BehaviorUpdateData.MobilePartyId);
         Assert.Same(guestPeer, appliedSource);
@@ -63,7 +64,7 @@ public class CampaignAuthoritySyncRelayServerHandlerTests
     [Fact]
     public void RelaysRecruitmentRosterDeltaForCurrentRemoteLease()
     {
-        var messageBroker = new TestMessageBroker();
+        var messageBroker = new MessageBroker();
         var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
         var identity = new SessionIdentity();
         Assert.True(identity.TryApply(new AuthorityLease("room-a", "authority-b", "guest", 2), "host"));
@@ -85,6 +86,7 @@ public class CampaignAuthoritySyncRelayServerHandlerTests
             "room-a", "authority-b", "guest", 2, 1, serializer.Serialize(rosterDelta));
 
         messageBroker.Publish(guestPeer, envelope);
+        GameThread.Run(() => { }, blocking: true);
 
         Assert.Equal(7u, applied.RosterId);
         Assert.Equal(9u, applied.CharacterId);
@@ -96,7 +98,7 @@ public class CampaignAuthoritySyncRelayServerHandlerTests
     [Fact]
     public void AppliesAndRelaysOnlyCurrentAuthorityDeltasWithIncreasingSequence()
     {
-        var messageBroker = new TestMessageBroker();
+        var messageBroker = new MessageBroker();
         var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
         var identity = new SessionIdentity();
         Assert.True(identity.TryApply(new AuthorityLease("room-a", "authority-b", "guest", 2), "host"));
@@ -127,11 +129,27 @@ public class CampaignAuthoritySyncRelayServerHandlerTests
             CreateEnvelope(serializer, epoch: 1, authorityId: "authority-old", controllerId: "guest", sequence: 99, value: 99));
         messageBroker.Publish(guestPeer,
             CreateEnvelope(serializer, epoch: 2, authorityId: "authority-b", controllerId: "other-player", sequence: 2, value: 77));
+        GameThread.Run(() => { }, blocking: true);
 
         Assert.Equal(new[] { 42 }, appliedValues);
         Assert.Same(guestPeer, appliedSource);
         network.Verify(value => value.SendAllBut(guestPeer, It.Is<NetworkCampaignAuthoritySyncEnvelope>(
             envelope => envelope.Sequence == 1 && envelope.Epoch == 2)), Times.Once);
+
+        using var entered = new System.Threading.ManualResetEventSlim();
+        using var release = new System.Threading.ManualResetEventSlim();
+        GameThread.EnqueueSafe(() => { entered.Set(); release.Wait(System.TimeSpan.FromSeconds(5)); });
+        try
+        {
+            Assert.True(entered.Wait(System.TimeSpan.FromSeconds(5)));
+            GameThread.EnqueueSafe(() => identity.TryApply(new AuthorityLease("room-a", "paused", "", 3, isPaused: true), "host"));
+            messageBroker.Publish(guestPeer,
+                CreateEnvelope(serializer, epoch: 2, authorityId: "authority-b", controllerId: "guest", sequence: 2, value: 43));
+        }
+        finally { release.Set(); }
+        GameThread.Run(() => { }, blocking: true);
+        Assert.Equal(new[] { 42 }, appliedValues);
+        network.Verify(value => value.SendAllBut(guestPeer, It.IsAny<IMessage>()), Times.Once);
     }
 
     private static NetworkCampaignAuthoritySyncEnvelope CreateEnvelope(

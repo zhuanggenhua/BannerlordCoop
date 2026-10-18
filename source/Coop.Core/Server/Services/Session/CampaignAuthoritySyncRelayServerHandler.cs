@@ -1,4 +1,4 @@
-using Common;
+﻿using Common;
 using Common.Logging;
 using Common.Messaging;
 using Common.Network;
@@ -67,6 +67,11 @@ public sealed class CampaignAuthoritySyncRelayServerHandler : IHandler
 
     private void Handle_AuthoritySyncEnvelope(MessagePayload<NetworkCampaignAuthoritySyncEnvelope> payload)
     {
+        GameThread.EnqueueSafe(() => ApplyEnvelopeOnGameThread(payload), context: nameof(CampaignAuthoritySyncRelayServerHandler));
+    }
+
+    private void ApplyEnvelopeOnGameThread(MessagePayload<NetworkCampaignAuthoritySyncEnvelope> payload)
+    {
         if (payload.Who is not NetPeer peer || !payload.What.IsValid ||
             !connections.HasCompletedCampaignSynchronization(peer) ||
             !playerManager.TryGetPlayer(peer, out Player player) ||
@@ -103,7 +108,7 @@ public sealed class CampaignAuthoritySyncRelayServerHandler : IHandler
         }
 
         // AutoSync receive handlers marshal the actual object lookup and apply to the game thread.
-        messageBroker.Publish(peer, innerMessage);
+        messageBroker.PublishRuntime(peer, innerMessage);
         network.SendAllBut(peer, payload.What);
     }
 
