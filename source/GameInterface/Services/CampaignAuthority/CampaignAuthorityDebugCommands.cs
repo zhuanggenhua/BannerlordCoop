@@ -108,9 +108,12 @@ public static class CampaignAuthorityDebugCommands
         public string Name => "world_state";
         public string Description => "Reports critical world hashes and an NPC position sample without changing game state.";
         public CoopCommandSide Side => CoopCommandSide.Both;
-        public IExpectedArgs[] ExpectedArgs { get; } = Array.Empty<IExpectedArgs>();
+        public IExpectedArgs[] ExpectedArgs { get; } =
+        { new ExpectedArgs("detail", "Optional positions includes every active party coordinate for frozen comparison.", false) };
         public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
         {
+            if (args.Count > 1 || (args.Count == 1 && args[0] != "positions"))
+                return new(false, "Expected optional positions detail.", "invalid_movement_detail");
             if (Campaign.Current == null)
                 return new(false, "World rosters are unavailable or contain unregistered identities", "world_unavailable");
             if (!rosters.TryCapture(out var checkpoint))
@@ -134,6 +137,8 @@ public static class CampaignAuthorityDebugCommands
             var allRosters = checkpoint.Rosters.OrderBy(roster => roster.RosterHandle).ToArray();
             var heroes = Hero.AllAliveHeroes.OrderBy(hero => hero.StringId, StringComparer.Ordinal).ToArray();
             var allocation = objects.CaptureAllocationCheckpoint();
+            var activeParties = parties.Where(party => party.active).ToArray();
+            ContainerProvider.TryResolve<ISessionIdentity>(out var session);
             return new(true, JsonConvert.SerializeObject(new
             {
                 campaign = Campaign.Current.UniqueGameId,
@@ -154,6 +159,18 @@ public static class CampaignAuthorityDebugCommands
                 allocationCounters = allocation.TypeCounters.OrderBy(pair => pair.Key, StringComparer.Ordinal)
                     .ToDictionary(pair => pair.Key, pair => pair.Value),
                 allocationCounterHash = Hash(allocation.TypeCounters.OrderBy(pair => pair.Key, StringComparer.Ordinal)),
+                movement = args.Count == 0 ? null : new
+                {
+                    complete = true,
+                    ready = activeParties.All(party => party.handle != 0),
+                    campaign = Campaign.Current.UniqueGameId,
+                    epoch = session?.CurrentLease.Epoch ?? 0,
+                    ticks = CampaignTime.Now.NumTicks,
+                    worldClockStopped = Campaign.Current.TimeControlMode == CampaignTimeControlMode.Stop ||
+                        Campaign.Current.TimeControlMode == CampaignTimeControlMode.FastForwardStop,
+                    count = activeParties.Length,
+                    rows = activeParties.Select(party => new { party.handle, party.id, party.x, party.y }).ToArray(),
+                },
                 npcSample = parties.Where(party => party.active && party.movingNpc).Take(24).ToArray(),
             }));
         }

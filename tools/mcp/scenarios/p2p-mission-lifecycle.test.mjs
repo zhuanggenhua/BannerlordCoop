@@ -16,7 +16,10 @@ function states(isPaused = true, writer = 'B') {
         worldTicks: 20, hours: 24, mission: { time: 10, ended: false, ending: false, scene: 'tavern' } }));
 }
 const world = () => ({ campaign: 'world', partyIdentityHash: 'id', rosterCountsHash: 'counts', rosterXpHash: 'xp',
-    volunteerHash: 'volunteers', heroGoldHash: 'gold', nextHandle: 100, ticks: 10, unregisteredParties: 0 });
+    volunteerHash: 'volunteers', heroGoldHash: 'gold', nextHandle: 100, ticks: 10, unregisteredParties: 0,
+    npcSample: [{ handle: 1, id: 'npc', x: 441, y: 512 }],
+    movement: { complete: true, ready: true, worldClockStopped: true, campaign: 'world', epoch: 6, ticks: 10,
+        count: 1, rows: [{ handle: 1, id: 'npc', x: 441, y: 512 }] } });
 const snapshot = () => ({ states: states(), worlds: [world(), world()], players: [[{ gold: 4 }], [{ gold: 4 }]],
     cycles: [{ instance: 'a', rows: [] }, { instance: 'b', rows: [] }] });
 

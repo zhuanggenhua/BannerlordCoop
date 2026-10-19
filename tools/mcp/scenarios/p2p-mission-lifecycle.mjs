@@ -12,6 +12,7 @@ import { allocationCheckpoint, assertAllocationCheckpointFloor, assertNoPollingM
     options, pollReadOnly } from './p2p-prisoner-sale.mjs';
 import { collectNativeLog } from './native-log-archive.mjs';
 import { UdpFaultProxy } from './udp-fault-proxy.mjs';
+import { assertFrozenMovementPair, assertFrozenNpcSamples } from './frozen-movement-evidence.mjs';
 
 export { options };
 export const HELP = `Usage: node tools/mcp/scenarios/p2p-mission-lifecycle.mjs
@@ -267,6 +268,9 @@ export function assertAllAway(states, initial) {
 export function assertNoWorldProgress(before, after, initial) {
     assertAllAway(before.states, initial); assertAllAway(after.states, initial);
     assertWorld(before.worlds); assertWorld(after.worlds);
+    assertFrozenNpcSamples(before.worlds); assertFrozenNpcSamples(after.worlds);
+    assertFrozenMovementPair(before.worlds.map(world => world.movement));
+    assertFrozenMovementPair(after.worlds.map(world => world.movement));
     for (let index = 0; index < 2; index++) {
         assert.deepEqual(after.states[index].lease, before.states[index].lease);
         for (const key of ['hours', 'worldTicks'])
@@ -390,7 +394,7 @@ export async function run(config) {
         return poll(label, async () => {
             const states = await bothStates(); assertActors(states, initial);
             if (allAway) assertAllAway(states, initial);
-            const worlds = await Promise.all(INSTANCES.map(instance => command(instance, 'coop.debug.authority.world_state').then(jsonOutput)));
+            const worlds = await Promise.all(INSTANCES.map(instance => command(instance, 'coop.debug.authority.world_state', allAway ? ['positions'] : []).then(jsonOutput)));
             assertWorld(worlds); assertAllocationCheckpointFloor(worlds, allocationFloor);
             const players = await Promise.all(INSTANCES.map(instance => Promise.all(initial.map(actor =>
                 command(instance, 'coop.debug.players.party_state', [actor.controller]).then(jsonOutput)))));
