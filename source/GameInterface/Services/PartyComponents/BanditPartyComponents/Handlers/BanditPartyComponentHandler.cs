@@ -20,6 +20,7 @@ internal class BanditPartyComponentHandler : IHandler
     private readonly IMessageBroker messageBroker;
     private readonly INetwork network;
     private readonly IObjectManager objectManager;
+    private volatile bool disposed;
 
     private static readonly ILogger Logger = LogManager.GetLogger<BanditPartyComponentHandler>();
 
@@ -40,12 +41,16 @@ internal class BanditPartyComponentHandler : IHandler
 
     public void Dispose()
     {
+        disposed = true;
         messageBroker.Unsubscribe<BanditPartyComponentUpdated>(Handle);
         messageBroker.Unsubscribe<NetworkUpdateBanditPartyComponent>(Handle);
+        messageBroker.Unsubscribe<BanditPartyComponentInitArgsUpdated>(Handle_BanditPartyComponentInitArgsUpdated);
+        messageBroker.Unsubscribe<NetworkUpdateBanditPartyComponentInitArgs>(Handle_NetworkUpdateBanditPartyComponentInitArgs);
     }
 
     private void Handle(MessagePayload<BanditPartyComponentUpdated> payload)
     {
+        if (disposed) return;
         var obj = payload.What;
 
         if(objectManager.TryGetId(obj.Component, out string componentId) == false)
@@ -67,6 +72,7 @@ internal class BanditPartyComponentHandler : IHandler
         {
             try
             {
+                if (disposed) return;
                 if (objectManager.TryGetObject<BanditPartyComponent>(obj.ComponentId, out var component) == false)
                 {
                     Logger.Error("Could not find {component} in registry", obj.ComponentId);
@@ -99,10 +105,13 @@ internal class BanditPartyComponentHandler : IHandler
     {
         var instance = payload.What.Instance;
         var initArgs = payload.What.InitArgs;
+        // Conversions create a component without spawn initialization.
+        if (disposed || initArgs == null) return;
 
         if (!objectManager.TryGetIdWithLogging(instance, out var banditPartyComponentId)) return;
         if (!objectManager.TryGetIdWithLogging(initArgs.Clan, out var clanId)) return;
-        if (!objectManager.TryGetIdWithLogging(initArgs.PartyTemplate, out var partyTemplateId)) return;
+        string partyTemplateId = null;
+        if (initArgs.PartyTemplate != null && !objectManager.TryGetIdWithLogging(initArgs.PartyTemplate, out partyTemplateId)) return;
 
         network.SendAll(new NetworkUpdateBanditPartyComponentInitArgs(
             banditPartyComponentId,
@@ -120,9 +129,11 @@ internal class BanditPartyComponentHandler : IHandler
         {
             try
             {
+                if (disposed) return;
                 if (!objectManager.TryGetObjectWithLogging<BanditPartyComponent>(message.BanditPartyComponentId, out var instance)) return;
                 if (!objectManager.TryGetObjectWithLogging<Clan>(message.ClanId, out var clan)) return;
-                if (!objectManager.TryGetObjectWithLogging<PartyTemplateObject>(message.PartyTemplateId, out var partyTemplate)) return;
+                PartyTemplateObject partyTemplate = null;
+                if (message.PartyTemplateId != null && !objectManager.TryGetObjectWithLogging<PartyTemplateObject>(message.PartyTemplateId, out partyTemplate)) return;
 
                 using (new AllowedThread())
                 {
