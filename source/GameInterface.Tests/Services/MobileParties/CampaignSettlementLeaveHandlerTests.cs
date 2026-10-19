@@ -5,9 +5,12 @@ using Common.Network;
 using Common.Network.MobileParties;
 using Common.Tests.Utils;
 using Common.Util;
+using Coop.Core.Client.Services.MobileParties.Handlers;
+using Coop.Core.Server.Services.MobileParties.Messages;
 using Coop.Tests.Mocks;
 using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Entity;
+using GameInterface.Services.MapEvents;
 using GameInterface.Services.MobileParties;
 using GameInterface.Services.MobileParties.Handlers;
 using GameInterface.Services.MobileParties.Messages.Behavior;
@@ -118,7 +121,16 @@ public sealed class CampaignSettlementLeaveHandlerTests
         f.Broker.Publish(sender, new CampaignSettlementLeaveCommand(request));
         f.Pump();
         Assert.Equal(0, f.NativeCalls);
-        Assert.Empty(f.Sent);
+        if (fault == "wrong_settlement")
+        {
+            var rejected = Assert.IsType<CampaignSettlementLeaveRejected>(Assert.Single(f.Sent).Message);
+            Assert.Equal(request.RequestStreamId, rejected.Request.RequestStreamId);
+            Assert.Equal(request.Sequence, rejected.Request.Sequence);
+        }
+        else
+        {
+            Assert.Empty(f.Sent);
+        }
         f.RoomHostPeer = f.PeerA;
         f.Broker.Publish(f.PeerA, new CampaignSettlementLeaveCommand(f.Request("a", 1)));
         f.Pump();
@@ -230,6 +242,130 @@ public sealed class CampaignSettlementLeaveHandlerTests
         Assert.Same(f.PartyA, Campaign.Current.MainParty);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void AcceptedReplicaLeaveClosesUiAndDiscardsReentrantLegacyEntry(bool clientSubscribesFirst)
+    {
+        using var f = new Fixture("a", "b", startHandler: false);
+        ClientSettlementExitEnterHandler client;
+        if (clientSubscribesFirst)
+        {
+            client = f.CreateClientHandler();
+            f.StartHandler();
+        }
+        else
+        {
+            f.StartHandler();
+            client = f.CreateClientHandler();
+        }
+        using (client)
+        {
+            f.OnEndEncounter = () => f.Broker.Publish(f, new StartSettlementEncounterAttempted(f.PartyA, f.Town));
+
+            f.Broker.Publish(f, new EndSettlementEncounterAttempted(f.PartyA, f.Lease));
+            f.Pump();
+            var command = Assert.IsType<CampaignSettlementLeaveCommand>(Assert.Single(f.Sent).Message);
+            Assert.Equal("a", command.Request.ControllerId);
+            Assert.Equal(0, f.NativeCalls);
+
+            f.Broker.Publish(f.PeerB, new CampaignSettlementLeaveApplied(command.Request));
+            f.Pump();
+            Assert.Equal(1, f.EndEncounterCalls);
+            Assert.DoesNotContain(f.Sent, value => value.Message.GetType().Name == "NetworkRequestStartSettlementEncounter");
+
+            f.Broker.Publish(f, new StartSettlementEncounterAttempted(f.PartyA, f.Town));
+            Assert.Single(f.Sent, value => value.Message.GetType().Name == "NetworkRequestStartSettlementEncounter");
+        }
+    }
+
+    [Fact]
+    public void LocalPreflightRejectionDoesNotLeaveAnUncorrelatedPendingMarker()
+    {
+        using var f = new Fixture("a", "b");
+        using var client = f.CreateClientHandler();
+        f.PartyA._currentSettlement = null;
+
+        f.Broker.Publish(f, new EndSettlementEncounterAttempted(f.PartyA, f.Lease));
+        f.Pump();
+
+        Assert.Empty(f.Sent);
+        f.Broker.Publish(f, new StartSettlementEncounterAttempted(f.PartyA, f.Town));
+        Assert.Single(f.Sent, value => value.Message.GetType().Name == "NetworkRequestStartSettlementEncounter");
+    }
+
+    [Fact]
+    public void CorrelatedAuthorityRejectionReleasesOnlyItsPendingLocalLeave()
+    {
+        using var f = new Fixture("a", "b");
+        using var client = new ClientSettlementExitEnterHandler(f.Broker, f.Network, f.Objects,
+            Mock.Of<ISettlementInterface>(), Mock.Of<IHideoutResultEncounter>(),
+            new CampaignAuthorityContext(f.Identity, f.Controller), f.Identity);
+
+        f.Broker.Publish(f, new EndSettlementEncounterAttempted(f.PartyA, f.Lease));
+        f.Pump();
+        var command = Assert.IsType<CampaignSettlementLeaveCommand>(Assert.Single(f.Sent).Message);
+        var request = command.Request;
+        f.Broker.Publish(f, new StartSettlementEncounterAttempted(f.PartyA, f.Town));
+
+        f.Broker.Publish(f.PeerB, new CampaignSettlementLeaveRejected(
+            new CampaignSettlementLeaveRequest(f.Lease, "a", request.Sequence + 1, request.PartyId,
+                request.SettlementId, request.RequestStreamId)));
+        f.Broker.Publish(f.PeerB, new CampaignSettlementLeaveRejected(
+            new CampaignSettlementLeaveRequest(new AuthorityLease("room", "old-world", "b", 4), "a",
+                request.Sequence, request.PartyId, request.SettlementId, request.RequestStreamId)));
+        f.Pump();
+        Assert.DoesNotContain(f.Sent, value => value.Message.GetType().Name == "NetworkRequestStartSettlementEncounter");
+
+        f.Broker.Publish(f.PeerB, new CampaignSettlementLeaveRejected(request));
+        f.Pump();
+        Assert.DoesNotContain(f.Sent, value => value.Message.GetType().Name == "NetworkRequestStartSettlementEncounter");
+
+        f.Broker.Publish(f, new StartSettlementEncounterAttempted(f.PartyA, f.Town));
+        Assert.Single(f.Sent, value => value.Message.GetType().Name == "NetworkRequestStartSettlementEncounter");
+    }
+
+    [Fact]
+    public void UnrelatedLocalAttemptCannotReplacePendingLeaveCorrelation()
+    {
+        using var f = new Fixture("a", "b");
+        using var client = f.CreateClientHandler();
+        f.OnEndEncounter = () => f.Broker.Publish(f, new StartSettlementEncounterAttempted(f.PartyA, f.Town));
+
+        f.Broker.Publish(f, new EndSettlementEncounterAttempted(f.PartyA, f.Lease));
+        f.Pump();
+        var command = Assert.IsType<CampaignSettlementLeaveCommand>(Assert.Single(f.Sent).Message);
+        f.Broker.Publish(f, new EndSettlementEncounterAttempted(f.PartyB, f.Lease));
+        f.Pump();
+
+        f.Broker.Publish(f.PeerB, new CampaignSettlementLeaveApplied(command.Request));
+        f.Pump();
+
+        Assert.Equal(1, f.EndEncounterCalls);
+        Assert.Contains(f.LeaveResolutions, value => value.Outcome == SettlementEncounterReplicaLeaveOutcome.Pending &&
+            value.Request.Sequence == command.Request.Sequence);
+        Assert.Contains(f.LeaveResolutions, value => value.Outcome == SettlementEncounterReplicaLeaveOutcome.Applied &&
+            value.Request.Sequence == command.Request.Sequence);
+        Assert.DoesNotContain(f.Sent, value => value.Message.GetType().Name == "NetworkRequestStartSettlementEncounter");
+    }
+
+    [Fact]
+    public void WriterRejectsChangedSettlementWithCorrelatedAuthorityResult()
+    {
+        using var f = new Fixture("b", "b");
+        f.PartyA._currentSettlement = null;
+        var request = f.Request("a", 1);
+
+        f.Broker.Publish(f.PeerA, new CampaignSettlementLeaveCommand(request));
+        f.Pump();
+
+        Assert.Equal(0, f.NativeCalls);
+        var rejected = Assert.IsType<CampaignSettlementLeaveRejected>(Assert.Single(f.Sent).Message);
+        Assert.Equal(request.RequestStreamId, rejected.Request.RequestStreamId);
+        Assert.Equal(request.Sequence, rejected.Request.Sequence);
+        Assert.IsAssignableFrom<ICampaignAuthorityScopedMessage>(rejected);
+    }
+
     [Fact]
     public void StaleAuthorityResultDoesNotCloseNewEncounter()
     {
@@ -290,7 +426,8 @@ public sealed class CampaignSettlementLeaveHandlerTests
         var request = new CampaignSettlementLeaveRequest(lease, "a", 42, 23, 99, "reconnect-stream");
         var command = ProtoBuf.Serializer.DeepClone(new CampaignSettlementLeaveCommand(request));
         var result = ProtoBuf.Serializer.DeepClone(new CampaignSettlementLeaveApplied(request));
-        foreach (var copy in new[] { command.Request, result.Request })
+        var rejected = ProtoBuf.Serializer.DeepClone(new CampaignSettlementLeaveRejected(request));
+        foreach (var copy in new[] { command.Request, result.Request, rejected.Request })
         {
             Assert.True(copy.Matches(lease));
             Assert.False(copy.Matches(new AuthorityLease("room", "next-world", "a", 18)));
@@ -301,6 +438,7 @@ public sealed class CampaignSettlementLeaveHandlerTests
             Assert.Equal("reconnect-stream", copy.RequestStreamId);
         }
         Assert.IsAssignableFrom<ICampaignAuthorityScopedMessage>(result);
+        Assert.IsAssignableFrom<ICampaignAuthorityScopedMessage>(rejected);
         Assert.IsAssignableFrom<IServerToClientCommand>(command);
     }
 
@@ -330,7 +468,10 @@ public sealed class CampaignSettlementLeaveHandlerTests
     {
         private readonly SessionMode priorMode = ModInformation.SessionMode;
         private readonly Campaign priorCampaign = Campaign.Current;
-        private readonly CampaignSettlementLeaveHandler handler;
+        private readonly Campaign campaign;
+        private readonly ICampaignSettlementLeave leave;
+        private readonly ISettlementInterface settlements;
+        private CampaignSettlementLeaveHandler handler;
         public readonly TestNetwork PeerPool = new();
         public readonly TestMessageBroker Broker = new();
         public readonly SessionIdentity Identity = new();
@@ -342,25 +483,31 @@ public sealed class CampaignSettlementLeaveHandlerTests
         public readonly MobileParty PartyB = ObjectHelper.SkipConstructor<MobileParty>();
         public readonly Settlement Town = ObjectHelper.SkipConstructor<Settlement>();
         public readonly List<(NetPeer? Peer, IMessage Message)> Sent = new();
+        public readonly List<SettlementEncounterReplicaLeaveResolved> LeaveResolutions = new();
+        public readonly IObjectManager Objects;
+        public readonly ControllerIdProvider Controller;
+        public INetwork Network { get; }
+        public Action OnEndEncounter;
         public int NativeCalls, ReplicaCalls, EndEncounterCalls, AppliedEvents;
 
-        public Fixture(string local, string writer, bool bindHostPeer = false)
+        public Fixture(string local, string writer, bool bindHostPeer = false, bool startHandler = true)
         {
             ModInformation.SessionMode = local == "a" ? SessionMode.ListenAuthority : SessionMode.RemoteReplica;
-            var campaign = ObjectHelper.SkipConstructor<Campaign>();
+            campaign = ObjectHelper.SkipConstructor<Campaign>();
             campaign.MainParty = local == "a" ? PartyA : PartyB;
             Campaign.Current = campaign;
             Lease = new AuthorityLease("room", "world", writer, 5);
             Assert.True(Identity.TryApply(Lease, "a"));
-            var controller = new ControllerIdProvider();
-            controller.SetControllerId(local);
+            Controller = new ControllerIdProvider();
+            Controller.SetControllerId(local);
             var objects = new ObjectManager(Mock.Of<ILogger>());
+            Objects = objects;
             Assert.True(objects.AddExisting("MobileParty_a", PartyA, 1));
             Assert.True(objects.AddExisting("MobileParty_b", PartyB, 2));
             Assert.True(objects.AddExisting("Settlement_town", Town, 10));
             PartyA._currentSettlement = Town;
             PartyB._currentSettlement = Town;
-            Players = new PlayerManager(Mock.Of<ILogger>(), objects, controller);
+            Players = new PlayerManager(Mock.Of<ILogger>(), objects, Controller);
             Assert.True(Players.AddPlayer(new Player("a", "", "MobileParty_a", "", "")));
             Assert.True(Players.AddPlayer(new Player("b", "", "MobileParty_b", "", "")));
             PeerA = PeerPool.CreatePeer();
@@ -373,10 +520,19 @@ public sealed class CampaignSettlementLeaveHandlerTests
                 .Setup(value => value.IsCurrentRoomHostPeer(It.IsAny<NetPeer>()))
                 .Returns<NetPeer>(peer => ReferenceEquals(peer, RoomHostPeer));
             network.Setup(value => value.Send(It.IsAny<NetPeer>(), It.IsAny<IMessage>()))
-                .Callback<NetPeer, IMessage>((peer, message) => Sent.Add((peer, message)));
+                .Callback<NetPeer, IMessage>((peer, message) =>
+                {
+                    if (message is CampaignSettlementLeaveCommand command)
+                        Assert.Contains(LeaveResolutions, value => value.Outcome == SettlementEncounterReplicaLeaveOutcome.Pending &&
+                            SameRequest(value.Request, command.Request));
+                    Sent.Add((peer, message));
+                });
             network.Setup(value => value.SendAll(It.IsAny<IMessage>()))
                 .Callback<IMessage>(message =>
                 {
+                    if (message is CampaignSettlementLeaveRequest request)
+                        Assert.Contains(LeaveResolutions, value => value.Outcome == SettlementEncounterReplicaLeaveOutcome.Pending &&
+                            SameRequest(value.Request, request));
                     if (message is CampaignSettlementLeaveApplied result)
                     {
                         Assert.Null(result.Request.PartyId == 1 ? PartyA.CurrentSettlement : PartyB.CurrentSettlement);
@@ -384,8 +540,9 @@ public sealed class CampaignSettlementLeaveHandlerTests
                     }
                     Sent.Add((null, message));
                 });
-            var leave = new Mock<ICampaignSettlementLeave>();
-            leave.Setup(value => value.Apply(It.IsAny<MobileParty>())).Returns<MobileParty>(party =>
+            Network = network.Object;
+            var leaveMock = new Mock<ICampaignSettlementLeave>();
+            leaveMock.Setup(value => value.Apply(It.IsAny<MobileParty>())).Returns<MobileParty>(party =>
             {
                 Assert.False(AllowedThread.IsThisThreadAllowed());
                 Assert.Same(campaign.MainParty, Campaign.Current.MainParty);
@@ -393,27 +550,47 @@ public sealed class CampaignSettlementLeaveHandlerTests
                 party._currentSettlement = null;
                 return true;
             });
-            var settlements = new Mock<ISettlementInterface>();
-            settlements.Setup(value => value.PartyLeaveSettlement(It.IsAny<MobileParty>())).Callback<MobileParty>(party =>
+            leave = leaveMock.Object;
+            var settlementsMock = new Mock<ISettlementInterface>();
+            settlementsMock.Setup(value => value.PartyLeaveSettlement(It.IsAny<MobileParty>())).Callback<MobileParty>(party =>
             {
                 Assert.True(AllowedThread.IsThisThreadAllowed());
                 ReplicaCalls++;
                 party._currentSettlement = null;
             });
-            settlements.Setup(value => value.EndSettlementEncounter()).Callback(() =>
+            settlementsMock.Setup(value => value.EndSettlementEncounter()).Callback(() =>
             {
                 Assert.True(AllowedThread.IsThisThreadAllowed());
                 EndEncounterCalls++;
+                OnEndEncounter?.Invoke();
             });
+            settlements = settlementsMock.Object;
+            Broker.Subscribe<SettlementEncounterReplicaLeaveResolved>(payload => LeaveResolutions.Add(payload.What));
             Broker.Subscribe<SettlementEncounterLeaveApplied>(_ => AppliedEvents++);
-            handler = new CampaignSettlementLeaveHandler(Broker, network.Object, objects, Players,
-                new CampaignAuthorityContext(Identity, controller), Identity, controller, leave.Object, settlements.Object);
+            if (startHandler) StartHandler();
+        }
+
+        public ClientSettlementExitEnterHandler CreateClientHandler() => new(Broker, Network, Objects,
+            Mock.Of<ISettlementInterface>(), Mock.Of<IHideoutResultEncounter>(),
+            new CampaignAuthorityContext(Identity, Controller), Identity);
+
+        public void StartHandler()
+        {
+            if (handler != null) return;
+            handler = new CampaignSettlementLeaveHandler(Broker, Network, Objects, Players,
+                new CampaignAuthorityContext(Identity, Controller), Identity, Controller, leave, settlements);
         }
 
         public CampaignSettlementLeaveRequest Request(string controller, uint party, long sequence = 1,
             string stream = "stream") => new(Lease, controller, sequence, party, 10, stream);
 
-        public void StopHandler() => handler.Dispose();
+        public void StopHandler() => handler?.Dispose();
+
+        private static bool SameRequest(CampaignSettlementLeaveRequest left, CampaignSettlementLeaveRequest right) =>
+            left != null && right != null && left.RoomId == right.RoomId && left.AuthorityId == right.AuthorityId &&
+            left.AuthorityControllerId == right.AuthorityControllerId && left.Epoch == right.Epoch &&
+            left.ControllerId == right.ControllerId && left.Sequence == right.Sequence && left.PartyId == right.PartyId &&
+            left.SettlementId == right.SettlementId && left.RequestStreamId == right.RequestStreamId;
 
         public void Pump() => GameThread.Run(() => { }, blocking: true);
 
@@ -436,7 +613,7 @@ public sealed class CampaignSettlementLeaveHandlerTests
 
         public void Dispose()
         {
-            handler.Dispose();
+            handler?.Dispose();
             PeerPool.Dispose();
             Campaign.Current = priorCampaign;
             ModInformation.SessionMode = priorMode;

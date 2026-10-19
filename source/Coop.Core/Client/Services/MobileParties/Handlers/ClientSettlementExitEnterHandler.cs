@@ -2,6 +2,7 @@
 using GameInterface.Services.CampaignAuthority;
 using Common.Messaging;
 using Common.Network;
+using Common.Network.MobileParties;
 using Common.Util;
 using Coop.Core.Client.Services.MobileParties.Messages;
 using Coop.Core.Server.Services.MobileParties.Messages;
@@ -36,9 +37,12 @@ public class ClientSettlementExitEnterHandler : IHandler
     private readonly IHideoutResultEncounter hideoutResultEncounter;
     private readonly ICampaignAuthorityContext authorityContext;
     private readonly ISessionIdentity sessionIdentity;
+    private volatile bool disposed;
     // Local attempts and all response transitions run on the game thread.
     private PendingStart pendingStart;
     private uint pendingLeavePartyId;
+    private AuthorityLease pendingLeaveLease;
+    private CampaignSettlementLeaveRequest pendingLeaveRequest;
     private (MobileParty Party, Settlement Settlement, MapEvent Battle) lastAutomaticRecovery;
 
     public ClientSettlementExitEnterHandler(
@@ -62,6 +66,7 @@ public class ClientSettlementExitEnterHandler : IHandler
         messageBroker.Subscribe<NetworkSettlementEncounterLeaveResult>(Handle);
         messageBroker.Subscribe<NetworkStartSettlementEncounter>(Handle);
         messageBroker.Subscribe<NetworkSettlementEncounterRejected>(Handle);
+        messageBroker.Subscribe<SettlementEncounterReplicaLeaveResolved>(Handle);
 
         messageBroker.Subscribe<NetworkPartyEnterSettlement>(Handle);
         messageBroker.Subscribe<NetworkPartyLeaveSettlement>(Handle);
@@ -70,20 +75,30 @@ public class ClientSettlementExitEnterHandler : IHandler
 
     public void Dispose()
     {
+        if (disposed) return;
+        disposed = true;
+
         messageBroker.Unsubscribe<StartSettlementEncounterAttempted>(Handle);
         messageBroker.Unsubscribe<EndSettlementEncounterAttempted>(Handle);
         messageBroker.Unsubscribe<NetworkSettlementEncounterLeaveResult>(Handle);
         messageBroker.Unsubscribe<NetworkStartSettlementEncounter>(Handle);
         messageBroker.Unsubscribe<NetworkSettlementEncounterRejected>(Handle);
+        messageBroker.Unsubscribe<SettlementEncounterReplicaLeaveResolved>(Handle);
 
         messageBroker.Unsubscribe<NetworkPartyEnterSettlement>(Handle);
         messageBroker.Unsubscribe<NetworkPartyLeaveSettlement>(Handle);
         messageBroker.Unsubscribe<NetworkPartyLeftBattle>(Handle);
+
+        pendingStart = null;
+        ResetPendingLeave();
+        lastAutomaticRecovery = default;
     }
 
     private void Handle(MessagePayload<StartSettlementEncounterAttempted> obj)
     {
         var payload = obj.What;
+
+        ClearStalePendingLeave();
 
         if (!objectManager.TryGetHandleWithLogging(payload.Party, out var partyId)) return;
         if (!objectManager.TryGetHandleWithLogging(payload.Settlement, out var settlementId)) return;
@@ -118,9 +133,11 @@ public class ClientSettlementExitEnterHandler : IHandler
 
     private void Handle(MessagePayload<EndSettlementEncounterAttempted> obj)
     {
-        if (authorityContext?.IsAuthorityKnown == true &&
-            !string.IsNullOrWhiteSpace(sessionIdentity?.RoomHostControllerId)) return;
         var payload = obj.What;
+
+        if (authorityContext?.IsAuthorityKnown == true &&
+            !string.IsNullOrWhiteSpace(sessionIdentity?.RoomHostControllerId))
+            return;
 
         if (!objectManager.TryGetHandleWithLogging(payload.Party, out var partyId)) return;
 
@@ -236,7 +253,7 @@ public class ClientSettlementExitEnterHandler : IHandler
         if (pendingLeavePartyId != partyId)
             return;
 
-        pendingLeavePartyId = 0;
+        ResetPendingLeave();
         if (pendingStart == null || pendingStart.State == PendingStartState.Sent)
             return;
 
@@ -264,7 +281,7 @@ public class ClientSettlementExitEnterHandler : IHandler
             if (partyId != 0 && pendingLeavePartyId != partyId)
                 return;
 
-            pendingLeavePartyId = 0;
+            ResetPendingLeave();
             pendingStart = null;
         }
 
@@ -280,6 +297,101 @@ public class ClientSettlementExitEnterHandler : IHandler
             settlementInterface.EndSettlementEncounter();
         }
     }
+
+    private void Handle(MessagePayload<SettlementEncounterReplicaLeaveResolved> payload)
+    {
+        if (disposed) return;
+        var resolution = payload.What;
+        GameThread.RunSafe(() =>
+        {
+            if (disposed) return;
+            HandleReplicaLeaveResolved(resolution);
+        });
+    }
+
+    private void HandleReplicaLeaveResolved(SettlementEncounterReplicaLeaveResolved resolution)
+    {
+        if (disposed) return;
+        var request = resolution.Request;
+        if (request == null || authorityContext == null ||
+            !authorityContext.TryGetCurrentLease(out var currentLease) || !request.Matches(currentLease))
+            return;
+
+        if (resolution.Outcome == SettlementEncounterReplicaLeaveOutcome.Pending)
+        {
+            if (pendingLeavePartyId == 0)
+            {
+                pendingLeavePartyId = request.PartyId;
+                pendingLeaveLease = currentLease;
+                pendingLeaveRequest = request;
+                return;
+            }
+
+            // A duplicate pending signal is harmless; another request cannot replace an in-flight leave.
+            return;
+        }
+
+        if (pendingLeavePartyId != request.PartyId || pendingLeaveLease != currentLease ||
+            !SameRequest(pendingLeaveRequest, request))
+            return;
+
+        if (resolution.Outcome is SettlementEncounterReplicaLeaveOutcome.Applied or SettlementEncounterReplicaLeaveOutcome.Rejected)
+            ResolvePendingLeave(request.PartyId);
+    }
+
+    private void ResolvePendingLeave(uint partyId)
+    {
+        ResetPendingLeave();
+        if (pendingStart != null && pendingStart.Request.PartyId == partyId)
+        {
+            pendingStart = null;
+            lastAutomaticRecovery = default;
+            return;
+        }
+
+        if (pendingStart?.State == PendingStartState.Queued)
+        {
+            var start = pendingStart;
+            start.State = PendingStartState.Sent;
+#if DEBUG
+            Logger.Debug("SettlementEncounterRecovery phase=send-deferred partyHandle={PartyHandle} settlementHandle={SettlementHandle}",
+                start.Request.PartyId, start.Request.SettlementId);
+#endif
+            network.SendAll(start.Request);
+            return;
+        }
+
+        if (pendingStart?.State == PendingStartState.Approved)
+        {
+            var start = pendingStart;
+            pendingStart = null;
+            ApplySettlementEncounter(start.Request.PartyId, start.Request.SettlementId);
+        }
+        lastAutomaticRecovery = default;
+    }
+
+    private void ClearStalePendingLeave()
+    {
+        if (pendingLeavePartyId == 0 || authorityContext == null) return;
+        if (authorityContext.TryGetCurrentLease(out var currentLease) && currentLease == pendingLeaveLease) return;
+
+        ResetPendingLeave();
+        pendingStart = null;
+        lastAutomaticRecovery = default;
+    }
+
+    private void ResetPendingLeave()
+    {
+        pendingLeavePartyId = 0;
+        pendingLeaveLease = default;
+        pendingLeaveRequest = null;
+    }
+
+    private static bool SameRequest(CampaignSettlementLeaveRequest left, CampaignSettlementLeaveRequest right) =>
+        left != null && right != null && left.RoomId == right.RoomId && left.AuthorityId == right.AuthorityId &&
+        left.AuthorityControllerId == right.AuthorityControllerId && left.Epoch == right.Epoch &&
+        left.ControllerId == right.ControllerId && left.Sequence == right.Sequence && left.PartyId == right.PartyId &&
+        left.SettlementId == right.SettlementId && left.RequestStreamId == right.RequestStreamId;
 
     private bool IsMainParty(uint partyId)
     {

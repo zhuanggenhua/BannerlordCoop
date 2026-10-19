@@ -49,3 +49,10 @@ public sealed class CampaignSettlementLeaveApplied : ICommand, ICampaignAuthorit
     [ProtoMember(1)] public readonly CampaignSettlementLeaveRequest Request;
     public CampaignSettlementLeaveApplied(CampaignSettlementLeaveRequest request) => Request = request;
 }
+
+[ProtoContract(SkipConstructor = true)]
+public sealed class CampaignSettlementLeaveRejected : ICommand, ICampaignAuthorityScopedMessage
+{
+    [ProtoMember(1)] public readonly CampaignSettlementLeaveRequest Request;
+    public CampaignSettlementLeaveRejected(CampaignSettlementLeaveRequest request) => Request = request;
+}

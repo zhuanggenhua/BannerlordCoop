@@ -33,6 +33,7 @@ internal sealed class CampaignSettlementLeaveHandler : IHandler
     private readonly Dictionary<string, long> routed = new Dictionary<string, long>();
     private readonly Dictionary<string, long> executed = new Dictionary<string, long>();
     private readonly Dictionary<string, long> applied = new Dictionary<string, long>();
+    private CampaignSettlementLeaveRequest pendingLocalRequest;
     private AuthorityLease watermarkLease;
     private long nextRequest;
     private volatile bool disposed;
@@ -55,6 +56,7 @@ internal sealed class CampaignSettlementLeaveHandler : IHandler
         broker.Subscribe<CampaignSettlementLeaveRequest>(HandleRequest);
         broker.Subscribe<CampaignSettlementLeaveCommand>(HandleCommand);
         broker.Subscribe<CampaignSettlementLeaveApplied>(HandleApplied);
+        broker.Subscribe<CampaignSettlementLeaveRejected>(HandleRejected);
     }
 
     public void Dispose()
@@ -64,6 +66,8 @@ internal sealed class CampaignSettlementLeaveHandler : IHandler
         broker.Unsubscribe<CampaignSettlementLeaveRequest>(HandleRequest);
         broker.Unsubscribe<CampaignSettlementLeaveCommand>(HandleCommand);
         broker.Unsubscribe<CampaignSettlementLeaveApplied>(HandleApplied);
+        broker.Unsubscribe<CampaignSettlementLeaveRejected>(HandleRejected);
+        pendingLocalRequest = null;
     }
 
     private void HandleAttempt(MessagePayload<EndSettlementEncounterAttempted> payload) =>
@@ -74,17 +78,41 @@ internal sealed class CampaignSettlementLeaveHandler : IHandler
                 !authority.IsAuthorityKnown || !authority.TryGetCurrentLease(out var lease) ||
                 !lease.IsValid || lease.IsPaused || attempt.ObservedLease != lease ||
                 controller.ControllerId == lease.AuthorityControllerId ||
-                !objects.TryGetHandle(attempt.Party, out var partyId) ||
-                !Controls(controller.ControllerId, partyId, out var party) || !ReferenceEquals(party, attempt.Party) ||
+                !objects.TryGetHandle(attempt.Party, out var partyId)) return;
+
+            if (pendingLocalRequest != null)
+            {
+                if (pendingLocalRequest.Matches(lease)) return;
+                pendingLocalRequest = null;
+            }
+
+            if (!Controls(controller.ControllerId, partyId, out var party) || !ReferenceEquals(party, attempt.Party) ||
                 !objects.TryGetHandle(party.CurrentSettlement, out var settlementId)) return;
 
             if (nextRequest == long.MaxValue) throw new InvalidOperationException("Settlement leave request sequence exhausted.");
             var request = new CampaignSettlementLeaveRequest(lease, controller.ControllerId,
                 ++nextRequest, partyId, settlementId, requestStreamId);
+            pendingLocalRequest = request;
+            broker.Publish(this, new SettlementEncounterReplicaLeaveResolved(
+                request, SettlementEncounterReplicaLeaveOutcome.Pending));
             logger.Information("Settlement leave requested controller={Controller} epoch={Epoch} sequence={Sequence} party={Party}",
                 request.ControllerId, request.Epoch, request.Sequence, request.PartyId);
-            if (IsRoomHost) Route(request);
-            else network.SendAll(request);
+            if (IsRoomHost)
+            {
+                if (!Route(request)) ResolveLocalRequest(request, SettlementEncounterReplicaLeaveOutcome.Rejected);
+            }
+            else
+            {
+                try
+                {
+                    network.SendAll(request);
+                }
+                catch
+                {
+                    ResolveLocalRequest(request, SettlementEncounterReplicaLeaveOutcome.Rejected);
+                    throw;
+                }
+            }
         }, context: nameof(CampaignSettlementLeaveHandler));
 
     private bool IsRoomHost => !disposed && ModInformation.IsListenAuthority &&
@@ -101,20 +129,26 @@ internal sealed class CampaignSettlementLeaveHandler : IHandler
             Route(payload.What);
         }, context: nameof(CampaignSettlementLeaveHandler));
 
-    private void Route(CampaignSettlementLeaveRequest request)
+    private bool Route(CampaignSettlementLeaveRequest request)
     {
         if (!authority.TryGetCurrentLease(out var lease) || !request.Matches(lease) ||
             !Controls(request.ControllerId, request.PartyId, out _) ||
-            !Advance(routed, lease, request)) return;
+            !Advance(routed, lease, request)) return false;
 
         if (authority.TryGetLocalAuthorityLease(out var localLease) && localLease == lease)
+        {
             Execute(request);
+            return true;
+        }
         else if (players.TryGetPeer(lease.AuthorityControllerId, out var peer) && peer != null)
         {
             network.Send(peer, new CampaignSettlementLeaveCommand(request));
             logger.Information("Settlement leave routed controller={Controller} writer={Writer} epoch={Epoch} sequence={Sequence}",
                 request.ControllerId, lease.AuthorityControllerId, request.Epoch, request.Sequence);
+            return true;
         }
+
+        return false;
     }
 
     private void HandleCommand(MessagePayload<CampaignSettlementLeaveCommand> payload) =>
@@ -139,14 +173,17 @@ internal sealed class CampaignSettlementLeaveHandler : IHandler
             settlementId != request.SettlementId)
         {
             LogRejected(request, "party_or_settlement_changed");
+            RejectCurrentOwnedRequest(request, lease);
             return;
         }
 
+        bool rejected = false;
         authority.TryExecuteWithCurrentLease(lease, () =>
         {
             if (!Advance(executed, lease, request))
             {
                 LogRejected(request, "duplicate_or_reordered_sequence");
+                rejected = true;
                 return;
             }
             var previousSettlement = party.CurrentSettlement;
@@ -154,6 +191,7 @@ internal sealed class CampaignSettlementLeaveHandler : IHandler
             {
                 logger.Warning("Settlement leave was not applied controller={Controller} epoch={Epoch} sequence={Sequence}",
                     request.ControllerId, request.Epoch, request.Sequence);
+                rejected = true;
                 return;
             }
             network.SendAll(new CampaignSettlementLeaveApplied(request));
@@ -161,6 +199,9 @@ internal sealed class CampaignSettlementLeaveHandler : IHandler
             logger.Information("Settlement leave applied controller={Controller} epoch={Epoch} sequence={Sequence} party={Party}",
                 request.ControllerId, request.Epoch, request.Sequence, request.PartyId);
         });
+
+        if (rejected)
+            RejectCurrentOwnedRequest(request, lease);
     }
 
     private void HandleApplied(MessagePayload<CampaignSettlementLeaveApplied> payload) =>
@@ -174,13 +215,56 @@ internal sealed class CampaignSettlementLeaveHandler : IHandler
                     (!objects.TryGetHandle(party.CurrentSettlement, out var town) || town != request.SettlementId)) ||
                 !Advance(applied, lease, request)) return;
 
+            bool resolvesLocalRequest = IsPendingLocalRequest(request);
             using (new AllowedThread())
             {
                 settlements.PartyLeaveSettlement(party);
                 if (request.ControllerId == controller.ControllerId && ReferenceEquals(party, MobileParty.MainParty))
                     settlements.EndSettlementEncounter();
             }
+
+            if (resolvesLocalRequest)
+                ResolveLocalRequest(request, SettlementEncounterReplicaLeaveOutcome.Applied);
         }, context: nameof(CampaignSettlementLeaveHandler));
+
+    private void HandleRejected(MessagePayload<CampaignSettlementLeaveRejected> payload) =>
+        GameThread.RunSafe(() =>
+        {
+            var request = payload.What?.Request;
+            if (disposed || request == null || !authority.TryGetCurrentLease(out var lease) || !request.Matches(lease) ||
+                authority.TryGetLocalAuthorityLease(out _) || controller.ControllerId != request.ControllerId ||
+                !Controls(request.ControllerId, request.PartyId, out _) || !IsPendingLocalRequest(request)) return;
+
+            LogRejected(request, "authority_rejected");
+            ResolveLocalRequest(request, SettlementEncounterReplicaLeaveOutcome.Rejected);
+        }, context: nameof(CampaignSettlementLeaveHandler));
+
+    private void RejectCurrentOwnedRequest(CampaignSettlementLeaveRequest request, AuthorityLease lease)
+    {
+        if (disposed || request == null || !authority.TryGetLocalAuthorityLease(out var currentLease) ||
+            currentLease != lease || !request.Matches(currentLease) ||
+            !Controls(request.ControllerId, request.PartyId, out _)) return;
+
+        network.SendAll(new CampaignSettlementLeaveRejected(request));
+    }
+
+    private bool IsPendingLocalRequest(CampaignSettlementLeaveRequest request) =>
+        SameRequest(pendingLocalRequest, request);
+
+    private void ResolveLocalRequest(
+        CampaignSettlementLeaveRequest request,
+        SettlementEncounterReplicaLeaveOutcome outcome)
+    {
+        if (!IsPendingLocalRequest(request)) return;
+        pendingLocalRequest = null;
+        broker.Publish(this, new SettlementEncounterReplicaLeaveResolved(request, outcome));
+    }
+
+    private static bool SameRequest(CampaignSettlementLeaveRequest left, CampaignSettlementLeaveRequest right) =>
+        left != null && right != null && left.RoomId == right.RoomId && left.AuthorityId == right.AuthorityId &&
+        left.AuthorityControllerId == right.AuthorityControllerId && left.Epoch == right.Epoch &&
+        left.ControllerId == right.ControllerId && left.Sequence == right.Sequence && left.PartyId == right.PartyId &&
+        left.SettlementId == right.SettlementId && left.RequestStreamId == right.RequestStreamId;
 
     private void LogRejected(CampaignSettlementLeaveRequest request, string reason) =>
         logger.Information("Settlement leave rejected reason={Reason} controller={Controller} epoch={Epoch} sequence={Sequence}",
