@@ -86,3 +86,14 @@ test('logs retain all error lines rather than excusing the historical unit-test 
     assert.equal(diagnostics.realTick,1);assert.equal(diagnostics.duplicateIds,1);assert.equal(diagnostics.errorLines.length,3);
     assert.deepEqual(jsonOutput('prefix\nLIVE_TEST_JSON={"x":1}'),{x:1});
 });
+
+test('actual Serilog process/time/context prefixes expose every ERR and FTL severity', () => {
+    const actual = [
+        '[(280) 09:28:25 ERR GameInterface.Services.ItemRosters.Patches.ItemRosterPatch] Client changed managed AddToCounts',
+        '[(8548) 09:28:26 FTL Coop.Core.Server.CoopServer] native fatal exception',
+        '[(8548) 09:28:27 INF Coop.Core.Server.CoopServer] error counter=0, ERROR text and [ERR] are message content',
+        '[(280) 09:28:28 WRN Coop.Core.Client.CoopClient] previous error is diagnostic text',
+        '[ERR] legacy abbreviated prefix',
+    ];
+    assert.deepEqual(logDiagnostics(actual.join('\r\n')).errorLines, [actual[0], actual[1], actual[4]]);
+});

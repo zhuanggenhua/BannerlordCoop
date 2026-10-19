@@ -149,7 +149,10 @@ export function logDiagnostics(text) {
     return { realTick: (text.match(/Failed to run ["']?Campaign\.RealTick/g) ?? []).length,
         duplicateIds: (text.match(/Duplicate id:|Generated duplicate id |Duplicate object handle:/gi) ?? []).length,
         aiBatch: (text.match(/(?:AI batch.*fail|Failed.*AI batch)/gi) ?? []).length,
-        errorLines: text.split(/\r?\n/).filter(line => /\[(?:ERR|FTL)\]|\b(?:ERROR|FATAL)\b/.test(line)) };
+        errorLines: text.split(/\r?\n/).filter(line => {
+            const prefix = line.match(/^\s*\[([^\]\r\n]*)\]/)?.[1];
+            return prefix !== undefined && /(?:^|\s)(?:ERR|FTL|ERROR|FATAL)(?:\s|$)/.test(prefix);
+        }) };
 }
 
 export async function run(config) {
