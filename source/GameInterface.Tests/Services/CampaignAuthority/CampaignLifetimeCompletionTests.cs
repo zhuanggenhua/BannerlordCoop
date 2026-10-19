@@ -256,6 +256,25 @@ public class CampaignLifetimeCompletionTests : IDisposable
     }
 
     [Fact]
+    public void ReentrantSameEventKeepsHeldIdentityThroughOutermostFinalizer()
+    {
+        var (mapEvent, party) = Event();
+        var outer = completion.EnterFinalization(mapEvent);
+        var inner = completion.EnterFinalization(mapEvent);
+        Assert.Same(outer, inner);
+        Assert.True(completion.TryHoldGarrison(party));
+        mapEvent._state = MapEventState.WaitingRemoval;
+        completion.LeaveFinalization(inner, true, null);
+        Assert.True(objects.Contains(party.Party));
+        Assert.Empty(sent);
+        Assert.False(completion.IsComplete);
+        completion.LeaveFinalization(outer, true, null);
+        Assert.False(objects.Contains(party.Party));
+        Assert.Single(sent);
+        Assert.True(completion.IsComplete);
+    }
+
+    [Fact]
     public void SkippedOrIncompleteOriginalFinalizationCannotAuthorizeRelease()
     {
         var (mapEvent, party) = Event();

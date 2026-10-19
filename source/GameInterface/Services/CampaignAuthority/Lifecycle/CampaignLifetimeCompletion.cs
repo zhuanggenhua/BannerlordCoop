@@ -49,6 +49,7 @@ internal sealed class CampaignLifetimeCompletion : ICampaignLifetimeCompletionDr
         internal HashSet<PartyBase> Held = new();
         internal bool Faulted;
         internal AuthorityLease Lease;
+        internal int Depth;
     }
 
     private readonly IObjectManager objects;
@@ -123,10 +124,22 @@ internal sealed class CampaignLifetimeCompletion : ICampaignLifetimeCompletionDr
     internal MapScope EnterFinalization(MapEvent mapEvent)
     {
         if (mapEvent == null || mapEvent.IsFinalized || !TryGetLease(out var lease)) return null;
+        var existing = events.LastOrDefault(scope => ReferenceEquals(scope.Event, mapEvent));
+        if (existing != null)
+        {
+            if (existing.Faulted || !IsCurrent(existing.Lease))
+            {
+                faulted = true;
+                throw new InvalidOperationException("Reentrant finalization crossed a failed scope or authority lease");
+            }
+            existing.Depth++;
+            return existing;
+        }
         var scope = new MapScope
         {
             Event = mapEvent,
             Lease = lease,
+            Depth = 1,
             Participants = new HashSet<PartyBase>(mapEvent.InvolvedParties.Where(party => party != null))
         };
         events.Add(scope);
@@ -158,11 +171,13 @@ internal sealed class CampaignLifetimeCompletion : ICampaignLifetimeCompletionDr
     internal void LeaveFinalization(MapScope scope, bool originalRan, Exception error)
     {
         if (scope == null) return;
+        scope.Depth--;
         if (error != null || !originalRan || !scope.Event.IsFinalized || !IsCurrent(scope.Lease))
         {
             scope.Faulted = faulted = true;
             return;
         }
+        if (scope.Depth != 0 || scope.Faulted) return;
         // Called by the Harmony finalizer, after the entire original and every ordinary postfix.
         // MapEventFinalized subscribers and the original MapEvent destroy have already run.
         foreach (var party in scope.Held) PublishDestroy(party);

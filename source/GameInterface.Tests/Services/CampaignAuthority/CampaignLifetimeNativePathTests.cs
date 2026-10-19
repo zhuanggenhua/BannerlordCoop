@@ -16,6 +16,7 @@ using GameInterface.Services.PartyBases;
 using GameInterface.Services.MapEvents.Messages;
 using GameInterface.Services.MapEvents.Messages.Leave;
 using GameInterface.Services.MapEvents.Patches;
+using GameInterface.Services.MapEventParties.Messages;
 using HarmonyLib;
 using Moq;
 using Serilog;
@@ -329,9 +330,10 @@ public class CampaignLifetimeNativePathTests : IDisposable
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void ActualNativeFinalizeReleasesAfterOriginalOrdinaryPostfixAndSubscribers(bool postfixThrows)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void ActualNativeFinalizeReleasesAfterOriginalOrdinaryPostfixAndSubscribers(bool postfixThrows, bool reentrant)
     {
         OnGameThread(() =>
         {
@@ -365,8 +367,21 @@ public class CampaignLifetimeNativePathTests : IDisposable
             harmony.Patch(finalize, postfix: new HarmonyMethod(typeof(CampaignLifetimeNativePathTests), nameof(LastOrdinaryPostfix)) { priority = Priority.Last });
             harmony.CreateClassProcessor(typeof(MapEventFinalizationCompletionPatch)).Patch();
             bool subscriberResolved = false;
+            int finalizedCount = 0;
+            bool enteredAgain = false;
+            bool heldAfterInner = false;
             Action<MessagePayload<MapEventFinalized>> subscriber = payload => subscriberResolved = objects.TryGetHandle(garrison.Party, out _) && !completion.IsComplete;
+            Action<MessagePayload<MapEventFinalized>> countFinalized = payload => finalizedCount++;
+            Action<MessagePayload<MapEventContributionFlushRequested>> reenter = payload =>
+            {
+                if (!reentrant || enteredAgain) return;
+                enteredAgain = true;
+                mapEvent.FinalizeEventAux();
+                heldAfterInner = objects.Contains(garrison.Party) && !completion.IsComplete;
+            };
             MessageBroker.Instance.Subscribe(subscriber);
+            MessageBroker.Instance.Subscribe(countFinalized);
+            MessageBroker.Instance.Subscribe(reenter);
             try
             {
                 if (postfixThrows)
@@ -382,11 +397,19 @@ public class CampaignLifetimeNativePathTests : IDisposable
                 Assert.True(heldInNative);
                 Assert.True(heldInPostfix);
                 Assert.True(subscriberResolved);
+                Assert.Equal(1, finalizedCount);
+                Assert.Equal(reentrant, enteredAgain);
+                if (reentrant) Assert.True(heldAfterInner);
                 Assert.Equal(postfixThrows, objects.Contains(garrison.Party));
                 Assert.Equal(!postfixThrows, completion.IsComplete);
                 Assert.Equal(postfixThrows ? 0 : 1, sent.OfType<NetworkDestroyInstance<PartyBase>>().Count());
             }
-            finally { MessageBroker.Instance.Unsubscribe(subscriber); }
+            finally
+            {
+                MessageBroker.Instance.Unsubscribe(subscriber);
+                MessageBroker.Instance.Unsubscribe(countFinalized);
+                MessageBroker.Instance.Unsubscribe(reenter);
+            }
         });
     }
 
