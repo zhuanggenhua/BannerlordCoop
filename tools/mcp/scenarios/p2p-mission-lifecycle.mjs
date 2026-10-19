@@ -96,6 +96,8 @@ export function assertAllAway(states, initial) {
     assertActors(states, initial);
     for (const state of states) {
         assert.equal(state.gameState, 'MissionState'); assert.equal(paused(state), true);
+        assert.ok(field(state.lease, 'roomId') && field(state.lease, 'authorityId'), 'Missing paused lease identity');
+        assert.notEqual(field(state.lease, 'authorityControllerId'), undefined, 'Missing paused lease controller field');
         assert.equal(state.localAuthority, false); assert.equal(state.frozen, false);
         assert.equal(state.yielded, false, 'Availability override masks automatic Mission coordination');
     }

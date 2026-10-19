@@ -83,6 +83,10 @@ test('all-away requires shared valid epoch, automatic availability and zero writ
     assert.throws(() => assertAllAway(wrongEpoch, initial));
     const yielded = states(); yielded[0].yielded = true;
     assert.throws(() => assertAllAway(yielded, initial), /override/);
+    for (const key of ['roomId', 'authorityId', 'authorityControllerId']) {
+        const missing = states(); missing.forEach(row => delete row.lease[key]);
+        assert.throws(() => assertAllAway(missing, initial), /Missing paused lease/);
+    }
 });
 
 test('all-away preserves exact world, tick, resources and dispatcher history', () => {
