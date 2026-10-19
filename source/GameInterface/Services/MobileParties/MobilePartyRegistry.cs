@@ -4,6 +4,7 @@ using Common.Network.Coalescing;
 using Common.Util;
 using GameInterface.Registry.Auto;
 using GameInterface.Services.Entity;
+using GameInterface.Services.CampaignAuthority.Lifecycle;
 using GameInterface.Services.MobileParties.Messages;
 using GameInterface.Services.ObjectManager;
 using static GameInterface.Services.ObjectManager.ObjectManager;
@@ -30,6 +31,7 @@ internal class MobilePartyRegistry : AutoRegistryBase<MobileParty>
     private readonly IControllerIdProvider controllerIdProvider;
     private readonly IMessageBroker messageBroker;
     private readonly ISendCoalescer coalescer;
+    private readonly CampaignLifetimeCompletion lifetimeCompletion;
 
     public MobilePartyRegistry(
         IControllerIdProvider controllerIdProvider,
@@ -37,12 +39,14 @@ internal class MobilePartyRegistry : AutoRegistryBase<MobileParty>
         ILogger logger,
         IAutoRegistryFactory autoRegistryFactory,
         IObjectManager objectManager,
-        ISendCoalescer coalescer = null)
+        ISendCoalescer coalescer = null,
+        CampaignLifetimeCompletion lifetimeCompletion = null)
         : base(logger, autoRegistryFactory, objectManager)
     {
         this.controllerIdProvider = controllerIdProvider;
         this.messageBroker = messageBroker;
         this.coalescer = coalescer;
+        this.lifetimeCompletion = lifetimeCompletion;
     }
 
     public override IEnumerable<MethodBase> Constructors => AccessTools.GetDeclaredConstructors(typeof(MobileParty));
@@ -151,7 +155,8 @@ internal class MobilePartyRegistry : AutoRegistryBase<MobileParty>
             messageBroker.Publish(this, new InstanceDestroyed<ItemRoster>(obj.ItemRoster));
             messageBroker.Publish(this, new InstanceDestroyed<TroopRoster>(obj.MemberRoster));
             messageBroker.Publish(this, new InstanceDestroyed<TroopRoster>(obj.PrisonRoster));
-            messageBroker.Publish(this, new InstanceDestroyed<PartyBase>(obj.Party));
+            if (lifetimeCompletion?.TryHoldGarrison(obj) != true)
+                messageBroker.Publish(this, new InstanceDestroyed<PartyBase>(obj.Party));
         }
         finally
         {

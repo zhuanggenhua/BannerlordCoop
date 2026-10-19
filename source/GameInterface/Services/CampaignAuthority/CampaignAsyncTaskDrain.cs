@@ -2,6 +2,7 @@
 using Serilog;
 using System;
 using TaleWorlds.CampaignSystem;
+using GameInterface.Services.CampaignAuthority.Lifecycle;
 
 namespace GameInterface.Services.CampaignAuthority;
 
@@ -13,6 +14,10 @@ public interface ICampaignAsyncTaskDrain
 internal sealed class CampaignAsyncTaskDrain : ICampaignAsyncTaskDrain
 {
     private static readonly ILogger Logger = LogManager.GetLogger<CampaignAsyncTaskDrain>();
+    private readonly ICampaignLifetimeCompletionDrain lifetimeCompletion;
+
+    public CampaignAsyncTaskDrain(ICampaignLifetimeCompletionDrain lifetimeCompletion = null) =>
+        this.lifetimeCompletion = lifetimeCompletion;
     public bool TryDrain() => TryDrain(Campaign.Current);
 
     internal bool TryDrain(Campaign campaign)
@@ -20,11 +25,12 @@ internal sealed class CampaignAsyncTaskDrain : ICampaignAsyncTaskDrain
         if (campaign == null) return false;
         try
         {
+            if (lifetimeCompletion?.IsComplete == false) return false;
             // RealTick waits for this task at the beginning of the next frame. A handoff can
             // arrive before that frame, so drain it while its original lease still permits writes.
             campaign.WaitAsyncTasks();
             campaign.CampaignLateAITickTask = null;
-            return true;
+            return lifetimeCompletion?.IsComplete != false;
         }
         catch (Exception ex)
         {

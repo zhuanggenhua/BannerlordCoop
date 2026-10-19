@@ -29,10 +29,9 @@ internal class ArmyRegistry : AutoRegistryBase<Army>
 
     public override IEnumerable<MethodBase> Constructors => AccessTools.GetDeclaredConstructors(typeof(Army));
 
-    public override IEnumerable<MethodBase> DestroyMethods => new MethodBase[]
-    {
-        AccessTools.Method(typeof(Army), nameof(Army.DisperseInternal))
-    };
+    // The typed completion adapter publishes the unchanged InstanceDestroyed only after the
+    // enclosing native Army setter/removal has finished its last field writes.
+    public override IEnumerable<MethodBase> DestroyMethods => Enumerable.Empty<MethodBase>();
 
     public override void RegisterAllObjects()
     {
