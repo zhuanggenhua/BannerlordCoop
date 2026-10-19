@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { collectNativeLog } from './native-log-archive.mjs';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { appendFile, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
@@ -181,7 +182,7 @@ export function assertProcessLogCompleteness(text, expectedPid) {
     assert.ok(Number.isSafeInteger(expectedPid) && expectedPid > 0, 'Missing actual expected PID for process log');
     assert.equal(typeof text, 'string', 'Process log is not text');
     assert.ok(text.length > 0, 'Process log is empty');
-    const prefixes = [...text.matchAll(/^\[\((\d+)\)\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3}\s+[^\]\r\n]+\]/gm)];
+    const prefixes = [...text.matchAll(/^\[\((\d+)\)\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3}\s+[^\]\n]+\]/gm)];
     assert.ok(prefixes.length > 0, 'Process log has no actual Serilog process prefix');
     const observedPids = [...new Set(prefixes.map(match => Number(match[1])))];
     assert.deepEqual(observedPids, [expectedPid], `Process log prefixes do not match expected PID ${expectedPid}`);
@@ -224,7 +225,7 @@ export function logDiagnostics(text) {
         duplicateIds: (text.match(/Duplicate id:|Generated duplicate id |Duplicate object handle:/gi) ?? []).length,
         aiBatch: (text.match(/(?:AI batch.*fail|Failed.*AI batch)/gi) ?? []).length,
         errorLines: text.split(/\r?\n/).filter(line => {
-            const prefix = line.match(/^\s*\[([^\]\r\n]*)\]/)?.[1];
+            const prefix = line.match(/^\s*\[([^\]\n]*)\]/)?.[1];
             return prefix !== undefined && /(?:^|\s)(?:ERR|FTL|ERROR|FATAL)(?:\s|$)/.test(prefix);
         }) };
 }
@@ -255,7 +256,7 @@ export async function run(config) {
     const client = new Client({ name: 'codex-p2p-udp-reliability', version: '1.0.0' });
     const transport = new StdioClientTransport({ command: config.server, args: ['--config', config.config], cwd: config.repo,
         stderr: 'inherit', maxBufferSize: 16 * 1024 * 1024 });
-    const logs = Object.fromEntries(INSTANCES.map(name => [name, { text: '', cursor: undefined, resets: 0 }]));
+    const logs = Object.fromEntries(INSTANCES.map(name => [name, { text: '', cursor: undefined }]));
     const expectedLogPids = Object.create(null);
     let runId, initial, callId = 0, readDeadline;
     const emit = entry => appendFile(config.record, JSON.stringify({ utc: new Date().toISOString(), ...entry }) + '\n');
@@ -290,7 +291,8 @@ export async function run(config) {
         if (name === 'start_client') captureLogPids(data.run, 'start_client');
         if (name === 'get_run') captureLogPids(data, 'get_run');
         await emit({ phase: 'response', callId: id, name, args, data, raw });
-        assert.ok(!raw.isError, `${name}: ${JSON.stringify(data)}`); return data;
+        assert.ok(!raw.isError, `${name}: ${JSON.stringify(data)}`);
+        return name === 'read_logs' ? { result: data.result ?? data, qaCallId: id } : data;
     }
     async function command(instance, name, args = [], mutation = false) {
         const response = await call('execute_command', { run_id: runId, instance, name, arguments: args }, mutation);
@@ -340,30 +342,22 @@ export async function run(config) {
         await command('server', 'coop.debug.set_time_mode', ['Pause', 'force-live-test'], true);
         return snapshot('exact paused critical state');
     }
-    async function collectLogs() {
+    async function collectLogs(archived = false) {
         summary.logs ??= {}; const failures = [];
         for (const instance of INSTANCES) {
             try {
             const log = logs[instance];
-            for (let page = 0; page < 1024; page++) {
-                const response = await call('read_logs', { run_id: runId, instance, cursor: log.cursor, max_bytes: 65536 });
-                const chunk = response.result ?? response;
-                assert.equal(typeof chunk.text, 'string'); assert.equal(typeof chunk.cursor, 'string');
-                assert.equal(typeof chunk.hasMore, 'boolean'); assert.equal(typeof chunk.reset, 'boolean');
-                if (chunk.reset) { log.resets++; log.text += '\n--- retained previous log; cursor reset ---\n'; }
-                log.text += chunk.text; log.cursor = chunk.cursor;
-                if (!chunk.hasMore) break;
-                assert.ok(page < 1023, 'Incomplete log capture: page budget');
-            }
+            await collectNativeLog(log, cursor => call('read_logs', { run_id: runId, instance, cursor, max_bytes: 65536 }),
+                { archived, source: { runId, instance, rawRecord: config.record } });
             const path = config.record + '.' + instance + '.log'; await writeFile(path, log.text);
             const diagnostics = logDiagnostics(log.text);
             const expectedPid = expectedLogPids[instance];
-            summary.logs[instance] = { path, sha256: createHash('sha256').update(log.text).digest('hex'), resets: log.resets,
+            summary.logs[instance] = { path, sha256: createHash('sha256').update(log.text).digest('hex'), collections: log.collections,
                 expectedPid: expectedPid ?? null, ...diagnostics };
             assertProcessLogCompleteness(log.text, expectedPid);
             if (diagnostics.realTick + diagnostics.duplicateIds + diagnostics.aiBatch > 0 || diagnostics.errorLines.length > 0)
                 failures.push({ instance, diagnostics });
-            } catch (error) { failures.push({ instance, error: error.stack }); }
+            } catch (error) { failures.push({ instance, error: error.stack, collection: logs[instance].collections?.at(-1) }); }
         }
         assert.deepEqual(failures, [], 'Incomplete logs or runtime error lines require investigation; no baseline blanket exemption');
     }
@@ -636,7 +630,7 @@ export async function run(config) {
                 if (initial) assert.equal(stopped.instances.length, 2);
                 assert.ok(stopped.instances.every(row => row.cleanupComplete && !row.processAlive && !row.processTreeAlive)); summary.cleanupConfirmed = true;
             } catch (error) { summary.cleanupError = error.stack; }
-            try { await collectLogs(); } catch (error) { summary.finalLogError = error.stack; }
+            try { await collectLogs(summary.cleanupConfirmed === true); } catch (error) { summary.finalLogError = error.stack; }
         }
         try { await client.close(); } catch (error) { summary.transportCloseError = error.stack; }
         await proxy.close(); summary.completedUtc = new Date().toISOString();

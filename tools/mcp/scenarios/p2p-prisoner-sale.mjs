@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { collectNativeLog } from './native-log-archive.mjs';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -355,7 +356,7 @@ export async function run(config) {
     const client = new Client({ name: 'codex-p2p-prisoner-sale', version: '1.0.0' });
     const transport = new StdioClientTransport({ command: config.server, args: ['--config', config.config],
         cwd: config.repo, stderr: 'inherit', maxBufferSize: 16 * 1024 * 1024 });
-    const logState = Object.fromEntries(INSTANCES.map(instance => [instance, { text: '', cursor: undefined, copiesRemoved: 0 }]));
+    const logState = Object.fromEntries(INSTANCES.map(instance => [instance, { text: '', cursor: undefined }]));
     const emit = entry => appendFile(config.record, JSON.stringify({ utc: new Date().toISOString(), ...entry }) + '\n');
     const saveSummary = () => writeFile(summaryPath, JSON.stringify(summary, null, 2) + '\n');
 
@@ -379,7 +380,7 @@ export async function run(config) {
         assert.ok(!raw.isError, `${name} MCP error: ${JSON.stringify(data)}`);
         console.log(JSON.stringify({ tool: name, instance: args.instance, callId: id, runId,
             status: data.state ?? data.ok ?? data.outcome ?? data.result?.reached }));
-        return data;
+        return name === 'read_logs' ? { result: data.result ?? data, qaCallId: id } : data;
     }
     async function commandResult(instance, name, args = [], mutation = false) {
         const response = await call('execute_command', { run_id: runId, instance, name, arguments: args }, mutation);
@@ -481,29 +482,15 @@ export async function run(config) {
         for (const instance of INSTANCES) {
             try {
                 const log = logState[instance];
-                for (let page = 0; page < 1024; page++) {
-                    const response = await call('read_logs', { run_id: runId, instance, cursor: log.cursor, max_bytes: 65536 });
-                    const chunk = response.result ?? response;
-                    assert.equal(typeof chunk.text, 'string'); assert.equal(typeof chunk.cursor, 'string');
-                    assert.equal(typeof chunk.reset, 'boolean'); assert.equal(typeof chunk.hasMore, 'boolean');
-                    if (chunk.reset) {
-                        assert.ok(archived, 'Live log reset; complete native application evidence is unavailable');
-                        const existing = new Set(log.text.split(/\r?\n/));
-                        const novel = chunk.text.split(/\r?\n/).filter(line => line && !existing.has(line));
-                        log.copiesRemoved += chunk.text.split(/\r?\n/).filter(line => line && existing.has(line)).length;
-                        if (novel.length) log.text += (log.text.endsWith('\n') ? '' : '\n') + novel.join('\n') + '\n';
-                    } else log.text += chunk.text;
-                    log.cursor = chunk.cursor;
-                    if (!chunk.hasMore) break;
-                    assert.ok(page < 1023, 'Log page budget exhausted');
-                }
+                await collectNativeLog(log, cursor => call('read_logs', { run_id: runId, instance, cursor, max_bytes: 65536 }),
+                    { archived, source: { runId, instance, rawRecord: config.record } });
                 const path = config.record + '.' + instance + '.log'; await writeFile(path, log.text);
                 const critical = logDiagnostics(log.text);
                 summary.logs[instance] = { path, sha256: createHash('sha256').update(log.text).digest('hex'),
-                    critical, archivedDuplicateLinesRemoved: log.copiesRemoved };
+                    critical, collections: log.collections };
                 assert.equal(critical.realTick + critical.duplicateIds + critical.aiBatch + critical.errorLines.length, 0,
                     `${instance} strict log diagnostics: ${JSON.stringify(critical)}`);
-            } catch (error) { errors.push(`${instance}: ${error.message}`); await emit({ phase: 'log_evidence_error', instance, error: error.stack }); }
+            } catch (error) { errors.push(`${instance}: ${error.message}`); await emit({ phase: 'log_evidence_error', instance, error: error.stack, collection: logState[instance].collections?.at(-1) }); }
         }
         assert.deepEqual(errors, [], 'Native log evidence or strict diagnostics failed');
     }
