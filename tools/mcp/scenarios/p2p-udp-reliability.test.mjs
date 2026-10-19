@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { options, proxyProfile, assertActors, assertWriter, assertWorld, assertPlayers, assertFrozenHost,
     assertPacketEvidence, assertProcessEvidence, logDiagnostics, jsonOutput, assertReconnectResult,
-    authorityBarrierEvents, assertHeldBarrierFaultPoint } from './p2p-udp-reliability.mjs';
+    authorityBarrierEvents, assertHeldBarrierFaultPoint, assertProcessLogCompleteness,
+    assertCandidateOnlyPacketEvidence } from './p2p-udp-reliability.mjs';
 
 const argv = ['--repo','.', '--server','mcp.exe','--config','profiles.json','--sdk-root','node_modules','--record','new.jsonl'];
 const initial = [ { controller:'A', mainHero:'hero_A', mainParty:'party_A', roomHost:'A' },
@@ -105,6 +106,39 @@ test('barrier-only selects one paused handoff without accepting multi-round stre
     assert.throws(()=>options([...argv,'--barrier-only','--rounds','3']));
     assert.throws(()=>options([...argv,'--barrier-only','--lost-writer']));
     assert.throws(()=>options([...argv,'--rounds','1']));
+});
+
+test('candidate-only skips stress explicitly and rejects incompatible modes and round counts', () => {
+    const selected=options([...argv,'--candidate-only']);
+    assert.equal(selected['candidate-only'],true); assert.equal(selected.rounds,0);
+    assert.throws(()=>options([...argv,'--candidate-only','--rounds','3']));
+    assert.throws(()=>options([...argv,'--candidate-only','--lost-writer']));
+    assert.throws(()=>options([...argv,'--candidate-only','--barrier-only']));
+    assert.equal(options(argv).rounds,3);
+    assert.equal(options([...argv,'--barrier-only']).rounds,1);
+});
+
+test('captured process logs require real Serilog prefixes from the actual expected PID', () => {
+    const expectedPid=280;
+    const actual='[(280) 09:28:25 INF GameInterface.Services.ItemRosters.Patches.ItemRosterPatch] Startup ready\n   at CoopMod.NoHarmonyInit()';
+    assert.deepEqual(assertProcessLogCompleteness(actual,expectedPid),{expectedPid,prefixLines:1});
+    assert.throws(()=>assertProcessLogCompleteness('',expectedPid),/empty/);
+    assert.throws(()=>assertProcessLogCompleteness('--- retained previous log; cursor reset ---',expectedPid),/Serilog process prefix/);
+    assert.throws(()=>assertProcessLogCompleteness('[(281) 09:28:25 INF CoopMod] wrong process',expectedPid),/expected PID 280/);
+    assert.throws(()=>assertProcessLogCompleteness(actual+'\n[(281) 09:28:26 INF CoopMod] wrong process',expectedPid),/expected PID 280/);
+    assert.throws(()=>assertProcessLogCompleteness(actual,0),/actual expected PID/);
+});
+
+test('candidate-only packet evidence requires held barrier traffic and actual blackout drops, not stress faults', () => {
+    const stats={errors:[],dropped:2,heldTotal:2,heldCurrentCount:0,heldCurrentBytes:0,
+        heldSamples:[{direction:'toClient',policyUtc:'held',bytes:128,sha256:'a'.repeat(64)}],
+        policies:[{holdToClient:true,blackout:false},{holdToClient:false,blackout:true}],
+        received:{toHost:9},sent:{toHost:8}};
+    assert.equal(assertCandidateOnlyPacketEvidence(stats),stats);
+    for(const patch of [{dropped:0},{heldTotal:0},{errors:['overflow']},{sent:{toHost:0}}])
+        assert.throws(()=>assertCandidateOnlyPacketEvidence({...clone(stats),...patch}));
+    const reversed=clone(stats);reversed.policies.reverse();
+    assert.throws(()=>assertCandidateOnlyPacketEvidence(reversed),/did not follow the held barrier/);
 });
 
 test('candidate fault point requires a new current-epoch barrier, held A-to-B UDP, and live B-to-A traffic', () => {

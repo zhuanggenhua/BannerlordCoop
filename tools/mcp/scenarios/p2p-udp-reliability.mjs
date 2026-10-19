@@ -11,7 +11,7 @@ export const HELP = `Usage: node tools/mcp/scenarios/p2p-udp-reliability.mjs
   --repo <coordinator checkout> --server <CoopMcpServer.exe> --config <profiles-proxy.json>
   --sdk-root <node_modules> --record <new evidence.jsonl>
   [--profile local] [--save P1B_DirectIP_Recruit] [--rounds 3]
-  [--timeout-seconds 75] [--lost-writer] [--barrier-only]
+  [--timeout-seconds 75] [--lost-writer] [--barrier-only] [--candidate-only]
 
 Run under tools/coordination/with-game-lock.mjs, from the coordinator only.
 The selected ListenAuthority profile must set clientProxyPort (for example24200).
@@ -20,6 +20,9 @@ Default: three or more A/B/A rounds under real packet loss/delay/reordering,
 then a committed-paused candidate disconnect, timeout and fresh-barrier reconnect.
 --barrier-only: one paused A/B/A preparation and the disconnect boundary only;
 NPC simulation and multi-round stress are explicitly NOT_RUN. Cannot set --rounds.
+--candidate-only: fault the initial paused A-to-B checkpoint before any A/B/A warm-up;
+active stress and simulation are NOT_RUN. Cannot combine with --rounds, --lost-writer,
+or --barrier-only.
 --lost-writer: separate pre-final-ACK writer-loss safety experiment, explicitly
 NOT lossless recovery. Rejoin must be refused with CampaignCheckpointUnavailable.
 Every feature records whole logs, two BMP receipts and UDP stats; stop_run and
@@ -39,14 +42,15 @@ export const paused = state => field(state.lease, 'isPaused');
 export const jsonOutput = text => JSON.parse(text.includes('LIVE_TEST_JSON=') ? text.split('LIVE_TEST_JSON=').at(-1) : text);
 
 export function options(argv) {
-    const config = { profile: 'local', save: 'P1B_DirectIP_Recruit', rounds: 3, 'timeout-seconds': 75, 'lost-writer': false };
+    const config = { profile: 'local', save: 'P1B_DirectIP_Recruit', rounds: 3, 'timeout-seconds': 75,
+        'lost-writer': false, 'candidate-only': false };
     const allowed = new Set(['repo', 'server', 'config', 'sdk-root', 'record', 'profile', 'save', 'rounds', 'timeout-seconds']);
     const seen = new Set();
     for (let i = 0; i < argv.length; i++) {
         const key = argv[i]?.replace(/^--/, '');
         assert.ok(argv[i]?.startsWith('--') && !seen.has(key), 'Invalid or duplicate option: ' + argv[i]);
         seen.add(key);
-        if (key === 'lost-writer' || key === 'barrier-only') { config[key] = true; continue; }
+        if (key === 'lost-writer' || key === 'barrier-only' || key === 'candidate-only') { config[key] = true; continue; }
         assert.ok(allowed.has(key) && argv[i + 1] && !argv[i + 1].startsWith('--'), 'Invalid option: ' + argv[i]);
         config[key] = argv[++i];
     }
@@ -54,7 +58,11 @@ export function options(argv) {
         assert.ok(config[key], 'Missing --' + key); config[key] = resolve(config[key]);
     }
     config.rounds = Number(config.rounds); config['timeout-seconds'] = Number(config['timeout-seconds']);
-    if (config['barrier-only']) {
+    if (config['candidate-only']) {
+        assert.ok(!seen.has('rounds') && !config['lost-writer'] && !config['barrier-only'],
+            'candidate-only is the initial candidate boundary, not stress, active writer loss or barrier-only');
+        config.rounds = 0;
+    } else if (config['barrier-only']) {
         assert.ok(!seen.has('rounds') && !config['lost-writer'], 'barrier-only is the candidate boundary, not configurable stress or active writer loss'); config.rounds=1;
     } else assert.ok(Number.isInteger(config.rounds) && config.rounds >= 3 && config.rounds <= 20, 'rounds must be3..20');
     assert.ok(Number.isInteger(config['timeout-seconds']) && config['timeout-seconds'] >= 65 && config['timeout-seconds'] <= 180,
@@ -153,6 +161,33 @@ export function assertPacketEvidence(stats) {
     for (const row of stats.samples) assert.match(row.sha256, /^[0-9a-f]{64}$/);
 }
 
+export function assertCandidateOnlyPacketEvidence(stats) {
+    assert.deepEqual(stats.errors, [], 'Candidate-only proxy reported an error');
+    assert.ok(stats.heldTotal > 0 && stats.heldSamples.some(row => row.direction === 'toClient' && row.bytes > 0 &&
+        /^[0-9a-f]{64}$/.test(row.sha256)), 'Candidate-only run did not hash an actually held A-to-B datagram');
+    const holdIndex = stats.policies.findIndex(row => row.holdToClient === true && !row.blackout);
+    const blackoutIndex = stats.policies.findIndex(row => row.blackout === true);
+    assert.ok(holdIndex >= 0, 'Candidate-only run did not apply its one-way A-to-B hold policy');
+    assert.ok(blackoutIndex > holdIndex, 'Candidate-only blackout did not follow the held barrier');
+    assert.ok(stats.dropped > 0, 'Blackout did not record dropping held UDP datagrams');
+    assert.equal(stats.heldCurrentCount, 0, 'Held UDP packets remain queued after blackout and cleanup');
+    assert.equal(stats.heldCurrentBytes, 0, 'Held UDP bytes remain queued after blackout and cleanup');
+    assert.ok(stats.received.toHost > 0 && stats.sent.toHost > 0,
+        'Candidate-to-host UDP did not flow while A-to-B traffic was held');
+    return stats;
+}
+
+export function assertProcessLogCompleteness(text, expectedPid) {
+    assert.ok(Number.isSafeInteger(expectedPid) && expectedPid > 0, 'Missing actual expected PID for process log');
+    assert.equal(typeof text, 'string', 'Process log is not text');
+    assert.ok(text.length > 0, 'Process log is empty');
+    const prefixes = [...text.matchAll(/^\[\((\d+)\)\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3}\s+[^\]\r\n]+\]/gm)];
+    assert.ok(prefixes.length > 0, 'Process log has no actual Serilog process prefix');
+    const observedPids = [...new Set(prefixes.map(match => Number(match[1])))];
+    assert.deepEqual(observedPids, [expectedPid], `Process log prefixes do not match expected PID ${expectedPid}`);
+    return { expectedPid, prefixLines: prefixes.length };
+}
+
 export function authorityBarrierEvents(text) {
     return [...text.matchAll(/Sent campaign authority handoff barrier (\d+) for paused epoch (\d+)/g)]
         .map(match => ({ sequence: Number(match[1]), epoch: Number(match[2]) }));
@@ -211,16 +246,35 @@ export async function run(config) {
         features: [], screenshots: [], probes: [], failed: null, cleanupConfirmed: false, passed: false,
         losslessWriterRecovery: 'NOT_IMPLEMENTED',
         barrierFaultPointVerdict: 'NOT_RUN',
-        stressCoverage: config['barrier-only'] ? 'NOT_RUN' : 'requires all configured active rounds',
-        simulationCoverage: config['barrier-only'] ? 'NOT_RUN' : 'sole writer five-second intervals', scope: 'Real loopback UDP faults, existing map authority protocol; no combat, native daily or cold-save acceptance.' };
+        stressCoverage: config['barrier-only'] || config['candidate-only'] ? 'NOT_RUN' : 'requires all configured active rounds',
+        simulationCoverage: config['barrier-only'] || config['candidate-only'] ? 'NOT_RUN' : 'sole writer five-second intervals',
+        scope: config['candidate-only']
+            ? 'Initial paused A checkpoint, held final barrier, actual UDP blackout/timeout/reconnect; active stress and simulation are NOT_RUN.'
+            : 'Real loopback UDP faults, existing map authority protocol; no combat, native daily or cold-save acceptance.' };
     const proxy = new UdpFaultProxy({ listenPort: profile.port });
     const client = new Client({ name: 'codex-p2p-udp-reliability', version: '1.0.0' });
     const transport = new StdioClientTransport({ command: config.server, args: ['--config', config.config], cwd: config.repo,
         stderr: 'inherit', maxBufferSize: 16 * 1024 * 1024 });
     const logs = Object.fromEntries(INSTANCES.map(name => [name, { text: '', cursor: undefined, resets: 0 }]));
+    const expectedLogPids = Object.create(null);
     let runId, initial, callId = 0, readDeadline;
     const emit = entry => appendFile(config.record, JSON.stringify({ utc: new Date().toISOString(), ...entry }) + '\n');
     const save = async () => { summary.udp = structuredClone(proxy.stats); await writeFile(summaryPath, JSON.stringify(summary, null, 2) + '\n'); };
+    function captureLogPids(view, source) {
+        for (const row of view?.instances ?? []) {
+            if (!INSTANCES.includes(row.name)) continue;
+            const pid = row.identity?.pid;
+            if (!Number.isSafeInteger(pid) || pid <= 0) continue;
+            if (expectedLogPids[row.name] !== undefined)
+                assert.equal(pid, expectedLogPids[row.name], `${source} changed the ${row.name} process identity`);
+            expectedLogPids[row.name] = pid;
+            summary.logProcessIdentities ??= {};
+            const receipt = summary.logProcessIdentities[row.name] ?? { pid, sources: [] };
+            assert.equal(receipt.pid, pid, `${source} PID does not match captured ${row.name} identity`);
+            if (!receipt.sources.includes(source)) receipt.sources.push(source);
+            summary.logProcessIdentities[row.name] = receipt;
+        }
+    }
     async function call(name, args, mutation = false) {
         assert.ok(!(readDeadline && mutation), 'Polling callbacks may not mutate');
         const timeout = readDeadline ? readDeadline - Date.now() : 360000;
@@ -230,7 +284,11 @@ export async function run(config) {
         try { raw = await client.callTool({ name, arguments: args }, undefined, { timeout }); }
         catch (error) { await emit({ phase: 'transport_error', callId: id, name, error: error.stack, outcomeUncertain: mutation }); throw error; }
         const data = raw.structuredContent ?? JSON.parse(raw.content.find(item => item.type === 'text').text);
-        if (name === 'start_run' && data.runId) { runId = data.runId; summary.runId = runId; }
+        if (name === 'start_run' && data.runId) {
+            runId = data.runId; summary.runId = runId; captureLogPids(data, 'start_run');
+        }
+        if (name === 'start_client') captureLogPids(data.run, 'start_client');
+        if (name === 'get_run') captureLogPids(data, 'get_run');
         await emit({ phase: 'response', callId: id, name, args, data, raw });
         assert.ok(!raw.isError, `${name}: ${JSON.stringify(data)}`); return data;
     }
@@ -299,7 +357,10 @@ export async function run(config) {
             }
             const path = config.record + '.' + instance + '.log'; await writeFile(path, log.text);
             const diagnostics = logDiagnostics(log.text);
-            summary.logs[instance] = { path, sha256: createHash('sha256').update(log.text).digest('hex'), resets: log.resets, ...diagnostics };
+            const expectedPid = expectedLogPids[instance];
+            summary.logs[instance] = { path, sha256: createHash('sha256').update(log.text).digest('hex'), resets: log.resets,
+                expectedPid: expectedPid ?? null, ...diagnostics };
+            assertProcessLogCompleteness(log.text, expectedPid);
             if (diagnostics.realTick + diagnostics.duplicateIds + diagnostics.aiBatch > 0 || diagnostics.errorLines.length > 0)
                 failures.push({ instance, diagnostics });
             } catch (error) { failures.push({ instance, error: error.stack }); }
@@ -403,20 +464,22 @@ export async function run(config) {
             assertProcessEvidence(osProcesses, processes.map(value => value.identity.pid));
             return { snapshot, processes, osProcesses };
         });
-        proxy.setFault({ dropEvery: 11, delayEvery: 5, delayMs: 250 });
-        for (let round = 1; round <= config.rounds; round++) {
-            await feature(config['barrier-only'] ? 'paused-handoff-under-network-faults' : 'loss-delay-reorder-round-' + round, async () => {
-                const a = await awaitWriter(initial[0].controller), aProbe = await allocation('server');
-                const aTick = config['barrier-only'] ? { simulation: 'NOT_RUN', snapshot: await pause() } : await soleTick('server');
-                await command('server', 'coop.debug.authority.availability', ['yield'], true);
-                const b = await awaitWriter(initial[1].controller); assert.equal(epoch(b[0]), epoch(a[0]) + 2);
-                const bProbe = await allocation('client1'), bTick = config['barrier-only'] ? { simulation: 'NOT_RUN', snapshot: await pause() } : await soleTick('client1');
-                await command('server', 'coop.debug.authority.availability', ['auto'], true);
-                const returned = await awaitWriter(initial[0].controller); assert.equal(epoch(returned[0]), epoch(b[0]) + 2);
-                return { a, b, returned, aProbe, bProbe, aTick, bTick, snapshot: await pause() };
-            });
+        if (!config['candidate-only']) {
+            proxy.setFault({ dropEvery: 11, delayEvery: 5, delayMs: 250 });
+            for (let round = 1; round <= config.rounds; round++) {
+                await feature(config['barrier-only'] ? 'paused-handoff-under-network-faults' : 'loss-delay-reorder-round-' + round, async () => {
+                    const a = await awaitWriter(initial[0].controller), aProbe = await allocation('server');
+                    const aTick = config['barrier-only'] ? { simulation: 'NOT_RUN', snapshot: await pause() } : await soleTick('server');
+                    await command('server', 'coop.debug.authority.availability', ['yield'], true);
+                    const b = await awaitWriter(initial[1].controller); assert.equal(epoch(b[0]), epoch(a[0]) + 2);
+                    const bProbe = await allocation('client1'), bTick = config['barrier-only'] ? { simulation: 'NOT_RUN', snapshot: await pause() } : await soleTick('client1');
+                    await command('server', 'coop.debug.authority.availability', ['auto'], true);
+                    const returned = await awaitWriter(initial[0].controller); assert.equal(epoch(returned[0]), epoch(b[0]) + 2);
+                    return { a, b, returned, aProbe, bProbe, aTick, bTick, snapshot: await pause() };
+                });
+            }
+            assertPacketEvidence(proxy.stats); proxy.setFault();
         }
-        assertPacketEvidence(proxy.stats); proxy.setFault();
         if (config['lost-writer']) {
             await feature('lost-before-final-ack-safety-only', async () => {
                 await command('server', 'coop.debug.authority.availability', ['yield'], true); await awaitWriter(initial[1].controller);
@@ -553,7 +616,8 @@ export async function run(config) {
                 };
             });
         }
-        assertPacketEvidence(proxy.stats);
+        if (config['candidate-only']) assertCandidateOnlyPacketEvidence(proxy.stats);
+        else assertPacketEvidence(proxy.stats);
     } catch (error) {
         summary.failed = { message: error.message, stack: error.stack }; await emit({ phase: 'scenario_failure', ...summary.failed });
         if (runId && !summary.features.some(row => row.status === 'FAIL')) {
