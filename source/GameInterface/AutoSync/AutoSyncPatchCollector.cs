@@ -19,8 +19,9 @@ public interface IAutoSyncPatchCollector : IDisposable
 class AutoSyncPatchCollector : IAutoSyncPatchCollector
 {
     private static readonly ILogger Logger = LogManager.GetLogger<AutoSyncPatchCollector>();
+    private static readonly object PatchGate = new();
 
-    public static readonly HashSet<(MethodBase, MethodInfo, HarmonyPatchType)> PatchedMethods = new();
+    private static readonly HashSet<(string HarmonyId, MethodBase Method, MethodInfo Patch, HarmonyPatchType Type)> PatchedMethods = new();
 
     private readonly Harmony harmony;
 
@@ -56,85 +57,154 @@ class AutoSyncPatchCollector : IAutoSyncPatchCollector
 
     public void PatchAll()
     {
-        foreach (var (method, patch) in transpilers)
+        lock (PatchGate)
         {
-            var key = (method, patch, HarmonyPatchType.Transpiler);
-            if (PatchedMethods.Contains(key))
+            PatchAll(transpilers, HarmonyPatchType.Transpiler);
+            PatchAll(prefixes, HarmonyPatchType.Prefix);
+            PatchAll(postfixes, HarmonyPatchType.Postfix);
+        }
+    }
+
+    private void PatchAll(List<(MethodBase, MethodInfo)> patches, HarmonyPatchType patchType)
+    {
+        foreach (var (method, patch) in patches)
+            Patch(method, patch, patchType);
+    }
+
+    private void Patch(MethodBase method, MethodInfo patch, HarmonyPatchType patchType)
+    {
+        var key = (harmony.Id, method, patch, patchType);
+
+        try
+        {
+            // Harmony metadata is the source of truth. The static set can outlive a
+            // container, while an external unpatch can remove Harmony's live entry.
+            var ownedCount = CountInstalledPatches(method, patch, patchType, out var otherOwner);
+            if (ownedCount > 1)
             {
-                Logger.Error("Method '{MethodName}' was already patched with '{PatchName}'", method.Name, patch.Name);
-                continue;
+                Logger.Error("Harmony patch {PatchDeclaringType}.{PatchName} has {PatchCount} live registrations for {DeclaringType}.{MethodName} owned by {HarmonyId}",
+                    patch.DeclaringType, patch.Name, ownedCount, method.DeclaringType, method.Name, harmony.Id);
+                return;
             }
 
-            try
-            { 
-                harmony.Patch(method, transpiler: new HarmonyMethod(patch));
-                PatchedMethods.Add(key);
-            } 
-            catch (Exception ex)
+            if (otherOwner != null)
             {
-                Logger.Error(ex, "Failed to patch {DeclaringType}.{MethodName} with patch {PatchDeclaringType}.{PatchName}",
-                    method.DeclaringType, method.Name, patch.DeclaringType, patch.Name);
+                Logger.Error("Method {DeclaringType}.{MethodName} already has patch {PatchDeclaringType}.{PatchName} owned by {OtherHarmonyId}; refusing duplicate under {HarmonyId}",
+                    method.DeclaringType, method.Name, patch.DeclaringType, patch.Name, otherOwner, harmony.Id);
+                return;
             }
+
+            if (ownedCount == 1)
+            {
+                PatchedMethods.Add(key);
+                return;
+            }
+
+            if (PatchedMethods.Remove(key))
+                Logger.Warning("Harmony patch {PatchDeclaringType}.{PatchName} for {DeclaringType}.{MethodName} owned by {HarmonyId} was missing and will be reinstalled",
+                    patch.DeclaringType, patch.Name, method.DeclaringType, method.Name, harmony.Id);
+
+            var harmonyMethod = new HarmonyMethod(patch);
+            switch (patchType)
+            {
+                case HarmonyPatchType.Transpiler:
+                    harmony.Patch(method, transpiler: harmonyMethod);
+                    break;
+                case HarmonyPatchType.Prefix:
+                    harmony.Patch(method, prefix: harmonyMethod);
+                    break;
+                case HarmonyPatchType.Postfix:
+                    harmony.Patch(method, postfix: harmonyMethod);
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(patchType), patchType, "Unsupported Harmony patch type.");
+            }
+
+            ownedCount = CountInstalledPatches(method, patch, patchType, out otherOwner);
+            if (otherOwner != null)
+            {
+                Logger.Error("Harmony patch {PatchDeclaringType}.{PatchName} for {DeclaringType}.{MethodName} is also owned by {OtherHarmonyId} after installation under {HarmonyId}",
+                    patch.DeclaringType, patch.Name, method.DeclaringType, method.Name, otherOwner, harmony.Id);
+                return;
+            }
+
+            if (ownedCount != 1)
+            {
+                Logger.Error("Harmony did not register exactly one patch {PatchDeclaringType}.{PatchName} for {DeclaringType}.{MethodName} owned by {HarmonyId}; found {PatchCount}",
+                    patch.DeclaringType, patch.Name, method.DeclaringType, method.Name, harmony.Id, ownedCount);
+                return;
+            }
+
+            PatchedMethods.Add(key);
+        }
+        catch (Exception ex)
+        {
+            Logger.Error(ex, "Failed to patch {DeclaringType}.{MethodName} with patch {PatchDeclaringType}.{PatchName}",
+                method.DeclaringType, method.Name, patch.DeclaringType, patch.Name);
+        }
+    }
+
+    private int CountInstalledPatches(MethodBase method, MethodInfo patch, HarmonyPatchType patchType, out string otherOwner)
+    {
+        otherOwner = null;
+        var patchInfo = Harmony.GetPatchInfo(method);
+        if (patchInfo == null) return 0;
+
+        IEnumerable<Patch> livePatches = patchType switch
+        {
+            HarmonyPatchType.Transpiler => patchInfo.Transpilers,
+            HarmonyPatchType.Prefix => patchInfo.Prefixes,
+            HarmonyPatchType.Postfix => patchInfo.Postfixes,
+            _ => null
+        };
+
+        if (livePatches == null) return 0;
+
+        var ownedCount = 0;
+        foreach (var livePatch in livePatches)
+        {
+            if (livePatch.PatchMethod != patch) continue;
+            if (livePatch.owner == harmony.Id)
+                ownedCount++;
+            else
+                otherOwner ??= livePatch.owner;
         }
 
-        foreach (var (method, patch) in prefixes)
-        {
-            var key = (method, patch, HarmonyPatchType.Prefix);
-            if (PatchedMethods.Contains(key))
-            {
-                Logger.Error("Method '{DeclaringType}.{MethodName}' was already patched with '{PatchName}'", method.DeclaringType, method.Name, patch.Name);
-                continue;
-            }
-
-            try
-            {
-                harmony.Patch(method, prefix: new HarmonyMethod(patch));
-                PatchedMethods.Add(key);
-            } catch (Exception ex)
-            {
-                Logger.Error(ex, "Failed to patch {DeclaringType}.{MethodName} with patch {PatchDeclaringType}.{PatchName}",
-                    method.DeclaringType, method.Name, patch.DeclaringType, patch.Name);
-            }
-        }
-
-        foreach (var (method, patch) in postfixes)
-        {
-            var key = (method, patch, HarmonyPatchType.Postfix);
-            if (PatchedMethods.Contains(key))
-            {
-                Logger.Error("Method '{MethodName}' was already patched with '{PatchName}'", method.Name, patch.Name);
-                continue;
-            }
-
-            try
-            {
-                harmony.Patch(method, postfix: new HarmonyMethod(patch));
-                PatchedMethods.Add(key);
-            }
-            catch (Exception ex)
-            {
-                Logger.Error(ex, "Failed to patch {DeclaringType}.{MethodName} with patch {PatchDeclaringType}.{PatchName}",
-                    method.DeclaringType, method.Name, patch.DeclaringType, patch.Name);
-            }
-        }
+        return ownedCount;
     }
 
     public void UnpatchAll()
     {
-        UnpatchAll(transpilers, HarmonyPatchType.Transpiler);
-        UnpatchAll(prefixes, HarmonyPatchType.Prefix);
-        UnpatchAll(postfixes, HarmonyPatchType.Postfix);
+        lock (PatchGate)
+        {
+            UnpatchAll(transpilers, HarmonyPatchType.Transpiler);
+            UnpatchAll(prefixes, HarmonyPatchType.Prefix);
+            UnpatchAll(postfixes, HarmonyPatchType.Postfix);
+        }
     }
 
     private void UnpatchAll(List<(MethodBase, MethodInfo)> patches, HarmonyPatchType patchType)
     {
         foreach (var (method, patch) in patches.ToArray())
         {
-            // Always clear the bookkeeping, even if the live unpatch fails: the static set must not
-            // outlive the patches, otherwise a rebuilt container's PatchAll skips re-patching them.
-            // The live patch is also removed in bulk by the caller's Harmony.UnpatchAll().
             try
             {
+                var ownedCount = CountInstalledPatches(method, patch, patchType, out var otherOwner);
+                if (ownedCount == 0)
+                {
+                    PatchedMethods.Remove((harmony.Id, method, patch, patchType));
+                    patches.Remove((method, patch));
+                    continue;
+                }
+
+                if (otherOwner != null)
+                {
+                    // Harmony's MethodInfo-only unpatch removes matching hooks across owners.
+                    Logger.Error("Cannot unpatch {PatchDeclaringType}.{PatchName} from {DeclaringType}.{MethodName}: the same patch is also owned by {OtherHarmonyId}",
+                        patch.DeclaringType, patch.Name, method.DeclaringType, method.Name, otherOwner);
+                    continue;
+                }
+
                 harmony.Unpatch(method, patch);
             }
             catch (Exception ex)
@@ -143,7 +213,7 @@ class AutoSyncPatchCollector : IAutoSyncPatchCollector
                     method.DeclaringType, method.Name, patch.DeclaringType, patch.Name);
             }
 
-            PatchedMethods.Remove((method, patch, patchType));
+            PatchedMethods.Remove((harmony.Id, method, patch, patchType));
             patches.Remove((method, patch));
         }
     }
