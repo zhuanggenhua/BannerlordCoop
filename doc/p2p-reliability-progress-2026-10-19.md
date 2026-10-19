@@ -14,20 +14,28 @@
 
 结构化证据：[`artifacts/p2p-authority/reliability-cold03-2026-10-19.json`](../artifacts/p2p-authority/reliability-cold03-2026-10-19.json)。完整请求、日志、截图及验证回执保留在本机 `.mcp-local/p2p-cold-save-03.jsonl*` 和 Git common 目录的 `codex-coordination/evidence/p2p-reliability-20261019/cold03-receipt.json`。Cold01/02 的失败证据保留，未改写为通过。
 
+## 已通过：双向观察者离城及地图交接
+
+运行代码：`bff7aec55077f69250e313b58572895a35853964`。Observer03 的 9/9 阶段通过，A/B PID 为 14384、22508。B 观察者通过 A 权威离城、A 观察者通过 B 权威离城均只有一次权威执行；两端均回到原生地图，角色及部队身份保持稳定，A→B→A 后比较世界时钟、编号、兵力、经验、金币、注册数量及玩家状态一致。两端日志非空且无 ERR/FTL，并确认两个进程完整退出。
+
+修复将离城请求与任期、玩家、部队、城镇及序号关联，在原生离城结束后清除重入产生的旧进入请求；呈现层完成事件独立于有世界副作用的权威离城事件。保留 Observer01/02 原始失败。准备城镇位置使用权威端 QA 命令，因此这项验收不等同于普通远距离旅行/入城验收；单权威运行样本各五秒，不等同于自然跨日。
+
+结构化证据：[Observer03 验收摘要](../artifacts/p2p-authority/reliability-observer03-2026-10-19.json)。完整原始证据在本机 `.mcp-local/p2p-observer-leave-03.jsonl*`。
+
 ## 当前未通过与待验证
 
 | 场景 | 真实结果 | 证据及后续 |
 | --- | --- | --- |
-| UDP 丢包、延迟、乱序下活动 A→B→A | Active09 首轮 PASS，第二轮 FAIL | 空 Hero 的完整 DEBUG 调用栈已定位到 `OtherNotificationsHandler.Handle_NotifyKingdomInfluenceChanged`；由 NPC 捐俘后的影响力通知触发。修复尚待集成及实机复测。 |
-| 最终屏障交接中断与重新加入 | Candidate08 未到达目标故障点 | 已拦截 A→B 数据包并保留 B→A 通信，但当前暂停任期未记录新屏障，明确标记 `FAULTPOINT_NOT_REACHED`；不视为恢复通过或恢复失败。 |
-| 观察者离城 | Observer02 FAIL | 权威端已执行离城，客户端随后发出旧入口的城镇进入请求，服务端批准后又进入城镇。正在修复呈现层待处理请求的失效及关联拒绝响应。 |
+| UDP 丢包、延迟、乱序下活动 A→B→A | Active11 前两轮 PASS，第三轮 FAIL | 已集成空 Hero 影响力通知修复，本次未再出现该错误；第三轮 B 观察者出现 TroopRoster 缺少网络句柄的新错误，正在追加 DEBUG 调用栈定位，不自动补编号或忽略错误。 |
+| 最终屏障交接中断与重新加入 | Candidate12 到达故障点，恢复 FAIL | 新任期最终屏障被真实网络拦截，75 秒断网后 B 在同进程重连，但未获得新权威；B 重初始化还记录 AutoSync 重复补丁 ERR。保持暂停，未出现超时强行提升；需继续修复并复测。Candidate08 未到达故障点的历史结果保留。 |
+| 观察者离城 | Observer03 9/9 PASS（限定范围） | 见上方完整说明；普通远距离旅行和入城仍需独立验收。 |
 | NPC 售俘动态权威归属 | 静态缺口已确认，候选未集成 | 旧监听注册依赖固定 IsServer。严格租约候选会暴露旧玩家售俘请求仍在房主执行的问题，因此总控拒绝将候选作为可用功能集成，需先修复玩家请求路由。 |
 | 自然跨日、完整 AI 周期连续性 | NOT RUN | 当前周期计数器可能把合法补跑归为重复，需限定或修正判据后验收。 |
 | 旧权威在最终 ACK 前突然失联且无损接管 | 未实现 | 当前安全策略保持冻结，并拒绝使用房主过期快照接回；不得把安全拒绝称为无损恢复。 |
 
-UDP 工具四组 Node 测试在 `ab247716f17cf1210c75e9ad730d3dc7bdba3493` 为 40/40。最后一次总控完整回归在 `53c0b518` 为 GameInterface 2,941/0、Coop 1,414/195、Common 423/0、选定 E2E 60/10，195/10 失败名称均与历史基线一致。上述计数标明对应代码，不将未集成候选的测试计入当前功能。
+UDP 工具四组 Node 测试在 `c5f205c0b660645f187643ffbda619250c5f0ae1` 为 43/43。最后一次总控完整回归在 `bff7aec55077f69250e313b58572895a35853964` 为 GameInterface 2,957/0、Coop 1,419/195、Common 423/0、选定 E2E 60/10，195/10 失败名称均与历史基线逐项一致，新增和消失均为 0；Coop/E2E 的原始退出码仍为 1，不能称为全绿。上述计数不包含未集成的售俘候选。
 
-Candidate08 的 B 日志为空，不能从空日志推断“无异常”。该诊断完整性问题继续登记。所有未通过场景都保持未验收，P2P 可靠性收口与完整 P1-B 均未标记完成。
+Candidate08 和 Initial-barrier10 的 B 空日志失败保留。已在 `1c7ef7fc32fa91894ee9fc51360a4ab5b1ccab67` 将文件日志初始化提前到显式 AutoConnect 地址解析之前。Active11 实机检查两端完整归档日志均有各自 PID 的实际日志前缀和启动头，B PID 2852 的归档为 367,822 字节；其中真实兵员句柄错误保持可见。这只证明日志修复，不改变压力测试 FAIL。对应摘要保留在 Git common 目录 `codex-coordination/evidence/p2p-reliability-20261019/active11-logging-proof.json`。所有未通过场景都保持未验收，P2P 可靠性收口与完整 P1-B 均未标记完成。
 
 ## 编排约束
 

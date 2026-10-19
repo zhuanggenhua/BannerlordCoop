@@ -1,0 +1,81 @@
+{
+  "status": "PASS-bounded-explicit-endpoint-file-logging",
+  "runtimeCommit": "bff7aec55077f69250e313b58572895a35853964",
+  "fixCommit": "1c7ef7fc32fa91894ee9fc51360a4ab5b1ccab67",
+  "runId": "378d354941f44f5d8ae369dbb965f283",
+  "raw": {
+    "path": "E:/code/code home/BannerlordCoop/.mcp-local/p2p-udp-active-11.jsonl",
+    "sha256": "5bc34e60a79a53b9e5c44349066bfd46bca2ae8c0afd60a5e71f4d0a54827236"
+  },
+  "summary": {
+    "path": "E:/code/code home/BannerlordCoop/.mcp-local/p2p-udp-active-11.jsonl.summary.json",
+    "sha256": "51a00309540c8d0a7a3258ad000096005a832a391e00e3c9cbbbc99dfac26dc1"
+  },
+  "instances": [
+    {
+      "name": "server",
+      "identity": {
+        "pid": 25728,
+        "startedUtc": "2026-10-19T04:53:37.7045342Z",
+        "role": "server",
+        "platformId": "LocalA",
+        "runToken": "378d354941f44f5d8ae369dbb965f283"
+      },
+      "bytes": 2712101,
+      "processPrefixedRows": 1332,
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-udp-active-11.jsonl.server.log",
+      "sha256": "44bbb958b33dac4dedb5eb1a38e9c4cb58f39338e6ca722a896f6ccd302fc94a",
+      "resets": 1,
+      "realTick": 0,
+      "duplicateIds": 0,
+      "aiBatch": 0,
+      "errorLines": []
+    },
+    {
+      "name": "client1",
+      "identity": {
+        "pid": 2852,
+        "startedUtc": "2026-10-19T04:54:27.4783134Z",
+        "role": "client",
+        "platformId": "testclient1",
+        "runToken": "378d354941f44f5d8ae369dbb965f283"
+      },
+      "bytes": 367822,
+      "processPrefixedRows": 1284,
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-udp-active-11.jsonl.client1.log",
+      "sha256": "6332b935f0538a9933cc9d85d5bd823be4de9b9adcafb2f8924a0ee7a9751bcd",
+      "resets": 1,
+      "realTick": 0,
+      "duplicateIds": 0,
+      "aiBatch": 0,
+      "errorLines": [
+        "[(2852) 12:56:42 ERR GameInterface.Services.ObjectManager.ObjectManager] [ObjectManager] Failed to get network handle for object of type TaleWorlds.CampaignSystem.Roster.TroopRoster",
+        "[(2852) 12:56:42 ERR GameInterface.Services.ObjectManager.ObjectManager] [ObjectManager] Failed to get network handle for object of type TaleWorlds.CampaignSystem.Roster.TroopRoster"
+      ]
+    }
+  ],
+  "cleanupConfirmed": true,
+  "wholeStressStatus": "FAIL",
+  "stressFeatures": [
+    {
+      "name": "two-process-exact-baseline",
+      "status": "PASS"
+    },
+    {
+      "name": "loss-delay-reorder-round-1",
+      "status": "PASS"
+    },
+    {
+      "name": "loss-delay-reorder-round-2",
+      "status": "PASS"
+    },
+    {
+      "name": "loss-delay-reorder-round-3",
+      "status": "FAIL"
+    }
+  ],
+  "limits": [
+    "Only proves process-owned startup and ongoing file logging for this explicit-endpoint run. It does not certify the entire stress run.",
+    "The real TroopRoster missing-handle error remains recorded and blocks stress acceptance. Repeated archive copies are not separate underlying events."
+  ]
+}

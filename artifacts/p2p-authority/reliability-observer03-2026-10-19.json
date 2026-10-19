@@ -1,0 +1,1092 @@
+{
+  "status": "passed-bounded-observer-settlement-exit-and-map-handoff",
+  "runtimeCommit": "bff7aec55077f69250e313b58572895a35853964",
+  "runId": "b55f10591fd645558030440c7d62ecc7",
+  "features": [
+    {
+      "name": "join-single-native-actors",
+      "status": "PASS"
+    },
+    {
+      "name": "native-Danustica-writer-only-preparation",
+      "status": "PASS"
+    },
+    {
+      "name": "B-observer-exits-through-A-writer",
+      "status": "PASS"
+    },
+    {
+      "name": "A-to-B-final-checkpoint",
+      "status": "PASS"
+    },
+    {
+      "name": "A-observer-exits-through-B-writer",
+      "status": "PASS"
+    },
+    {
+      "name": "B-sole-writer-time-and-NPC-sample",
+      "status": "PASS"
+    },
+    {
+      "name": "B-to-A-final-checkpoint",
+      "status": "PASS"
+    },
+    {
+      "name": "A-sole-writer-time-and-NPC-sample",
+      "status": "PASS"
+    },
+    {
+      "name": "final-strict-world-and-actors",
+      "status": "PASS"
+    }
+  ],
+  "processes": [
+    {
+      "name": "server",
+      "identity": {
+        "pid": 14384,
+        "startedUtc": "2026-10-19T04:48:45.2105391Z",
+        "role": "server",
+        "platformId": "LocalA",
+        "runToken": "b55f10591fd645558030440c7d62ecc7"
+      },
+      "processAlive": true,
+      "status": {
+        "protocolVersion": 1,
+        "uiCapability": "bounded-ui-layers-v1",
+        "pid": 14384,
+        "role": "server",
+        "platformId": "LocalA",
+        "runToken": "b55f10591fd645558030440c7d62ecc7",
+        "buildVersion": "0.1.7+bff7aec55077f69250e313b58572895a35853964",
+        "assemblyMvid": "a9f534a5-dcc5-4e70-864d-ffbeeefd6469",
+        "loadedAssemblies": [
+          {
+            "name": "Common",
+            "version": "1.0.0.0",
+            "mvid": "a090629d-1d49-4d1e-9edc-7bc123be4045",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Common.dll"
+          },
+          {
+            "name": "Coop",
+            "version": "1.0.0.0",
+            "mvid": "a9f534a5-dcc5-4e70-864d-ffbeeefd6469",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.dll"
+          },
+          {
+            "name": "Coop.Core",
+            "version": "1.0.0.0",
+            "mvid": "421d63d2-7f34-4e42-b4f2-73fe30ad356d",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Core.dll"
+          },
+          {
+            "name": "Coop.Steam",
+            "version": "1.0.0.0",
+            "mvid": "4c628251-0b07-41c0-869a-3d4e504b4299",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Steam.dll"
+          },
+          {
+            "name": "GameInterface",
+            "version": "1.0.0.0",
+            "mvid": "3e6b48a7-7ca0-4f71-bafe-a2da2edd31b4",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\GameInterface.dll"
+          },
+          {
+            "name": "Missions",
+            "version": "1.0.0.0",
+            "mvid": "f9e3a73c-5b2d-4a57-8222-57497452ed67",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Missions.dll"
+          }
+        ],
+        "processStartedUtc": "2026-10-19T04:48:45.2105391Z",
+        "logPath": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\bin\\Win64_Shipping_Client\\Coop_server.log",
+        "gameThreadInitialized": true,
+        "gameThreadQueueDepth": 0,
+        "commandRegistryReady": true,
+        "activeState": "TaleWorlds.CampaignSystem.GameState.MapState",
+        "topScreen": "SandBox.View.Map.MapScreen",
+        "activeMenu": null,
+        "campaignLoaded": true,
+        "requestedSaveName": "P1B_DirectIP_Recruit",
+        "loadedCampaignId": "RVLgBrkkFApz",
+        "loadedSaveNameConfirmed": false,
+        "missionActive": false,
+        "coopRunning": true,
+        "coopState": "Coop.Core.Server.States.ServerRunningState",
+        "registeredPlayers": 2,
+        "registeredPlayerCount": 2,
+        "connectedPlayerCount": 2,
+        "registeredControllerIds": [
+          "LocalA",
+          "testclient1"
+        ],
+        "connectedControllerIds": [
+          "LocalA",
+          "testclient1"
+        ],
+        "deferredClientJoinEnabled": false,
+        "readyForClientJoin": false,
+        "deferredClientJoinAttempted": false,
+        "readyForCampaignTests": true,
+        "readyForMissionTests": false
+      },
+      "error": null,
+      "processTreeAlive": true,
+      "cleanupComplete": false
+    },
+    {
+      "name": "client1",
+      "identity": {
+        "pid": 22508,
+        "startedUtc": "2026-10-19T04:49:32.5980536Z",
+        "role": "client",
+        "platformId": "testclient1",
+        "runToken": "b55f10591fd645558030440c7d62ecc7"
+      },
+      "processAlive": true,
+      "status": {
+        "protocolVersion": 1,
+        "uiCapability": "bounded-ui-layers-v1",
+        "pid": 22508,
+        "role": "client",
+        "platformId": "testclient1",
+        "runToken": "b55f10591fd645558030440c7d62ecc7",
+        "buildVersion": "0.1.7+bff7aec55077f69250e313b58572895a35853964",
+        "assemblyMvid": "a9f534a5-dcc5-4e70-864d-ffbeeefd6469",
+        "loadedAssemblies": [
+          {
+            "name": "Common",
+            "version": "1.0.0.0",
+            "mvid": "a090629d-1d49-4d1e-9edc-7bc123be4045",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Common.dll"
+          },
+          {
+            "name": "Coop",
+            "version": "1.0.0.0",
+            "mvid": "a9f534a5-dcc5-4e70-864d-ffbeeefd6469",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.dll"
+          },
+          {
+            "name": "Coop.Core",
+            "version": "1.0.0.0",
+            "mvid": "421d63d2-7f34-4e42-b4f2-73fe30ad356d",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Core.dll"
+          },
+          {
+            "name": "Coop.Steam",
+            "version": "1.0.0.0",
+            "mvid": "4c628251-0b07-41c0-869a-3d4e504b4299",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Steam.dll"
+          },
+          {
+            "name": "GameInterface",
+            "version": "1.0.0.0",
+            "mvid": "3e6b48a7-7ca0-4f71-bafe-a2da2edd31b4",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\GameInterface.dll"
+          },
+          {
+            "name": "Missions",
+            "version": "1.0.0.0",
+            "mvid": "f9e3a73c-5b2d-4a57-8222-57497452ed67",
+            "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Missions.dll"
+          }
+        ],
+        "processStartedUtc": "2026-10-19T04:49:32.5980536Z",
+        "logPath": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\bin\\Win64_Shipping_Client\\Coop_client.log",
+        "gameThreadInitialized": true,
+        "gameThreadQueueDepth": 0,
+        "commandRegistryReady": true,
+        "activeState": "TaleWorlds.CampaignSystem.GameState.MapState",
+        "topScreen": "SandBox.View.Map.MapScreen",
+        "activeMenu": "town",
+        "campaignLoaded": true,
+        "requestedSaveName": null,
+        "loadedCampaignId": "RVLgBrkkFApz",
+        "loadedSaveNameConfirmed": false,
+        "missionActive": false,
+        "coopRunning": true,
+        "coopState": "Coop.Core.Client.States.CampaignState",
+        "registeredPlayers": 2,
+        "registeredPlayerCount": null,
+        "connectedPlayerCount": null,
+        "registeredControllerIds": null,
+        "connectedControllerIds": null,
+        "deferredClientJoinEnabled": true,
+        "readyForClientJoin": false,
+        "deferredClientJoinAttempted": true,
+        "readyForCampaignTests": true,
+        "readyForMissionTests": false
+      },
+      "error": null,
+      "processTreeAlive": true,
+      "cleanupComplete": false,
+      "startupPopup": {
+        "outcome": "not_applicable"
+      }
+    }
+  ],
+  "osProcesses": [
+    {
+      "Name": "Bannerlord.exe",
+      "ProcessId": 14384,
+      "CreationDate": "/Date(1792385325210)/",
+      "CommandLine": "\"E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\bin\\Win64_Shipping_Client\\Bannerlord.exe\" \"/singleplayer\" \"/server\" \"/autoconnect\" \"/platformId\" \"LocalA\" \"/cooptestrun\" \"b55f10591fd645558030440c7d62ecc7\" \"/listenhost\" \"/coopsave\" \"P1B_DirectIP_Recruit\" \"_MODULES_*Native*SandBoxCore*SandBox*StoryMode*Coop*_MODULES_\""
+    },
+    {
+      "Name": "Bannerlord.exe",
+      "ProcessId": 22508,
+      "CreationDate": "/Date(1792385372598)/",
+      "CommandLine": "\"E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\bin\\Win64_Shipping_Client\\Bannerlord.exe\" \"/singleplayer\" \"/client\" \"/autoconnect\" \"/platformId\" \"testclient1\" \"/cooptestrun\" \"b55f10591fd645558030440c7d62ecc7\" \"/cooptestmanualjoin\" \"_MODULES_*Native*SandBoxCore*SandBox*StoryMode*Coop*_MODULES_\""
+    }
+  ],
+  "logs": {
+    "server": {
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-observer-leave-03.jsonl.server.log",
+      "sha256": "2f443c9d1bb0dfe7605605ff8f0298eab8f1b518ead472de46560e78635251c4",
+      "critical": {
+        "realTick": 0,
+        "duplicateIds": 0,
+        "aiBatch": 0,
+        "errorLines": []
+      }
+    },
+    "client1": {
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-observer-leave-03.jsonl.client1.log",
+      "sha256": "7e89b697601ce6a59cd8017473279cbd6fa781995e99d868d3bae10c0f5d3c32",
+      "critical": {
+        "realTick": 0,
+        "duplicateIds": 0,
+        "aiBatch": 0,
+        "errorLines": []
+      }
+    }
+  },
+  "cleanupConfirmed": true,
+  "operations": [
+    {
+      "kind": "observer-leave",
+      "label": "B-observer-exit",
+      "instance": "client1",
+      "controller": "testclient1",
+      "writer": "LocalA",
+      "epoch": 7,
+      "submitted": "Requested that the local player party leave 达努斯提卡",
+      "repeated": {
+        "name": "coop.debug.siege.leave_settlement",
+        "arguments": [],
+        "found": true,
+        "output": "The local player party is not in a settlement encounter",
+        "succeeded": false,
+        "errorCode": "command_failed",
+        "hasStructuredResult": false,
+        "structuredResult": null
+      },
+      "before": [
+        [
+          {
+            "mode": "ListenAuthority",
+            "localControllerId": "LocalA",
+            "mainHeroId": "main_hero",
+            "mainPartyId": "player_party",
+            "campaignId": "RVLgBrkkFApz",
+            "hours": 2186083.4815998888,
+            "registeredPlayers": 2,
+            "controllerId": "LocalA",
+            "heroId": "Hero_main_hero",
+            "heroStringId": "main_hero",
+            "clanId": "Clan_player_faction",
+            "characterId": "CharacterObject_main_hero",
+            "gold": 1000,
+            "partyId": "MobileParty_player_party",
+            "partyStringId": "player_party",
+            "x": 658.7773,
+            "y": 277.1635,
+            "troops": 1,
+            "settlementId": "town_ES1",
+            "items": [],
+            "wounded": 0,
+            "heroRegistrations": 1,
+            "partyRegistrations": 1,
+            "clanRegistrations": 1,
+            "connected": true,
+            "active": true,
+            "mapEvent": "none",
+            "visual": true
+          },
+          {
+            "mode": "ListenAuthority",
+            "localControllerId": "LocalA",
+            "mainHeroId": "main_hero",
+            "mainPartyId": "player_party",
+            "campaignId": "RVLgBrkkFApz",
+            "hours": 2186083.4815998888,
+            "registeredPlayers": 2,
+            "controllerId": "testclient1",
+            "heroId": "Hero_Player",
+            "heroStringId": "Player",
+            "clanId": "Clan_Player",
+            "characterId": "CharacterObject_Player",
+            "gold": 920,
+            "partyId": "MobileParty_Player",
+            "partyStringId": "Player",
+            "x": 658.7773,
+            "y": 277.1635,
+            "troops": 5,
+            "settlementId": "town_ES1",
+            "items": [],
+            "wounded": 0,
+            "heroRegistrations": 1,
+            "partyRegistrations": 1,
+            "clanRegistrations": 1,
+            "connected": true,
+            "active": true,
+            "mapEvent": "none",
+            "visual": true
+          }
+        ],
+        [
+          {
+            "mode": "RemoteReplica",
+            "localControllerId": "testclient1",
+            "mainHeroId": "Player",
+            "mainPartyId": "Player",
+            "campaignId": "RVLgBrkkFApz",
+            "hours": 2186083.4815998888,
+            "registeredPlayers": 2,
+            "controllerId": "LocalA",
+            "heroId": "Hero_main_hero",
+            "heroStringId": "main_hero",
+            "clanId": "Clan_player_faction",
+            "characterId": "CharacterObject_main_hero",
+            "gold": 1000,
+            "partyId": "MobileParty_player_party",
+            "partyStringId": "player_party",
+            "x": 658.7773,
+            "y": 277.1635,
+            "troops": 1,
+            "settlementId": "town_ES1",
+            "items": [],
+            "wounded": 0,
+            "heroRegistrations": 1,
+            "partyRegistrations": 1,
+            "clanRegistrations": 1,
+            "connected": false,
+            "active": true,
+            "mapEvent": "none",
+            "visual": true
+          },
+          {
+            "mode": "RemoteReplica",
+            "localControllerId": "testclient1",
+            "mainHeroId": "Player",
+            "mainPartyId": "Player",
+            "campaignId": "RVLgBrkkFApz",
+            "hours": 2186083.4815998888,
+            "registeredPlayers": 2,
+            "controllerId": "testclient1",
+            "heroId": "Hero_Player",
+            "heroStringId": "Player",
+            "clanId": "Clan_Player",
+            "characterId": "CharacterObject_Player",
+            "gold": 920,
+            "partyId": "MobileParty_Player",
+            "partyStringId": "Player",
+            "x": 658.7773,
+            "y": 277.1635,
+            "troops": 5,
+            "settlementId": "town_ES1",
+            "items": [],
+            "wounded": 0,
+            "heroRegistrations": 1,
+            "partyRegistrations": 1,
+            "clanRegistrations": 1,
+            "connected": false,
+            "active": true,
+            "mapEvent": "none",
+            "visual": true
+          }
+        ]
+      ],
+      "after": [
+        [
+          {
+            "mode": "ListenAuthority",
+            "localControllerId": "LocalA",
+            "mainHeroId": "main_hero",
+            "mainPartyId": "player_party",
+            "campaignId": "RVLgBrkkFApz",
+            "hours": 2186083.4815998888,
+            "registeredPlayers": 2,
+            "controllerId": "LocalA",
+            "heroId": "Hero_main_hero",
+            "heroStringId": "main_hero",
+            "clanId": "Clan_player_faction",
+            "characterId": "CharacterObject_main_hero",
+            "gold": 1000,
+            "partyId": "MobileParty_player_party",
+            "partyStringId": "player_party",
+            "x": 658.7773,
+            "y": 277.1635,
+            "troops": 1,
+            "settlementId": "town_ES1",
+            "items": [],
+            "wounded": 0,
+            "heroRegistrations": 1,
+            "partyRegistrations": 1,
+            "clanRegistrations": 1,
+            "connected": true,
+            "active": true,
+            "mapEvent": "none",
+            "visual": true
+          },
+          {
+            "mode": "ListenAuthority",
+            "localControllerId": "LocalA",
+            "mainHeroId": "main_hero",
+            "mainPartyId": "player_party",
+            "campaignId": "RVLgBrkkFApz",
+            "hours": 2186083.4815998888,
+            "registeredPlayers": 2,
+            "controllerId": "testclient1",
+            "heroId": "Hero_Player",
+            "heroStringId": "Player",
+            "clanId": "Clan_Player",
+            "characterId": "CharacterObject_Player",
+            "gold": 920,
+            "partyId": "MobileParty_Player",
+            "partyStringId": "Player",
+            "x": 658.7773,
+            "y": 277.1635,
+            "troops": 5,
+            "settlementId": null,
+            "items": [],
+            "wounded": 0,
+            "heroRegistrations": 1,
+            "partyRegistrations": 1,
+            "clanRegistrations": 1,
+            "connected": true,
+            "active": true,
+            "mapEvent": "none",
+            "visual": true
+          }
+        ],
+        [
+          {
+            "mode": "RemoteReplica",
+            "localControllerId": "testclient1",
+            "mainHeroId": "Player",
+            "mainPartyId": "Player",
+            "campaignId": "RVLgBrkkFApz",
+            "hours": 2186083.4815998888,
+            "registeredPlayers": 2,
+            "controllerId": "LocalA",
+            "heroId": "Hero_main_hero",
+            "heroStringId": "main_hero",
+            "clanId": "Clan_player_faction",
+            "characterId": "CharacterObject_main_hero",
+            "gold": 1000,
+            "partyId": "MobileParty_player_party",
+            "partyStringId": "player_party",
+            "x": 658.7773,
+            "y": 277.1635,
+            "troops": 1,
+            "settlementId": "town_ES1",
+            "items": [],
+            "wounded": 0,
+            "heroRegistrations": 1,
+            "partyRegistrations": 1,
+            "clanRegistrations": 1,
+            "connected": false,
+            "active": true,
+            "mapEvent": "none",
+            "visual": true
+          },
+          {
+            "mode": "RemoteReplica",
+            "localControllerId": "testclient1",
+            "mainHeroId": "Player",
+            "mainPartyId": "Player",
+            "campaignId": "RVLgBrkkFApz",
+            "hours": 2186083.4815998888,
+            "registeredPlayers": 2,
+            "controllerId": "testclient1",
+            "heroId": "Hero_Player",
+            "heroStringId": "Player",
+            "clanId": "Clan_Player",
+            "characterId": "CharacterObject_Player",
+            "gold": 920,
+            "partyId": "MobileParty_Player",
+            "partyStringId": "Player",
+            "x": 658.7773,
+            "y": 277.1635,
+            "troops": 5,
+            "settlementId": null,
+            "items": [],
+            "wounded": 0,
+            "heroRegistrations": 1,
+            "partyRegistrations": 1,
+            "clanRegistrations": 1,
+            "connected": false,
+            "active": true,
+            "mapEvent": "none",
+            "visual": true
+          }
+        ]
+      ],
+      "ui": {
+        "evidence": "menuView=False pendingMenuView=False encounterOverlay=False cameraFollowParty=Player cameraMode=FollowParty followTargetReached=False animation=False fastMove=False loading=False",
+        "movement": "position=658.7773,277.1635|target=658.7773,277.1635|behavior=Hold|settlement=none|encounter=none|time=Stop",
+        "status": {
+          "protocolVersion": 1,
+          "uiCapability": "bounded-ui-layers-v1",
+          "pid": 22508,
+          "role": "client",
+          "platformId": "testclient1",
+          "runToken": "b55f10591fd645558030440c7d62ecc7",
+          "buildVersion": "0.1.7+bff7aec55077f69250e313b58572895a35853964",
+          "assemblyMvid": "a9f534a5-dcc5-4e70-864d-ffbeeefd6469",
+          "loadedAssemblies": [
+            {
+              "name": "Common",
+              "version": "1.0.0.0",
+              "mvid": "a090629d-1d49-4d1e-9edc-7bc123be4045",
+              "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Common.dll"
+            },
+            {
+              "name": "Coop",
+              "version": "1.0.0.0",
+              "mvid": "a9f534a5-dcc5-4e70-864d-ffbeeefd6469",
+              "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.dll"
+            },
+            {
+              "name": "Coop.Core",
+              "version": "1.0.0.0",
+              "mvid": "421d63d2-7f34-4e42-b4f2-73fe30ad356d",
+              "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Core.dll"
+            },
+            {
+              "name": "Coop.Steam",
+              "version": "1.0.0.0",
+              "mvid": "4c628251-0b07-41c0-869a-3d4e504b4299",
+              "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Steam.dll"
+            },
+            {
+              "name": "GameInterface",
+              "version": "1.0.0.0",
+              "mvid": "3e6b48a7-7ca0-4f71-bafe-a2da2edd31b4",
+              "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\GameInterface.dll"
+            },
+            {
+              "name": "Missions",
+              "version": "1.0.0.0",
+              "mvid": "f9e3a73c-5b2d-4a57-8222-57497452ed67",
+              "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Missions.dll"
+            }
+          ],
+          "processStartedUtc": "2026-10-19T04:49:32.5980536Z",
+          "logPath": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\bin\\Win64_Shipping_Client\\Coop_client.log",
+          "gameThreadInitialized": true,
+          "gameThreadQueueDepth": 0,
+          "commandRegistryReady": true,
+          "activeState": "TaleWorlds.CampaignSystem.GameState.MapState",
+          "topScreen": "SandBox.View.Map.MapScreen",
+          "activeMenu": null,
+          "campaignLoaded": true,
+          "requestedSaveName": null,
+          "loadedCampaignId": "RVLgBrkkFApz",
+          "loadedSaveNameConfirmed": false,
+          "missionActive": false,
+          "coopRunning": true,
+          "coopState": "Coop.Core.Client.States.CampaignState",
+          "registeredPlayers": 2,
+          "registeredPlayerCount": null,
+          "connectedPlayerCount": null,
+          "registeredControllerIds": null,
+          "connectedControllerIds": null,
+          "deferredClientJoinEnabled": true,
+          "readyForClientJoin": false,
+          "deferredClientJoinAttempted": true,
+          "readyForCampaignTests": true,
+          "readyForMissionTests": false
+        }
+      }
+    },
+    {
+      "kind": "observer-leave",
+      "label": "A-observer-exit",
+      "instance": "server",
+      "controller": "LocalA",
+      "writer": "testclient1",
+      "epoch": 9,
+      "submitted": "Requested that the local player party leave 达努斯提卡",
+      "repeated": {
+        "name": "coop.debug.siege.leave_settlement",
+        "arguments": [],
+        "found": true,
+        "output": "The local player party is not in a settlement encounter",
+        "succeeded": false,
+        "errorCode": "command_failed",
+        "hasStructuredResult": false,
+        "structuredResult": null
+      },
+      "before": [
+        [
+          {
+            "mode": "ListenAuthority",
+            "localControllerId": "LocalA",
+            "mainHeroId": "main_hero",
+            "mainPartyId": "player_party",
+            "campaignId": "RVLgBrkkFApz",
+            "hours": 2186083.4815998888,
+            "registeredPlayers": 2,
+            "controllerId": "LocalA",
+            "heroId": "Hero_main_hero",
+            "heroStringId": "main_hero",
+            "clanId": "Clan_player_faction",
+            "characterId": "CharacterObject_main_hero",
+            "gold": 1000,
+            "partyId": "MobileParty_player_party",
+            "partyStringId": "player_party",
+            "x": 658.7773,
+            "y": 277.1635,
+            "troops": 1,
+            "settlementId": "town_ES1",
+            "items": [],
+            "wounded": 0,
+            "heroRegistrations": 1,
+            "partyRegistrations": 1,
+            "clanRegistrations": 1,
+            "connected": true,
+            "active": true,
+            "mapEvent": "none",
+            "visual": true
+          },
+          {
+            "mode": "ListenAuthority",
+            "localControllerId": "LocalA",
+            "mainHeroId": "main_hero",
+            "mainPartyId": "player_party",
+            "campaignId": "RVLgBrkkFApz",
+            "hours": 2186083.4815998888,
+            "registeredPlayers": 2,
+            "controllerId": "testclient1",
+            "heroId": "Hero_Player",
+            "heroStringId": "Player",
+            "clanId": "Clan_Player",
+            "characterId": "CharacterObject_Player",
+            "gold": 920,
+            "partyId": "MobileParty_Player",
+            "partyStringId": "Player",
+            "x": 658.7773,
+            "y": 277.1635,
+            "troops": 5,
+            "settlementId": null,
+            "items": [],
+            "wounded": 0,
+            "heroRegistrations": 1,
+            "partyRegistrations": 1,
+            "clanRegistrations": 1,
+            "connected": true,
+            "active": true,
+            "mapEvent": "none",
+            "visual": true
+          }
+        ],
+        [
+          {
+            "mode": "RemoteReplica",
+            "localControllerId": "testclient1",
+            "mainHeroId": "Player",
+            "mainPartyId": "Player",
+            "campaignId": "RVLgBrkkFApz",
+            "hours": 2186083.4815998888,
+            "registeredPlayers": 2,
+            "controllerId": "LocalA",
+            "heroId": "Hero_main_hero",
+            "heroStringId": "main_hero",
+            "clanId": "Clan_player_faction",
+            "characterId": "CharacterObject_main_hero",
+            "gold": 1000,
+            "partyId": "MobileParty_player_party",
+            "partyStringId": "player_party",
+            "x": 658.7773,
+            "y": 277.1635,
+            "troops": 1,
+            "settlementId": "town_ES1",
+            "items": [],
+            "wounded": 0,
+            "heroRegistrations": 1,
+            "partyRegistrations": 1,
+            "clanRegistrations": 1,
+            "connected": false,
+            "active": true,
+            "mapEvent": "none",
+            "visual": true
+          },
+          {
+            "mode": "RemoteReplica",
+            "localControllerId": "testclient1",
+            "mainHeroId": "Player",
+            "mainPartyId": "Player",
+            "campaignId": "RVLgBrkkFApz",
+            "hours": 2186083.4815998888,
+            "registeredPlayers": 2,
+            "controllerId": "testclient1",
+            "heroId": "Hero_Player",
+            "heroStringId": "Player",
+            "clanId": "Clan_Player",
+            "characterId": "CharacterObject_Player",
+            "gold": 920,
+            "partyId": "MobileParty_Player",
+            "partyStringId": "Player",
+            "x": 658.7773,
+            "y": 277.1635,
+            "troops": 5,
+            "settlementId": null,
+            "items": [],
+            "wounded": 0,
+            "heroRegistrations": 1,
+            "partyRegistrations": 1,
+            "clanRegistrations": 1,
+            "connected": false,
+            "active": true,
+            "mapEvent": "none",
+            "visual": true
+          }
+        ]
+      ],
+      "after": [
+        [
+          {
+            "mode": "ListenAuthority",
+            "localControllerId": "LocalA",
+            "mainHeroId": "main_hero",
+            "mainPartyId": "player_party",
+            "campaignId": "RVLgBrkkFApz",
+            "hours": 2186083.4815998888,
+            "registeredPlayers": 2,
+            "controllerId": "LocalA",
+            "heroId": "Hero_main_hero",
+            "heroStringId": "main_hero",
+            "clanId": "Clan_player_faction",
+            "characterId": "CharacterObject_main_hero",
+            "gold": 1000,
+            "partyId": "MobileParty_player_party",
+            "partyStringId": "player_party",
+            "x": 658.7773,
+            "y": 277.1635,
+            "troops": 1,
+            "settlementId": null,
+            "items": [],
+            "wounded": 0,
+            "heroRegistrations": 1,
+            "partyRegistrations": 1,
+            "clanRegistrations": 1,
+            "connected": true,
+            "active": true,
+            "mapEvent": "none",
+            "visual": true
+          },
+          {
+            "mode": "ListenAuthority",
+            "localControllerId": "LocalA",
+            "mainHeroId": "main_hero",
+            "mainPartyId": "player_party",
+            "campaignId": "RVLgBrkkFApz",
+            "hours": 2186083.4815998888,
+            "registeredPlayers": 2,
+            "controllerId": "testclient1",
+            "heroId": "Hero_Player",
+            "heroStringId": "Player",
+            "clanId": "Clan_Player",
+            "characterId": "CharacterObject_Player",
+            "gold": 920,
+            "partyId": "MobileParty_Player",
+            "partyStringId": "Player",
+            "x": 658.7773,
+            "y": 277.1635,
+            "troops": 5,
+            "settlementId": null,
+            "items": [],
+            "wounded": 0,
+            "heroRegistrations": 1,
+            "partyRegistrations": 1,
+            "clanRegistrations": 1,
+            "connected": true,
+            "active": true,
+            "mapEvent": "none",
+            "visual": true
+          }
+        ],
+        [
+          {
+            "mode": "RemoteReplica",
+            "localControllerId": "testclient1",
+            "mainHeroId": "Player",
+            "mainPartyId": "Player",
+            "campaignId": "RVLgBrkkFApz",
+            "hours": 2186083.4815998888,
+            "registeredPlayers": 2,
+            "controllerId": "LocalA",
+            "heroId": "Hero_main_hero",
+            "heroStringId": "main_hero",
+            "clanId": "Clan_player_faction",
+            "characterId": "CharacterObject_main_hero",
+            "gold": 1000,
+            "partyId": "MobileParty_player_party",
+            "partyStringId": "player_party",
+            "x": 658.7773,
+            "y": 277.1635,
+            "troops": 1,
+            "settlementId": null,
+            "items": [],
+            "wounded": 0,
+            "heroRegistrations": 1,
+            "partyRegistrations": 1,
+            "clanRegistrations": 1,
+            "connected": false,
+            "active": true,
+            "mapEvent": "none",
+            "visual": true
+          },
+          {
+            "mode": "RemoteReplica",
+            "localControllerId": "testclient1",
+            "mainHeroId": "Player",
+            "mainPartyId": "Player",
+            "campaignId": "RVLgBrkkFApz",
+            "hours": 2186083.4815998888,
+            "registeredPlayers": 2,
+            "controllerId": "testclient1",
+            "heroId": "Hero_Player",
+            "heroStringId": "Player",
+            "clanId": "Clan_Player",
+            "characterId": "CharacterObject_Player",
+            "gold": 920,
+            "partyId": "MobileParty_Player",
+            "partyStringId": "Player",
+            "x": 658.7773,
+            "y": 277.1635,
+            "troops": 5,
+            "settlementId": null,
+            "items": [],
+            "wounded": 0,
+            "heroRegistrations": 1,
+            "partyRegistrations": 1,
+            "clanRegistrations": 1,
+            "connected": false,
+            "active": true,
+            "mapEvent": "none",
+            "visual": true
+          }
+        ]
+      ],
+      "ui": {
+        "evidence": "menuView=False pendingMenuView=False encounterOverlay=False cameraFollowParty=player_party cameraMode=FollowParty followTargetReached=True animation=False fastMove=False loading=False",
+        "movement": "position=658.7773,277.1635|target=658.7773,277.1635|behavior=Hold|settlement=none|encounter=none|time=Stop",
+        "status": {
+          "protocolVersion": 1,
+          "uiCapability": "bounded-ui-layers-v1",
+          "pid": 14384,
+          "role": "server",
+          "platformId": "LocalA",
+          "runToken": "b55f10591fd645558030440c7d62ecc7",
+          "buildVersion": "0.1.7+bff7aec55077f69250e313b58572895a35853964",
+          "assemblyMvid": "a9f534a5-dcc5-4e70-864d-ffbeeefd6469",
+          "loadedAssemblies": [
+            {
+              "name": "Common",
+              "version": "1.0.0.0",
+              "mvid": "a090629d-1d49-4d1e-9edc-7bc123be4045",
+              "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Common.dll"
+            },
+            {
+              "name": "Coop",
+              "version": "1.0.0.0",
+              "mvid": "a9f534a5-dcc5-4e70-864d-ffbeeefd6469",
+              "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.dll"
+            },
+            {
+              "name": "Coop.Core",
+              "version": "1.0.0.0",
+              "mvid": "421d63d2-7f34-4e42-b4f2-73fe30ad356d",
+              "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Core.dll"
+            },
+            {
+              "name": "Coop.Steam",
+              "version": "1.0.0.0",
+              "mvid": "4c628251-0b07-41c0-869a-3d4e504b4299",
+              "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Steam.dll"
+            },
+            {
+              "name": "GameInterface",
+              "version": "1.0.0.0",
+              "mvid": "3e6b48a7-7ca0-4f71-bafe-a2da2edd31b4",
+              "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\GameInterface.dll"
+            },
+            {
+              "name": "Missions",
+              "version": "1.0.0.0",
+              "mvid": "f9e3a73c-5b2d-4a57-8222-57497452ed67",
+              "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Missions.dll"
+            }
+          ],
+          "processStartedUtc": "2026-10-19T04:48:45.2105391Z",
+          "logPath": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\bin\\Win64_Shipping_Client\\Coop_server.log",
+          "gameThreadInitialized": true,
+          "gameThreadQueueDepth": 0,
+          "commandRegistryReady": true,
+          "activeState": "TaleWorlds.CampaignSystem.GameState.MapState",
+          "topScreen": "SandBox.View.Map.MapScreen",
+          "activeMenu": null,
+          "campaignLoaded": true,
+          "requestedSaveName": "P1B_DirectIP_Recruit",
+          "loadedCampaignId": "RVLgBrkkFApz",
+          "loadedSaveNameConfirmed": false,
+          "missionActive": false,
+          "coopRunning": true,
+          "coopState": "Coop.Core.Server.States.ServerRunningState",
+          "registeredPlayers": 2,
+          "registeredPlayerCount": 2,
+          "connectedPlayerCount": 2,
+          "registeredControllerIds": [
+            "LocalA",
+            "testclient1"
+          ],
+          "connectedControllerIds": [
+            "LocalA",
+            "testclient1"
+          ],
+          "deferredClientJoinEnabled": false,
+          "readyForClientJoin": false,
+          "deferredClientJoinAttempted": false,
+          "readyForCampaignTests": true,
+          "readyForMissionTests": false
+        }
+      }
+    }
+  ],
+  "screenshots": [
+    {
+      "instance": "server",
+      "label": "join-single-native-actors",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\b55f10591fd645558030440c7d62ecc7\\server-74763bbbbda34f90a215613c9019ea0f.bmp",
+      "sha256": "67ebc41610bd109338da8989d12ed0717a6757c5226d43b1f4c5fd96c741b181"
+    },
+    {
+      "instance": "client1",
+      "label": "join-single-native-actors",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\b55f10591fd645558030440c7d62ecc7\\client1-a3f7daaf2b8f4b54a0266798ae754052.bmp",
+      "sha256": "0a0a2135f69c1160ec78aff403bb8114a522a5eba73c550b9d2019a62654e7b2"
+    },
+    {
+      "instance": "server",
+      "label": "native-Danustica-writer-only-preparation",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\b55f10591fd645558030440c7d62ecc7\\server-0753264441c449d9b26e51b3f2c5b7d5.bmp",
+      "sha256": "c4228aa181f4855b659a6ce71399fe387d617bdb0079a7681bf13b94a3601f98"
+    },
+    {
+      "instance": "client1",
+      "label": "native-Danustica-writer-only-preparation",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\b55f10591fd645558030440c7d62ecc7\\client1-f2a91deee9604d5bb0d31e7df085339a.bmp",
+      "sha256": "3e6a6aff8195de2d22d49450d11ae432f75db06551216e3e97bce874701c21b6"
+    },
+    {
+      "instance": "server",
+      "label": "B-observer-exits-through-A-writer",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\b55f10591fd645558030440c7d62ecc7\\server-49ff2cf3d33647d1992acd6e0652a619.bmp",
+      "sha256": "e0a8ae6f091a5c9b199f684e0646c8ade28c08b5f54ce81bddcd4407fae7ba7e"
+    },
+    {
+      "instance": "client1",
+      "label": "B-observer-exits-through-A-writer",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\b55f10591fd645558030440c7d62ecc7\\client1-07155e27a0ad4c1e863d15d66010efab.bmp",
+      "sha256": "2c4ced9cdc1d4876fc6bfa6c4187e6e88e99ab26babc2eaf16b65ebbb2e30899"
+    },
+    {
+      "instance": "server",
+      "label": "A-to-B-final-checkpoint",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\b55f10591fd645558030440c7d62ecc7\\server-22ef9ace3aa84cdebd8461ea02c4397e.bmp",
+      "sha256": "56d01a1c40bf500ff9e590bf4403ef0df5bb2ccd751287ebf0f4a271eece3910"
+    },
+    {
+      "instance": "client1",
+      "label": "A-to-B-final-checkpoint",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\b55f10591fd645558030440c7d62ecc7\\client1-ba72e100f9c84e60a39a87f18d0a8892.bmp",
+      "sha256": "55972928e086fcc17f071eab55f9afa3fc9da6c0720a0c1e0aab7e182a868229"
+    },
+    {
+      "instance": "server",
+      "label": "A-observer-exits-through-B-writer",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\b55f10591fd645558030440c7d62ecc7\\server-0b665a55b437412ba29d9e4c070c8b9a.bmp",
+      "sha256": "b5e76139cddd15006f30171da60f7e09cdab70f062f6bbb0030cef7de675876c"
+    },
+    {
+      "instance": "client1",
+      "label": "A-observer-exits-through-B-writer",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\b55f10591fd645558030440c7d62ecc7\\client1-704e00a3109a4b4798ec7f5cf44ad8a2.bmp",
+      "sha256": "54ec113403a1320012c2d7cbebb8d9c299300cf1691a562be94fafc690aa45dc"
+    },
+    {
+      "instance": "server",
+      "label": "B-sole-writer-time-and-NPC-sample",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\b55f10591fd645558030440c7d62ecc7\\server-6d7b494c83b24a078e3e1a11ed72461f.bmp",
+      "sha256": "8186ecfa267f95acad0c461e55205ff4cfc3a7f2457fb4a1d1af8449b7c726fe"
+    },
+    {
+      "instance": "client1",
+      "label": "B-sole-writer-time-and-NPC-sample",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\b55f10591fd645558030440c7d62ecc7\\client1-753bfa635dba4613b7ad6acc6a168f57.bmp",
+      "sha256": "0d7495e41f56e64ad57b901c228a75b9dab4eeb1c9294a6c64844cc1f4c5f992"
+    },
+    {
+      "instance": "server",
+      "label": "B-to-A-final-checkpoint",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\b55f10591fd645558030440c7d62ecc7\\server-0771342cfc7e4be4b8767ae776778ca8.bmp",
+      "sha256": "b67bedede5bddadb887b234115e243bd73b2afbb2bd5285ace3d89a7d755a997"
+    },
+    {
+      "instance": "client1",
+      "label": "B-to-A-final-checkpoint",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\b55f10591fd645558030440c7d62ecc7\\client1-27045085e23c44dd9807debc309b05a6.bmp",
+      "sha256": "6e92e5e18c6931d52589e9049fcf1cd44e2497a6dd008e3271841fe69b85997c"
+    },
+    {
+      "instance": "server",
+      "label": "A-sole-writer-time-and-NPC-sample",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\b55f10591fd645558030440c7d62ecc7\\server-cbeef60f41a34cd8978e107d5a291a11.bmp",
+      "sha256": "78f186f29c5a76d3737ad65634df2e9d5fcbf55309970d8accf599ddce6d3654"
+    },
+    {
+      "instance": "client1",
+      "label": "A-sole-writer-time-and-NPC-sample",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\b55f10591fd645558030440c7d62ecc7\\client1-1e0915bf44374637af32e9eaa522aabb.bmp",
+      "sha256": "b626cab3e54f5f3bfff38bdc2f38088b71dbc86dd11d431d2a643d462b5dffc8"
+    },
+    {
+      "instance": "server",
+      "label": "final-strict-world-and-actors",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\b55f10591fd645558030440c7d62ecc7\\server-ecdbd17eff0443cb911bbb0af4d8694c.bmp",
+      "sha256": "365155eddab29374c2797b4ed5b6b28374595d6637ef6fda9ed632d3b0c3e1b7"
+    },
+    {
+      "instance": "client1",
+      "label": "final-strict-world-and-actors",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\b55f10591fd645558030440c7d62ecc7\\client1-ddd601588d23461195d80f233a7d80b5.bmp",
+      "sha256": "5d3977201d99ef49d6f28d5045ed509196178b035fb3e5310f5e8407ed22590a"
+    }
+  ],
+  "raw": ".mcp-local/p2p-observer-leave-03.jsonl",
+  "rawSha256": "80931999d49eb4ad7c1868abd3b5c183246d78f1557b09e68a1d2c722c25fc0d",
+  "summary": ".mcp-local/p2p-observer-leave-03.jsonl.summary.json",
+  "summarySha256": "688aeeda21d85c342597496cb8ce8b16f34eda3a3a8988b950755825f9e13fc9",
+  "limitations": [
+    "Native town preparation uses trusted QA location commands while the preparing node is writer, not ordinary observer travel/entry.",
+    "Five-second sole-writer intervals and strict final state; not natural 24-hour cycle or complete NPC behavior acceptance.",
+    "Observer01/02 failures retained. One still-frame visual inspection is not a temporal no-trails proof."
+  ],
+  "visualInspection": {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\b55f10591fd645558030440c7d62ecc7\\client1-ddd601588d23461195d80f233a7d80b5.bmp",
+    "observation": "Native map/HUD visible with no settlement menu overlay in inspected final B still frame."
+  }
+}
