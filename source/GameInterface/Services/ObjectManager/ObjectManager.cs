@@ -554,10 +554,18 @@ public class ObjectManager : IObjectManager
 
         if (obj == null)
         {
+#if DEBUG
+            logger.Error(
+                "[{ClassName}] Failed to get id because object was null ({ObjectType})\n{CallStack}",
+                nameof(ObjectManager),
+                typeof(T),
+                Environment.StackTrace);
+#else
             logger.Error(
                 "[{ClassName}] Failed to get id because object was null ({ObjectType})",
                 nameof(ObjectManager),
                 typeof(T));
+#endif
 
             return false;
         }
