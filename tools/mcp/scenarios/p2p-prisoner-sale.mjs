@@ -473,7 +473,8 @@ export async function run(config) {
         const fixture = await prepareSale(writerInstance, originController);
         const originBefore = fixture.before.actors[INSTANCES.indexOf(originInstance)]
             .find(row => row.targetController === originController);
-        await play();
+        // Native time Pause retains the confirmed writer lease. Keep unrelated NPC ticks
+        // outside this one-action comparison; active simulation has its own stress scenario.
         const output = jsonOutput(await once.run(`submit-sale-${summary.sales.length + 1}`,
             () => command(originInstance, 'coop.debug.prisoner_sale.submit', [originController], true)));
         assert.equal(output.status, 'submitted'); assert.equal(output.controller, originController);
