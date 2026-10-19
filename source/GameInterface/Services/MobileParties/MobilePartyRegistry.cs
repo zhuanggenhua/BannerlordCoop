@@ -7,6 +7,7 @@ using GameInterface.Services.Entity;
 using GameInterface.Services.CampaignAuthority.Lifecycle;
 using GameInterface.Services.MobileParties.Messages;
 using GameInterface.Services.ObjectManager;
+using GameInterface.Services.ObjectReadiness;
 using static GameInterface.Services.ObjectManager.ObjectManager;
 using HarmonyLib;
 using Serilog;
@@ -32,6 +33,7 @@ internal class MobilePartyRegistry : AutoRegistryBase<MobileParty>
     private readonly IMessageBroker messageBroker;
     private readonly ISendCoalescer coalescer;
     private readonly CampaignLifetimeCompletion lifetimeCompletion;
+    private readonly ICampaignObjectGraphReadiness graphReadiness;
 
     public MobilePartyRegistry(
         IControllerIdProvider controllerIdProvider,
@@ -40,13 +42,15 @@ internal class MobilePartyRegistry : AutoRegistryBase<MobileParty>
         IAutoRegistryFactory autoRegistryFactory,
         IObjectManager objectManager,
         ISendCoalescer coalescer = null,
-        CampaignLifetimeCompletion lifetimeCompletion = null)
+        CampaignLifetimeCompletion lifetimeCompletion = null,
+        ICampaignObjectGraphReadiness graphReadiness = null)
         : base(logger, autoRegistryFactory, objectManager)
     {
         this.controllerIdProvider = controllerIdProvider;
         this.messageBroker = messageBroker;
         this.coalescer = coalescer;
         this.lifetimeCompletion = lifetimeCompletion;
+        this.graphReadiness = graphReadiness;
     }
 
     public override IEnumerable<MethodBase> Constructors => AccessTools.GetDeclaredConstructors(typeof(MobileParty));
@@ -67,6 +71,7 @@ internal class MobilePartyRegistry : AutoRegistryBase<MobileParty>
 
     public override void OnClientCreated(MobileParty obj, string id)
     {
+        graphReadiness?.BeginReplicaCreation(obj);
         using (new AllowedThread())
         {
             obj._isVisible = false;
@@ -82,16 +87,27 @@ internal class MobilePartyRegistry : AutoRegistryBase<MobileParty>
 
         GameThread.RunSafe(() =>
         {
-            var objectManager = Campaign.Current?.CampaignObjectManager;
-            if (objectManager == null) return;
-
-            objectManager.AddMobileParty(obj);
-            MBObjectManager.Instance?.RegisterObjectInternalWithoutTypeId(obj, presumed: false, out _);
+            void Publish()
+            {
+                var campaignObjects = Campaign.Current?.CampaignObjectManager;
+                var nativeObjects = MBObjectManager.Instance;
+                if (campaignObjects == null || nativeObjects == null)
+                    throw new InvalidOperationException("Replica world publication requires the active native object managers");
+                // Deferred publication is still received state, including on an observing ListenHost.
+                using (new AllowedThread())
+                {
+                    campaignObjects.AddMobileParty(obj);
+                    nativeObjects.RegisterObjectInternalWithoutTypeId(obj, presumed: false, out _);
+                }
+            }
+            if (graphReadiness == null) Publish();
+            else graphReadiness.PublishReplicaWhenReady(obj, Publish);
         }, context: "MobilePartyRegistry.OnClientCreated");
     }
 
     public override void OnClientDestroyed(MobileParty obj, string id)
     {
+        graphReadiness?.CancelReplicaPublication(obj);
         GameThread.RunSafe(() =>
         {
             using (new AllowedThread())
@@ -120,6 +136,7 @@ internal class MobilePartyRegistry : AutoRegistryBase<MobileParty>
                     Campaign.Current.VisualTrackerManager.RemoveTrackedObject(obj, true);
                     CampaignEventDispatcher.Instance.OnPartyRemoved(obj.Party);
                     Campaign.Current.CampaignObjectManager.RemoveMobileParty(obj);
+                    graphReadiness?.CompleteReplicaRemoval(obj);
                 }
                 catch (Exception ex)
                 {

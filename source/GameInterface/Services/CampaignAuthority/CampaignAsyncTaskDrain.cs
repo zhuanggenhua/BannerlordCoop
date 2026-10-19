@@ -3,6 +3,7 @@ using Serilog;
 using System;
 using TaleWorlds.CampaignSystem;
 using GameInterface.Services.CampaignAuthority.Lifecycle;
+using GameInterface.Services.ObjectReadiness;
 
 namespace GameInterface.Services.CampaignAuthority;
 
@@ -15,9 +16,14 @@ internal sealed class CampaignAsyncTaskDrain : ICampaignAsyncTaskDrain
 {
     private static readonly ILogger Logger = LogManager.GetLogger<CampaignAsyncTaskDrain>();
     private readonly ICampaignLifetimeCompletionDrain lifetimeCompletion;
+    private readonly ICampaignObjectGraphReadiness graphReadiness;
 
-    public CampaignAsyncTaskDrain(ICampaignLifetimeCompletionDrain lifetimeCompletion = null) =>
+    public CampaignAsyncTaskDrain(ICampaignLifetimeCompletionDrain lifetimeCompletion = null,
+        ICampaignObjectGraphReadiness graphReadiness = null)
+    {
         this.lifetimeCompletion = lifetimeCompletion;
+        this.graphReadiness = graphReadiness;
+    }
     public bool TryDrain() => TryDrain(Campaign.Current);
 
     internal bool TryDrain(Campaign campaign)
@@ -25,12 +31,12 @@ internal sealed class CampaignAsyncTaskDrain : ICampaignAsyncTaskDrain
         if (campaign == null) return false;
         try
         {
-            if (lifetimeCompletion?.IsComplete == false) return false;
+            if (!Ready()) return false;
             // RealTick waits for this task at the beginning of the next frame. A handoff can
             // arrive before that frame, so drain it while its original lease still permits writes.
             campaign.WaitAsyncTasks();
             campaign.CampaignLateAITickTask = null;
-            return lifetimeCompletion?.IsComplete != false;
+            return Ready();
         }
         catch (Exception ex)
         {
@@ -38,4 +44,7 @@ internal sealed class CampaignAsyncTaskDrain : ICampaignAsyncTaskDrain
             return false;
         }
     }
+
+    private bool Ready() => lifetimeCompletion?.IsComplete != false &&
+        (graphReadiness == null || graphReadiness.TryEnsureReady(out _));
 }

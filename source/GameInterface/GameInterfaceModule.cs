@@ -175,7 +175,14 @@ public class GameInterfaceModule : Module
         builder.RegisterType<EncounterMenuConditionRefresher>().As<IEncounterMenuConditionRefresher>().InstancePerDependency();
         builder.RegisterType<PartyScreenRosterRefresher>().As<IPartyScreenRosterRefresher>().InstancePerDependency();
         builder.RegisterType<PlayerTroopXpRelevance>().As<IPlayerTroopXpRelevance>().InstancePerDependency();
-        builder.RegisterType<Services.CampaignAuthority.CampaignRosterCheckpointService>()
+        builder.RegisterModule<Services.ObjectReadiness.ObjectReadinessModule>();
+        builder.RegisterModule<Services.CampaignAuthority.Lifecycle.CampaignLifetimeCompletionModule>();
+        builder.RegisterModule<Services.CampaignAuthority.Movement.MovementModule>();
+        builder.RegisterType<Services.CampaignAuthority.CampaignRosterCheckpointService>().AsSelf().InstancePerDependency();
+        builder.Register(context => new Services.CampaignAuthority.ReadyCampaignRosterCheckpointService(
+            context.Resolve<Services.CampaignAuthority.CampaignRosterCheckpointService>(),
+            context.Resolve<Services.ObjectReadiness.ICampaignObjectGraphReadiness>(),
+            context.Resolve<Services.CampaignAuthority.Lifecycle.ICampaignLifetimeCompletionDrain>()))
             .As<Services.CampaignAuthority.ICampaignRosterCheckpointService>().InstancePerDependency();
         builder.RegisterType<Services.CampaignAuthority.CampaignSessionCheckpointService>()
             .As<Services.CampaignAuthority.ICampaignSessionCheckpointService>().InstancePerDependency();

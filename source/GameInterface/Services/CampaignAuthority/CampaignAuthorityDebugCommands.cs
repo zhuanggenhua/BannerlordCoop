@@ -13,6 +13,7 @@ using System.Collections.Generic;
 using GameInterface.Registry.Auto;
 using TaleWorlds.CampaignSystem.Roster;
 using GameInterface.Services.ObjectManager;
+using GameInterface.Services.ObjectReadiness;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.GameState;
 using TaleWorlds.CampaignSystem.Party;
@@ -102,8 +103,10 @@ public static class CampaignAuthorityDebugCommands
     {
         private readonly IObjectManager objects;
         private readonly ICampaignRosterCheckpointService rosters;
-        public WorldStateCommand(IObjectManager objects, ICampaignRosterCheckpointService rosters)
-        { this.objects = objects; this.rosters = rosters; }
+        private readonly ICampaignObjectGraphReadiness graphReadiness;
+        public WorldStateCommand(IObjectManager objects, ICampaignRosterCheckpointService rosters,
+            ICampaignObjectGraphReadiness graphReadiness = null)
+        { this.objects = objects; this.rosters = rosters; this.graphReadiness = graphReadiness; }
         public string Prefix => "coop.debug.authority";
         public string Name => "world_state";
         public string Description => "Reports critical world hashes and an NPC position sample without changing game state.";
@@ -116,6 +119,9 @@ public static class CampaignAuthorityDebugCommands
                 return new(false, "Expected optional positions detail.", "invalid_movement_detail");
             if (Campaign.Current == null)
                 return new(false, "World rosters are unavailable or contain unregistered identities", "world_unavailable");
+            if (graphReadiness != null && !graphReadiness.TryEnsureReady(out var reason))
+                return new(false, JsonConvert.SerializeObject(new { error = "Replica object graph is not ready", reason }),
+                    "object_graph_not_ready");
             if (!rosters.TryCapture(out var checkpoint))
                 return new(false, JsonConvert.SerializeObject(new
                 {
