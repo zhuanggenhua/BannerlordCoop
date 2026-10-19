@@ -330,20 +330,18 @@ internal class TradeHandler : IHandler
     {
         var command = payload.What;
         if (authorityContext == null ||
-            !CampaignAuthorityCommandSenderValidator.IsRoomHost(payload.Who as NetPeer, players, sessionIdentity) ||
-            !authorityContext.TryGetLocalAuthorityLease(out var lease) || !command.Matches(lease) ||
-            !players.TryGetPlayer(command.OriginControllerId, out var player) ||
-            !PlayerOwnsTrade(player, command.Trade) || players.IsReservedController(player.ControllerId) ||
-            !TryAdvanceAuthorityCommandSequence(lease, command.Sequence))
+            !CampaignAuthorityCommandSenderValidator.IsRoomHost(payload.Who as NetPeer, players, sessionIdentity, network))
             return;
 
         GameThread.RunSafe(() =>
         {
             // A lease or player registration may change while this command waits for the game thread.
-            if (!authorityContext.TryGetLocalAuthorityLease(out var currentLease) || currentLease != lease ||
+            if (!authorityContext.TryGetLocalAuthorityLease(out var lease) || !command.Matches(lease) ||
                 !players.TryGetPlayer(command.OriginControllerId, out var currentPlayer) ||
                 !PlayerOwnsTrade(currentPlayer, command.Trade) ||
-                players.IsReservedController(currentPlayer.ControllerId))
+                players.IsReservedController(currentPlayer.ControllerId) ||
+                !CampaignAuthorityCommandSenderValidator.IsRoomHost(payload.Who as NetPeer, players, sessionIdentity, network) ||
+                !TryAdvanceAuthorityCommandSequence(lease, command.Sequence))
                 return;
 
             ApplyCompleteTrade(command.Trade, peer: null, requiredLease: lease, authorityCommand: true);

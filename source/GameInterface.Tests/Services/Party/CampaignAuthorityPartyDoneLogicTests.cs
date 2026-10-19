@@ -1,8 +1,10 @@
-using Common;
+﻿using Common;
 using Common.Messaging;
 using Common.Network;
 using Common.PacketHandlers;
 using Common.Serialization;
+using Common.Tests.Utils;
+using Common.Util;
 using Coop.Tests.Mocks;
 using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Entity;
@@ -16,7 +18,12 @@ using GameInterface.Services.Players;
 using GameInterface.Services.TroopRosters.Data;
 using GameInterface.Services.TroopRosters.Interfaces;
 using GameInterface.Services.Villages.Interfaces;
+using GameInterface.Surrogates;
 using Moq;
+using LiteNetLib;
+using GameInterface.Services.Players.Data;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Party;
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -30,8 +37,11 @@ public sealed class CampaignAuthorityPartyDoneLogicTests
     private static readonly AuthorityLease CurrentLease =
         new("room-a", "authority-b", "controller-b", 7);
 
-    static CampaignAuthorityPartyDoneLogicTests() =>
+    static CampaignAuthorityPartyDoneLogicTests()
+    {
         RuntimeHelpers.RunModuleConstructor(typeof(TestNetwork).Module.ModuleHandle);
+        _ = new SurrogateCollection();
+    }
 
     [Fact]
     public void RoomHostRoutesPartyDoneLogicToCurrentRemoteAuthority()
@@ -75,6 +85,61 @@ public sealed class CampaignAuthorityPartyDoneLogicTests
         Assert.False(handler.TryAdvanceAuthorityCommandSequence(CurrentLease, 0));
         Assert.True(handler.TryAdvanceAuthorityCommandSequence(CurrentLease, 2));
         Assert.True(handler.TryAdvanceAuthorityCommandSequence(nextLease, 1));
+    }
+
+    [Fact]
+    public void QueuedPartyCommandUsesLiveTransportAndRejectsSupersededPeerBeforeSequence()
+    {
+        var previousMode = ModInformation.SessionMode;
+        using var peers = new TestNetwork();
+        var old = peers.CreatePeer();
+        var replacement = peers.CreatePeer();
+        NetPeer current = old;
+        var network = new Mock<INetwork>();
+        network.As<IRoomHostPeerProvider>().Setup(value => value.IsCurrentRoomHostPeer(It.IsAny<NetPeer>()))
+            .Returns<NetPeer>(peer => ReferenceEquals(peer, current));
+        var host = new Player("controller-a", "hero-a", "party-a", "clan-a", "character-a");
+        var players = new Mock<IPlayerManager>();
+        players.Setup(value => value.TryGetPlayer("controller-a", out host)).Returns(true);
+        var context = new Mock<ICampaignAuthorityContext>();
+        context.Setup(value => value.TryGetLocalAuthorityLease(out It.Ref<AuthorityLease>.IsAny))
+            .Returns((out AuthorityLease lease) => { lease = CurrentLease; return true; });
+        var hero = ObjectHelper.SkipConstructor<Hero>();
+        var party = ObjectHelper.SkipConstructor<MobileParty>();
+        hero._partyBelongedTo = party;
+        var partyId = "party-a";
+        var objects = new Mock<IObjectManager>();
+        objects.Setup(value => value.TryGetObject("hero-a", out hero)).Returns(true);
+        objects.Setup(value => value.TryGetId(party, out partyId)).Returns(true);
+        var broker = new TestMessageBroker();
+        using var handler = new PartyDoneLogicHandler(broker, objects.Object, network.Object,
+            Mock.Of<ITroopRosterInterface>(), Mock.Of<IVillageHostileActionInterface>(), context.Object,
+            players.Object, Mock.Of<IControllerIdProvider>(),
+            Mock.Of<ISessionIdentity>(value => value.RoomHostControllerId == "controller-a"));
+        try
+        {
+            ModInformation.SessionMode = SessionMode.RemoteReplica;
+            var command = new NetworkCampaignAuthorityPartyDoneLogicCommand(CurrentLease, 1, "controller-a", CreateRequest());
+            GameThread.Run(() =>
+            {
+                System.Threading.Tasks.Task.Run(() => broker.Publish(old, command)).GetAwaiter().GetResult();
+                current = replacement;
+            }, blocking: true);
+            GameThread.Run(() => { }, blocking: true);
+            Assert.True(handler.TryAdvanceAuthorityCommandSequence(CurrentLease, 1));
+            broker.Publish(old, new NetworkCampaignAuthorityPartyDoneLogicCommand(CurrentLease, 2, "controller-a", CreateRequest()));
+            GameThread.Run(() => { }, blocking: true);
+            Assert.True(handler.TryAdvanceAuthorityCommandSequence(CurrentLease, 2));
+            broker.Publish(replacement, new NetworkCampaignAuthorityPartyDoneLogicCommand(CurrentLease, 3, "controller-a", CreateRequest()));
+            GameThread.Run(() => { }, blocking: true);
+            Assert.False(handler.TryAdvanceAuthorityCommandSequence(CurrentLease, 3));
+        }
+        finally
+        {
+            handler.Dispose();
+            GameThread.Run(() => { }, blocking: true);
+            ModInformation.SessionMode = previousMode;
+        }
     }
 
     [Fact]

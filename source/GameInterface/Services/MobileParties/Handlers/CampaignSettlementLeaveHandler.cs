@@ -122,7 +122,7 @@ internal sealed class CampaignSettlementLeaveHandler : IHandler
         {
             if (disposed) return;
             if (payload.Who is NetPeer peer &&
-                CampaignAuthorityCommandSenderValidator.IsRoomHost(peer, players, session))
+                CampaignAuthorityCommandSenderValidator.IsRoomHost(peer, players, session, network))
                 Execute(payload.What?.Request);
             else LogRejected(payload.What?.Request, "room_host_peer_changed");
         }, context: nameof(CampaignSettlementLeaveHandler));

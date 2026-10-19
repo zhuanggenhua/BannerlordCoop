@@ -1,11 +1,13 @@
-using Common;
+﻿using Common;
 using Common.Messaging;
 using Common.Network;
 using Common.PacketHandlers;
 using Common.Serialization;
+using Common.Tests.Utils;
 using Common.Util;
 using Coop.Tests.Mocks;
 using GameInterface.Services.CampaignAuthority;
+using GameInterface.Services.Entity;
 using GameInterface.Services.Inventory.Data;
 using GameInterface.Services.Inventory.Handlers;
 using GameInterface.Services.Inventory.Interfaces;
@@ -17,6 +19,7 @@ using GameInterface.Services.Players.Data;
 using GameInterface.Services.Villages.Interfaces;
 using GameInterface.Tests;
 using Moq;
+using LiteNetLib;
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
@@ -66,6 +69,56 @@ public sealed class CampaignAuthorityTradeRoutingTests
         {
             ModInformation.SessionMode = previousMode;
             handler.Dispose();
+        }
+    }
+
+    [Fact]
+    public void QueuedTradeRevalidatesTransportBeforeConsumingSequence()
+    {
+        var previousMode = ModInformation.SessionMode;
+        using var peers = new TestNetwork();
+        var old = peers.CreatePeer();
+        var replacement = peers.CreatePeer();
+        NetPeer current = old;
+        var network = new Mock<INetwork>();
+        network.As<IRoomHostPeerProvider>().Setup(value => value.IsCurrentRoomHostPeer(It.IsAny<NetPeer>()))
+            .Returns<NetPeer>(peer => ReferenceEquals(peer, current));
+        var host = new Player("controller-a", "hero-a", "party-a", "clan-a", "character-a");
+        var players = new Mock<IPlayerManager>();
+        players.Setup(value => value.TryGetPlayer("controller-a", out host)).Returns(true);
+        var context = new Mock<ICampaignAuthorityContext>();
+        context.Setup(value => value.TryGetLocalAuthorityLease(out It.Ref<AuthorityLease>.IsAny))
+            .Returns((out AuthorityLease lease) => { lease = CurrentLease; return true; });
+        var broker = new TestMessageBroker();
+        var objects = new Mock<IObjectManager>();
+        using var handler = new TradeHandler(Mock.Of<IInventoryLogicInterface>(), broker, objects.Object,
+            network.Object, Mock.Of<IVillageHostileActionInterface>(), players.Object, context.Object,
+            Mock.Of<IControllerIdProvider>(),
+            Mock.Of<ISessionIdentity>(value => value.RoomHostControllerId == "controller-a"));
+        var command = new NetworkCampaignAuthorityCompleteTradeCommand(CurrentLease, 1, "controller-a", CreateTrade());
+        try
+        {
+            ModInformation.SessionMode = SessionMode.RemoteReplica;
+            GameThread.Run(() =>
+            {
+                System.Threading.Tasks.Task.Run(() => broker.Publish(old, command)).GetAwaiter().GetResult();
+                current = replacement;
+            }, blocking: true);
+            GameThread.Run(() => { }, blocking: true);
+            objects.Verify(value => value.TryGetObjectWithLogging<ItemRoster>(It.IsAny<string>(), out It.Ref<ItemRoster>.IsAny), Times.Never);
+            broker.Publish(old, command);
+            GameThread.Run(() => { }, blocking: true);
+            objects.Verify(value => value.TryGetObjectWithLogging<ItemRoster>(It.IsAny<string>(), out It.Ref<ItemRoster>.IsAny), Times.Never);
+            broker.Publish(replacement, command);
+            GameThread.Run(() => { }, blocking: true);
+            objects.Verify(value => value.TryGetObjectWithLogging<ItemRoster>("party-roster-a", out It.Ref<ItemRoster>.IsAny), Times.Once);
+            Assert.False(handler.TryAdvanceAuthorityCommandSequence(CurrentLease, 1));
+        }
+        finally
+        {
+            handler.Dispose();
+            GameThread.Run(() => { }, blocking: true);
+            ModInformation.SessionMode = previousMode;
         }
     }
 

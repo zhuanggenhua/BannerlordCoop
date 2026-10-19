@@ -30,7 +30,7 @@ public interface ICoopClient : IRelayNetwork, IUpdateable, INetEventListener, ID
 }
 
 /// <inheritdoc cref="ICoopClient"/>
-public class CoopClient : CoopNetworkBase, ICoopClient
+public class CoopClient : CoopNetworkBase, ICoopClient, IRoomHostPeerProvider
 {
     public override int Priority => 0;
     public IPEndPoint ServerEndpoint { get; private set; }
@@ -43,6 +43,26 @@ public class CoopClient : CoopNetworkBase, ICoopClient
     private bool isConnected = false;
     private bool reconnectPending = false;
     private DateTime reconnectAfter = DateTime.MinValue;
+    private readonly object roomHostPeerGate = new();
+    private NetPeer roomHostPeer;
+    private bool roomHostPeerDisposed;
+
+    public bool IsCurrentRoomHostPeer(NetPeer peer)
+    {
+        lock (roomHostPeerGate)
+            return !roomHostPeerDisposed && peer != null &&
+                ReferenceEquals(peer, roomHostPeer) && peer.ConnectionState == ConnectionState.Connected;
+    }
+
+    public override void Dispose()
+    {
+        lock (roomHostPeerGate)
+        {
+            roomHostPeerDisposed = true;
+            roomHostPeer = null;
+        }
+        base.Dispose();
+    }
 
     public CoopClient(
         INetworkConfig config,
@@ -110,6 +130,11 @@ public class CoopClient : CoopNetworkBase, ICoopClient
 
     public override void OnPeerConnected(NetPeer peer)
     {
+        lock (roomHostPeerGate)
+        {
+            if (roomHostPeerDisposed || peer == null) return;
+            roomHostPeer = peer;
+        }
         if(isConnected == false)
         {
             isConnected = true;
@@ -121,6 +146,13 @@ public class CoopClient : CoopNetworkBase, ICoopClient
 
     public override void OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo)
     {
+        lock (roomHostPeerGate)
+        {
+            if (roomHostPeerDisposed) return;
+            // A delayed callback from a replaced connection cannot revoke the new host.
+            if (roomHostPeer != null && !ReferenceEquals(peer, roomHostPeer)) return;
+            roomHostPeer = null;
+        }
         if (!isConnected && disconnectInfo.Reason == DisconnectReason.ConnectionRejected)
         {
             var rejectCode = ReadRejectCode(disconnectInfo);

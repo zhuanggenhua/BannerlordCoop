@@ -284,7 +284,7 @@ internal class PartyDoneLogicHandler : IHandler
         GameThread.RunSafe(() =>
         {
             if (authorityContext == null || playerManager == null ||
-                !CampaignAuthorityCommandSenderValidator.IsRoomHost(sender, playerManager, sessionIdentity) ||
+                !CampaignAuthorityCommandSenderValidator.IsRoomHost(sender, playerManager, sessionIdentity, network) ||
                 !authorityContext.TryGetLocalAuthorityLease(out var lease) || !command.Matches(lease) ||
                 !playerManager.TryGetPlayer(command.OriginControllerId, out var player) ||
                 !PlayerOwnsPartyDoneLogic(player, command.Request) ||

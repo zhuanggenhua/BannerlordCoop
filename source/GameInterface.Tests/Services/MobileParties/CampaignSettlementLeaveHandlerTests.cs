@@ -83,6 +83,19 @@ public sealed class CampaignSettlementLeaveHandlerTests
         Assert.IsType<CampaignSettlementLeaveApplied>(Assert.Single(f.Sent).Message);
     }
 
+    [Fact]
+    public void HostCommandUsesLiveClientTransportWithoutInventedPlayerPeerBinding()
+    {
+        using var f = new Fixture("b", "b", bindHostPeer: false);
+        Assert.False(f.Players.TryGetPeer("a", out _));
+        Assert.False(f.Players.TryGetPlayer(f.PeerA, out _));
+        f.Broker.Publish(f.PeerA, new CampaignSettlementLeaveCommand(f.Request("a", 1)));
+        f.Pump();
+        Assert.Equal(1, f.NativeCalls);
+        Assert.Null(f.PartyA.CurrentSettlement);
+        Assert.Same(f.PartyB, Campaign.Current.MainParty);
+    }
+
     [Theory]
     [InlineData("stale_epoch")]
     [InlineData("wrong_party")]
@@ -101,15 +114,36 @@ public sealed class CampaignSettlementLeaveHandlerTests
             fault == "wrong_party" ? 2u : 1u,
             fault == "wrong_settlement" ? 99u : 10u, "stream");
         var sender = fault == "non_host_peer" ? f.PeerB : f.PeerA;
-        if (fault == "superseded_host_peer") f.Players.SetPeer("a", f.PeerPool.CreatePeer("127.0.0.3"));
+        if (fault == "superseded_host_peer") f.RoomHostPeer = f.PeerPool.CreatePeer("127.0.0.3");
         f.Broker.Publish(sender, new CampaignSettlementLeaveCommand(request));
         f.Pump();
         Assert.Equal(0, f.NativeCalls);
         Assert.Empty(f.Sent);
-        f.Players.SetPeer("a", f.PeerA);
+        f.RoomHostPeer = f.PeerA;
         f.Broker.Publish(f.PeerA, new CampaignSettlementLeaveCommand(f.Request("a", 1)));
         f.Pump();
         Assert.Equal(1, f.NativeCalls);
+    }
+
+    [Fact]
+    public void HostDisconnectWhileQueuedRejectsCommandAndReconnectCanReuseUnconsumedSequence()
+    {
+        using var f = new Fixture("b", "b");
+        var command = new CampaignSettlementLeaveCommand(f.Request("a", 1));
+        f.EnqueueBefore(() => f.Broker.Publish(f.PeerA, command), () => f.RoomHostPeer = null);
+        f.Pump();
+        Assert.Equal(0, f.NativeCalls);
+        Assert.Empty(f.Sent);
+        var replacement = f.PeerPool.CreatePeer();
+        f.RoomHostPeer = replacement;
+        f.Broker.Publish(f.PeerA, command);
+        f.Pump();
+        Assert.Equal(0, f.NativeCalls);
+        f.Broker.Publish(replacement, command);
+        f.Pump();
+        Assert.Equal(1, f.NativeCalls);
+        Assert.Null(f.PartyA.CurrentSettlement);
+        Assert.Same(f.PartyB, Campaign.Current.MainParty);
     }
 
     [Fact]
@@ -303,13 +337,14 @@ public sealed class CampaignSettlementLeaveHandlerTests
         public readonly AuthorityLease Lease;
         public readonly PlayerManager Players;
         public readonly NetPeer PeerA, PeerB;
+        public NetPeer RoomHostPeer;
         public readonly MobileParty PartyA = ObjectHelper.SkipConstructor<MobileParty>();
         public readonly MobileParty PartyB = ObjectHelper.SkipConstructor<MobileParty>();
         public readonly Settlement Town = ObjectHelper.SkipConstructor<Settlement>();
         public readonly List<(NetPeer? Peer, IMessage Message)> Sent = new();
         public int NativeCalls, ReplicaCalls, EndEncounterCalls, AppliedEvents;
 
-        public Fixture(string local, string writer)
+        public Fixture(string local, string writer, bool bindHostPeer = false)
         {
             ModInformation.SessionMode = local == "a" ? SessionMode.ListenAuthority : SessionMode.RemoteReplica;
             var campaign = ObjectHelper.SkipConstructor<Campaign>();
@@ -330,9 +365,13 @@ public sealed class CampaignSettlementLeaveHandlerTests
             Assert.True(Players.AddPlayer(new Player("b", "", "MobileParty_b", "", "")));
             PeerA = PeerPool.CreatePeer();
             PeerB = PeerPool.CreatePeer("127.0.0.2");
-            Players.SetPeer("a", PeerA);
+            if (bindHostPeer) Players.SetPeer("a", PeerA);
             Players.SetPeer("b", PeerB);
+            RoomHostPeer = local == "b" ? PeerA : null;
             var network = new Mock<INetwork>();
+            network.As<IRoomHostPeerProvider>()
+                .Setup(value => value.IsCurrentRoomHostPeer(It.IsAny<NetPeer>()))
+                .Returns<NetPeer>(peer => ReferenceEquals(peer, RoomHostPeer));
             network.Setup(value => value.Send(It.IsAny<NetPeer>(), It.IsAny<IMessage>()))
                 .Callback<NetPeer, IMessage>((peer, message) => Sent.Add((peer, message)));
             network.Setup(value => value.SendAll(It.IsAny<IMessage>()))
