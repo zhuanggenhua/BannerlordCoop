@@ -382,6 +382,15 @@ internal class SellPrisonersHandler : IHandler
         TroopRoster roster = new();
         troopRosterInterface.UpdateWithData(roster, request.LeftPrisonerRosterData, sellingParty.LeaderHero);
         prisonerSaleProcessor.Sell(sellingParty, roster);
+        logger.Information(
+            "Prisoner sale applied originController={OriginControllerId} writerController={WriterControllerId} epoch={Epoch} authorityId={AuthorityId} requestStream={RequestStreamId} requestSequence={RequestSequence} sellingPartyId={SellingPartyId}",
+            originControllerId,
+            stateLease.AuthorityControllerId,
+            stateLease.Epoch,
+            stateLease.AuthorityId,
+            request.RequestStreamId,
+            request.RequestSequence,
+            request.SellingPartyId);
         FlushPrisonRoster(sellingParty);
 
         if (authorityCommand)
