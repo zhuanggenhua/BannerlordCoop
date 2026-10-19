@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
-import { assertPausedSnapshot, assertSaleApplications, assertSaleRegistrations, assertSaleTransition,
+import { allocationCheckpoint, assertAllocationCheckpointFloor, assertPausedSnapshot, assertSaleAllocationTransition,
+    assertSaleApplications, assertSaleRegistrations, assertSaleTransition,
     assertNoPollingMutation, assertStopped, awaitAllPreservingFirstFailure, createReadDeadlineScope,
     nextSettlementPreparationAction, options, pollReadOnly, saleApplications, OnceActions } from './p2p-prisoner-sale.mjs';
 
@@ -12,9 +13,10 @@ const ids = [
     { controller: 'B', mainHero: 'hero-B', mainParty: 'party-B' },
 ];
 const lease = { authorityControllerId: 'A', authorityId: 'world-3', roomId: 'room', epoch: 3, isPaused: true };
-function state(controller, actor) {
-    return { controller, mainHero: actor.mainHero, mainParty: actor.mainParty, roomHost: 'server', lease,
-        localAuthority: controller === 'A', frozen: false };
+function state(controller, actor, writerController = 'A') {
+    return { controller, mainHero: actor.mainHero, mainParty: actor.mainParty, roomHost: 'server',
+        lease: { ...lease, authorityControllerId: writerController },
+        localAuthority: actor.controller === writerController, frozen: false };
 }
 function player(controller, gold) {
     const actor = ids.find(row => row.controller === controller);
@@ -35,17 +37,27 @@ function actor(controller, gold, prisonRoster) {
 function world(overrides = {}) {
     return { campaign: 'campaign', ticks: 600, partyIdentityHash: 'party-id', rosterCountsHash: 'counts-1',
         rosterXpHash: 'xp-1', volunteerHash: 'volunteers', heroGoldHash: 'gold-1', nextHandle: 500,
-        allocationCounterHash: 'allocations', unregisteredParties: 0, ...overrides };
+        allocationCounters: {
+            'TaleWorlds.CampaignSystem.Roster.TroopRoster, TaleWorlds.CampaignSystem': 4185,
+            'TaleWorlds.CampaignSystem.Roster.TroopRosterElement, TaleWorlds.CampaignSystem': 11,
+        }, allocationCounterHash: 'allocations', unregisteredParties: 0, ...overrides };
 }
-function snapshots() {
+function snapshots(writerController = 'A') {
     const fixture = [{ character: 'imperial_infantryman', number: 2, woundedNumber: 1, xp: 137, isHero: false }];
     const beforePlayers = [player('A', 1000), player('B', 700)];
-    const before = { states: [state('server', ids[0]), state('client1', ids[1])], worlds: [world(), world()],
+    const before = { states: [state('server', ids[0], writerController), state('client1', ids[1], writerController)], worlds: [world(), world()],
         players: [clone(beforePlayers), clone(beforePlayers)],
         actors: [[actor('A', 1000, fixture), actor('B', 700, [])], [actor('A', 1000, fixture), actor('B', 700, [])]] };
     const afterPlayers = [player('A', 1120), player('B', 700)];
-    const after = { states: clone(before.states), worlds: [world({ rosterCountsHash: 'counts-2', rosterXpHash: 'xp-2', heroGoldHash: 'gold-2' }),
-            world({ rosterCountsHash: 'counts-2', rosterXpHash: 'xp-2', heroGoldHash: 'gold-2' })],
+    const writerCounters = { ...before.worlds[0].allocationCounters,
+        'TaleWorlds.CampaignSystem.Roster.TroopRoster, TaleWorlds.CampaignSystem': 4193 };
+    const replicaCounters = { ...before.worlds[1].allocationCounters,
+        'TaleWorlds.CampaignSystem.Roster.TroopRoster, TaleWorlds.CampaignSystem': 4189 };
+    const afterWorld = (allocationCounters, allocationCounterHash) => world({ rosterCountsHash: 'counts-2', rosterXpHash: 'xp-2',
+        heroGoldHash: 'gold-2', nextHandle: 504, allocationCounters, allocationCounterHash });
+    const after = { states: clone(before.states), worlds: writerController === 'A' ?
+            [afterWorld(writerCounters, 'writer-counter-hash'), afterWorld(replicaCounters, 'replica-counter-hash')] :
+            [afterWorld(replicaCounters, 'replica-counter-hash'), afterWorld(writerCounters, 'writer-counter-hash')],
         players: [clone(afterPlayers), clone(afterPlayers)],
         actors: [[actor('A', 1120, []), actor('B', 700, [])], [actor('A', 1120, []), actor('B', 700, [])]] };
     return { before, after };
@@ -211,6 +223,54 @@ test('completed sale credits the originating actor only and removes exact count,
         sellingPartyId: 101, expectedRansomTotal: 120 };
     assert.deepEqual(assertSaleTransition(before, after, intent),
         { amount: 120, controller: 'A', writer: 'A', epoch: 3, partyHandle: 101 });
+});
+
+test('native dummy-roster allocation deltas are accepted for either current writer', () => {
+    for (const writerController of ['A', 'B']) {
+        const { before, after } = snapshots(writerController);
+        const intent = { originController: 'A', writerController, epoch: 3, authorityId: 'world-3',
+            sellingPartyId: 101, expectedRansomTotal: 120 };
+        assert.deepEqual(assertSaleTransition(before, after, intent),
+            { amount: 120, controller: 'A', writer: writerController, epoch: 3, partyHandle: 101 });
+        assert.notEqual(after.worlds[0].allocationCounterHash, after.worlds[1].allocationCounterHash,
+            'Different role-local type-counter hashes are expected after native dummy allocation');
+    }
+});
+
+test('sale allocation oracle rejects handle drift, rollback, wrong type deltas and changed counter keys', () => {
+    const { before, after } = snapshots();
+    const rosterType = Object.keys(before.worlds[0].allocationCounters)
+        .find(type => type.startsWith('TaleWorlds.CampaignSystem.Roster.TroopRoster,'));
+    const nonRosterType = Object.keys(before.worlds[0].allocationCounters).find(type => type !== rosterType);
+    const unequalHandles = clone(after.worlds); unequalHandles[1].nextHandle++;
+    assert.throws(() => assertSaleAllocationTransition(before.worlds, unequalHandles, 0), /World mismatch: nextHandle/);
+
+    const rollback = clone(after.worlds); for (const value of rollback) value.nextHandle = 499;
+    assert.throws(() => assertSaleAllocationTransition(before.worlds, rollback, 0), /increase monotonically/);
+    const unchangedHandle = clone(after.worlds); for (const value of unchangedHandle) value.nextHandle = 500;
+    assert.throws(() => assertSaleAllocationTransition(before.worlds, unchangedHandle, 0), /increase monotonically/);
+
+    const wrongWriterDelta = clone(after.worlds); wrongWriterDelta[0].allocationCounters[rosterType]--;
+    assert.throws(() => assertSaleAllocationTransition(before.worlds, wrongWriterDelta, 0), /Unexpected TroopRoster allocation delta on writer/);
+    const wrongReplicaDelta = clone(after.worlds); wrongReplicaDelta[1].allocationCounters[rosterType]++;
+    assert.throws(() => assertSaleAllocationTransition(before.worlds, wrongReplicaDelta, 0), /Unexpected TroopRoster allocation delta on replica/);
+    const otherTypeChanged = clone(after.worlds); otherTypeChanged[0].allocationCounters[nonRosterType]++;
+    assert.throws(() => assertSaleAllocationTransition(before.worlds, otherTypeChanged, 0), /non-TroopRoster allocation counter/);
+    const keyChanged = clone(after.worlds); delete keyChanged[0].allocationCounters[nonRosterType];
+    keyChanged[0].allocationCounters['Example.UnexpectedType, Example'] = 11;
+    assert.throws(() => assertSaleAllocationTransition(before.worlds, keyChanged, 0), /changed allocation counter type keys/);
+});
+
+test('handoff peers must retain the previous writer checkpoint while allowing Max-merged values', () => {
+    const { before, after } = snapshots();
+    const previousWriterCheckpoint = allocationCheckpoint(before.worlds[0]);
+    assert.doesNotThrow(() => assertAllocationCheckpointFloor(after.worlds, previousWriterCheckpoint));
+
+    const lostHandle = clone(after.worlds); for (const value of lostHandle) value.nextHandle = 499;
+    assert.throws(() => assertAllocationCheckpointFloor(lostHandle, previousWriterCheckpoint), /nextHandle fell below/);
+    const lostCounter = clone(after.worlds); lostCounter[1].allocationCounters[
+        'TaleWorlds.CampaignSystem.Roster.TroopRoster, TaleWorlds.CampaignSystem'] = 4184;
+    assert.throws(() => assertAllocationCheckpointFloor(lostCounter, previousWriterCheckpoint), /counter fell below/);
 });
 
 test('sale assertions reject wrong-actor gold, duplicate roster changes, tick drift and hash divergence', () => {

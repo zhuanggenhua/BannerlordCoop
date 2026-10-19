@@ -31,7 +31,75 @@ const FIXTURE = { id: 'imperial_infantryman', number: 2, wounded: 1, xp: 137 };
 const STABLE_PLAYER = ['heroId', 'heroStringId', 'partyId', 'partyStringId', 'clanId', 'characterId',
     'registeredPlayers', 'heroRegistrations', 'partyRegistrations', 'clanRegistrations', 'troops', 'wounded',
     'settlementId', 'x', 'y', 'active'];
-const STABLE_WORLD = ['campaign', 'partyIdentityHash', 'volunteerHash', 'nextHandle', 'allocationCounterHash'];
+const STABLE_WORLD = ['campaign', 'partyIdentityHash', 'volunteerHash'];
+const TROOP_ROSTER_COUNTER_TYPE = 'TaleWorlds.CampaignSystem.Roster.TroopRoster';
+
+function readAllocationCounters(world, label) {
+    assert.ok(world.allocationCounters && typeof world.allocationCounters === 'object' &&
+        !Array.isArray(world.allocationCounters), `${label} is missing allocation counters`);
+    const entries = Object.entries(world.allocationCounters);
+    assert.ok(entries.length > 0, `${label} has no allocation counters`);
+    for (const [type, count] of entries) {
+        assert.ok(type.trim().length > 0, `${label} has an empty allocation counter type`);
+        assert.ok(Number.isSafeInteger(count) && count >= 0, `${label} has an invalid allocation counter: ${type}`);
+    }
+    const rosterTypes = entries.map(([type]) => type).filter(type => type.split(',')[0] === TROOP_ROSTER_COUNTER_TYPE);
+    assert.equal(rosterTypes.length, 1, `${label} must contain exactly one TroopRoster allocation counter`);
+    return world.allocationCounters;
+}
+
+export function allocationCheckpoint(world) {
+    assert.ok(Number.isSafeInteger(world.nextHandle) && world.nextHandle > 0, 'Invalid allocation checkpoint nextHandle');
+    return { nextHandle: world.nextHandle, allocationCounters: { ...readAllocationCounters(world, 'Allocation checkpoint') } };
+}
+
+export function assertAllocationCheckpointFloor(worlds, floor) {
+    assert.equal(worlds.length, 2);
+    if (floor === null || floor === undefined) return;
+    assert.ok(Number.isSafeInteger(floor.nextHandle) && floor.nextHandle > 0, 'Invalid allocation floor nextHandle');
+    const floorCounters = floor.allocationCounters;
+    assert.ok(floorCounters && typeof floorCounters === 'object' && !Array.isArray(floorCounters),
+        'Invalid allocation floor counters');
+    for (let index = 0; index < worlds.length; index++) {
+        const current = worlds[index];
+        assert.ok(Number.isSafeInteger(current.nextHandle) && current.nextHandle >= floor.nextHandle,
+            `Allocation checkpoint nextHandle fell below the prior writer floor on peer ${index}`);
+        const counters = readAllocationCounters(current, `Peer ${index} allocation checkpoint`);
+        for (const [type, count] of Object.entries(floorCounters)) {
+            assert.ok(Object.hasOwn(counters, type), `Allocation checkpoint lost prior writer counter ${type} on peer ${index}`);
+            assert.ok(counters[type] >= count, `Allocation checkpoint counter fell below the prior writer floor: ${type} on peer ${index}`);
+        }
+    }
+}
+
+export function assertSaleAllocationTransition(beforeWorlds, afterWorlds, writerIndex) {
+    assert.equal(writerIndex === 0 || writerIndex === 1, true, 'Sale must have exactly one identified writer peer');
+    assertWorld(beforeWorlds); assertWorld(afterWorlds);
+    const beforeHandle = beforeWorlds[0].nextHandle;
+    const afterHandle = afterWorlds[0].nextHandle;
+    assert.ok(Number.isSafeInteger(beforeHandle) && beforeHandle > 0, 'Invalid pre-sale nextHandle');
+    assert.ok(Number.isSafeInteger(afterHandle) && afterHandle > beforeHandle,
+        'Sale allocation nextHandle must increase monotonically');
+    const handleDelta = afterHandle - beforeHandle;
+
+    for (let index = 0; index < 2; index++) {
+        const before = readAllocationCounters(beforeWorlds[index], `Pre-sale peer ${index}`);
+        const after = readAllocationCounters(afterWorlds[index], `Post-sale peer ${index}`);
+        assert.deepEqual(Object.keys(after).sort(), Object.keys(before).sort(),
+            `Sale changed allocation counter type keys on peer ${index}`);
+        const rosterType = Object.keys(before).find(type => type.split(',')[0] === TROOP_ROSTER_COUNTER_TYPE);
+        for (const type of Object.keys(before)) {
+            const delta = after[type] - before[type];
+            assert.ok(delta >= 0, `Sale allocation counter moved backwards: ${type} on peer ${index}`);
+            if (type === rosterType) {
+                const expectedDelta = handleDelta * (index === writerIndex ? 2 : 1);
+                assert.equal(delta, expectedDelta,
+                    `Unexpected TroopRoster allocation delta on ${index === writerIndex ? 'writer' : 'replica'} peer`);
+            } else assert.equal(delta, 0, `Sale changed non-TroopRoster allocation counter: ${type} on peer ${index}`);
+        }
+    }
+    return { handleDelta, writerIndex };
+}
 
 export function nextSettlementPreparationAction(inspection) {
     if (inspection?.settlement !== TOWN.id) return 'enter';
@@ -206,6 +274,12 @@ export function assertSaleTransition(before, after, intent) {
     assertPlayers(before.players); assertPlayers(after.players);
     assertWorld(before.worlds); assertWorld(after.worlds);
     assertActors(after.states, before.states);
+    const writerPeers = after.states.map((state, index) => state.localAuthority ? index : -1).filter(index => index >= 0);
+    assert.equal(writerPeers.length, 1, 'Sale snapshot must have exactly one current writer');
+    const writerIndex = writerPeers[0];
+    assert.equal(writer(after.states[writerIndex]), intent.writerController, 'Sale writer does not match submitted intent');
+    assert.equal(writer(before.states[writerIndex]), intent.writerController, 'Sale writer changed during the native action');
+    assertSaleAllocationTransition(before.worlds, after.worlds, writerIndex);
     assert.equal(intent.expectedRansomTotal > 0, true, 'Fixture must have positive native ransom value');
     const previousActors = before.actors;
     const currentActors = after.actors;
@@ -275,7 +349,7 @@ export async function run(config) {
         config, runId: null, features: [], sales: [], screenshots: [], logs: {}, failed: null,
         cleanupConfirmed: false, passed: false,
         scope: 'Trusted writer-only Danustica preparation and real regular-NPC player-sale prefix; no player-hero ransom, captivity/Mission, natural-cycle, cold-save, or network-fault acceptance.' };
-    let runId, callId = 0, initial = null;
+    let runId, callId = 0, initial = null, lastWriterAllocationCheckpoint = null;
     const readDeadlineScope = createReadDeadlineScope();
     const once = new OnceActions();
     const client = new Client({ name: 'codex-p2p-prisoner-sale', version: '1.0.0' });
@@ -588,6 +662,8 @@ export async function run(config) {
             }
             return receipt;
         }, 60000);
+        const writerPeer = after.states.findIndex(value => value.localAuthority);
+        lastWriterAllocationCheckpoint = allocationCheckpoint(after.worlds[writerPeer]);
         return { kind: 'sale', intent, request: output, before: fixture.before, after,
             authoritativeRecipient: originBefore.ransomRecipientHeroId,
             writerHeroId: fixture.before.states[INSTANCES.indexOf(writerInstance)].mainHero };
@@ -659,7 +735,11 @@ export async function run(config) {
             await play();
             await command('server', 'coop.debug.authority.availability', ['yield'], true);
             const states = await awaitWriter(initial[1].controller); await pause();
-            return { states, worlds: await Promise.all(INSTANCES.map(world)) };
+            const worlds = await Promise.all(INSTANCES.map(world));
+            assertWorld(worlds); assertAllocationCheckpointFloor(worlds, lastWriterAllocationCheckpoint);
+            const writerPeer = states.findIndex(value => value.localAuthority);
+            lastWriterAllocationCheckpoint = allocationCheckpoint(worlds[writerPeer]);
+            return { states, worlds };
         });
         await feature('A-observer-routes-through-B-writer-once', () => sell('server', 'client1'));
         await feature('B-local-writer-sells-once', () => sell('client1', 'client1'));
@@ -668,7 +748,11 @@ export async function run(config) {
             await play();
             await command('server', 'coop.debug.authority.availability', ['auto'], true);
             const states = await awaitWriter(initial[0].controller); await pause();
-            return { states, worlds: await Promise.all(INSTANCES.map(world)) };
+            const worlds = await Promise.all(INSTANCES.map(world));
+            assertWorld(worlds); assertAllocationCheckpointFloor(worlds, lastWriterAllocationCheckpoint);
+            const writerPeer = states.findIndex(value => value.localAuthority);
+            lastWriterAllocationCheckpoint = allocationCheckpoint(worlds[writerPeer]);
+            return { states, worlds };
         });
         await feature('final-prisoner-sale-state', async () => {
             const receipt = await snapshot('final actors/world');
