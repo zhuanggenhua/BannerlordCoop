@@ -1,5 +1,6 @@
 ﻿using Coop.Tests.Mocks;
 using Common;
+using Common.Logging;
 using Common.Messaging;
 using Common.Network;
 using Common.Network.Coalescing;
@@ -14,96 +15,140 @@ using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.ObjectManager;
 using GameInterface.Services.Time.Interfaces;
 using Moq;
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Coop.Tests.Client.Services.Session;
 
 public class CampaignAuthorityFreezeClientHandlerTests
 {
+    private readonly ITestOutputHelper output;
+
+    public CampaignAuthorityFreezeClientHandlerTests(ITestOutputHelper output) => this.output = output;
+
     [Fact]
     public void CurrentAuthorityFreezesBeforeSendingOrderedAcknowledgementAndCanBeCanceled()
     {
-        var broker = new TestMessageBroker();
-        var identity = new SessionIdentity();
-        var lease = new AuthorityLease("room-a", "authority-b", "controller-b", 3);
-        Assert.True(identity.TryApply(lease, "controller-a"));
-        var controller = new ControllerIdProvider();
-        controller.SetControllerId("controller-b");
-        var network = new Mock<INetwork>();
-        var operations = new List<string>();
-        var asyncTasks = new Mock<ICampaignAsyncTaskDrain>();
-        asyncTasks.Setup(value => value.TryDrain()).Callback(() =>
+        var evidence = new ConcurrentQueue<string>();
+        var elapsed = Stopwatch.StartNew();
+        void Observe(string stage)
         {
-            Assert.True(GameThread.Instance.IsGameThread);
-            Assert.False(identity.IsLocallyFrozen(lease));
-            var worker = System.Threading.Tasks.Task.Run(() =>
-                identity.TryExecuteWithLease(lease, () => operations.Add("worker")));
-            Assert.True(worker.Wait(System.TimeSpan.FromSeconds(2)), "Lease lock blocked the finishing AI worker");
-            Assert.True(worker.Result);
-        }).Returns(true);
-        var coalescer = new Mock<ISendCoalescer>();
-        coalescer.Setup(value => value.Flush(network.Object)).Callback(() =>
+            ThreadPool.GetAvailableThreads(out int workers, out int io);
+            evidence.Enqueue($"{DateTime.UtcNow:O} elapsedMs={elapsed.Elapsed.TotalMilliseconds:F3} stage={stage} thread={Thread.CurrentThread.ManagedThreadId} pool={Thread.CurrentThread.IsThreadPoolThread} gameThread={GameThread.Instance.IsGameThread} availableWorkers={workers} availableIO={io}");
+        }
+        Action<string> capture = message =>
         {
-            Assert.True(GameThread.Instance.IsGameThread);
-            Assert.False(identity.IsLocallyFrozen(lease));
-            Assert.True(identity.TryExecuteWithLease(lease, () => operations.Add("coalescer")));
-        });
-        var checkpoint = new RegistryAllocationCheckpoint(444, new Dictionary<string, int>());
-        var rosters = new CampaignRosterCheckpoint(new CampaignRosterState[0]);
-        var rosterService = new Mock<ICampaignRosterCheckpointService>();
-        rosterService.Setup(value => value.TryCapture(out rosters))
-            .Callback(() => Assert.True(identity.IsLocallyFrozen(lease))).Returns(true);
-        long finalTicks = 888;
-        var clock = new Mock<IMapTimeTrackerInterface>();
-        clock.Setup(value => value.TryGetCurrentTicks(out finalTicks))
-            .Callback(() => Assert.True(identity.IsLocallyFrozen(lease))).Returns(true);
-        var sessionCheckpoint = new CampaignSessionCheckpoint("campaign", "{}");
-        var sessions = new Mock<ICampaignSessionCheckpointService>();
-        sessions.Setup(value => value.TryCapture(out sessionCheckpoint))
-            .Callback(() => Assert.True(identity.IsLocallyFrozen(lease))).Returns(true);
-        var objectManager = new Mock<IObjectManager>();
-        objectManager.Setup(value => value.CaptureAllocationCheckpoint())
-            .Callback(() => Assert.True(identity.IsLocallyFrozen(lease)))
-            .Returns(checkpoint);
-        NetworkCampaignAuthorityFreezeAcknowledged? acknowledgement = null;
-
-        network.Setup(value => value.FlushPendingMessages())
-            .Callback(() => operations.Add("flush"));
-        network.Setup(value => value.SendAll(It.IsAny<IMessage>()))
-            .Callback<IMessage>(message =>
+            if (message.Contains("Failed to acknowledge campaign authority freeze")) evidence.Enqueue("HANDLER_ERROR " + message);
+        };
+        OutputSinkManager.AddLogCallback(capture);
+        try
+        {
+            var broker = new TestMessageBroker();
+            var identity = new SessionIdentity();
+            var lease = new AuthorityLease("room-a", "authority-b", "controller-b", 3);
+            Assert.True(identity.TryApply(lease, "controller-a"));
+            var controller = new ControllerIdProvider();
+            controller.SetControllerId("controller-b");
+            var network = new Mock<INetwork>();
+            var operations = new List<string>();
+            var asyncTasks = new Mock<ICampaignAsyncTaskDrain>();
+            asyncTasks.Setup(value => value.TryDrain()).Callback(() =>
             {
-                Assert.True(identity.IsLocallyFrozen(lease));
-                acknowledgement = Assert.IsType<NetworkCampaignAuthorityFreezeAcknowledged>(message);
-                operations.Add("ack");
+                Observe("drain-entered");
+                Assert.True(GameThread.Instance.IsGameThread);
+                Assert.False(identity.IsLocallyFrozen(lease));
+                // A finishing engine worker must run independently of the test runner thread pool.
+                var worker = System.Threading.Tasks.Task.Factory.StartNew(() =>
+                {
+                    Observe("worker-started-before-lease");
+                    Assert.False(Thread.CurrentThread.IsThreadPoolThread);
+                    Assert.False(GameThread.Instance.IsGameThread);
+                    bool result = identity.TryExecuteWithLease(lease, () => { Observe("worker-holds-lease"); operations.Add("worker"); });
+                    Observe("worker-completed-lease-result=" + result);
+                    return result;
+                }, CancellationToken.None, System.Threading.Tasks.TaskCreationOptions.LongRunning, System.Threading.Tasks.TaskScheduler.Default);
+                Observe("worker-dispatched");
+                bool completed = worker.Wait(System.TimeSpan.FromSeconds(2));
+                Observe("worker-wait-ended-completed=" + completed + "-status=" + worker.Status);
+                Assert.True(completed, "Lease lock blocked the finishing AI worker");
+                Assert.True(worker.Result);
+            }).Returns(true);
+            var coalescer = new Mock<ISendCoalescer>();
+            coalescer.Setup(value => value.Flush(network.Object)).Callback(() =>
+            {
+                Observe("coalescer");
+                Assert.True(GameThread.Instance.IsGameThread);
+                Assert.False(identity.IsLocallyFrozen(lease));
+                Assert.True(identity.TryExecuteWithLease(lease, () => operations.Add("coalescer")));
             });
+            var checkpoint = new RegistryAllocationCheckpoint(444, new Dictionary<string, int>());
+            var rosters = new CampaignRosterCheckpoint(new CampaignRosterState[0]);
+            var rosterService = new Mock<ICampaignRosterCheckpointService>();
+            rosterService.Setup(value => value.TryCapture(out rosters))
+                .Callback(() => Assert.True(identity.IsLocallyFrozen(lease))).Returns(true);
+            long finalTicks = 888;
+            var clock = new Mock<IMapTimeTrackerInterface>();
+            clock.Setup(value => value.TryGetCurrentTicks(out finalTicks))
+                .Callback(() => Assert.True(identity.IsLocallyFrozen(lease))).Returns(true);
+            var sessionCheckpoint = new CampaignSessionCheckpoint("campaign", "{}");
+            var sessions = new Mock<ICampaignSessionCheckpointService>();
+            sessions.Setup(value => value.TryCapture(out sessionCheckpoint))
+                .Callback(() => Assert.True(identity.IsLocallyFrozen(lease))).Returns(true);
+            var objectManager = new Mock<IObjectManager>();
+            objectManager.Setup(value => value.CaptureAllocationCheckpoint())
+                .Callback(() => Assert.True(identity.IsLocallyFrozen(lease)))
+                .Returns(checkpoint);
+            NetworkCampaignAuthorityFreezeAcknowledged? acknowledgement = null;
 
-        var request = new NetworkCampaignAuthorityFreezeRequest(lease, "controller-a", 44);
-        using var handler = new CampaignAuthorityFreezeClientHandler(broker, network.Object, identity, controller,
-            objectManager.Object, rosterService.Object, clock.Object, sessions.Object, CampaignHandoffTestServices.Scheduler(), asyncTasks.Object, coalescer.Object);
-        broker.Publish(this, request);
-        GameThread.Run(() => { }, blocking: true);
+            network.Setup(value => value.FlushPendingMessages())
+                .Callback(() => operations.Add("flush"));
+            network.Setup(value => value.SendAll(It.IsAny<IMessage>()))
+                .Callback<IMessage>(message =>
+                {
+                    Assert.True(identity.IsLocallyFrozen(lease));
+                    acknowledgement = Assert.IsType<NetworkCampaignAuthorityFreezeAcknowledged>(message);
+                    operations.Add("ack");
+                });
 
-        Assert.True(identity.IsLocallyFrozen(lease));
-        Assert.NotNull(acknowledgement);
-        Assert.Equal(new[] { "worker", "coalescer", "flush", "ack", "flush" }, operations);
-        Assert.Equal(request.HandoffSequence, acknowledgement.Value.HandoffSequence);
-        Assert.Equal(request.CandidateControllerId, acknowledgement.Value.CandidateControllerId);
-        Assert.Same(checkpoint, acknowledgement.Value.AllocationCheckpoint);
-        Assert.Same(rosters, acknowledgement.Value.RosterCheckpoint);
-        Assert.Equal(888, acknowledgement.Value.ClockCheckpoint.Ticks);
-        Assert.Same(sessionCheckpoint, acknowledgement.Value.SessionCheckpoint);
-        Assert.NotNull(acknowledgement.Value.SchedulerCheckpoint);
+            var request = new NetworkCampaignAuthorityFreezeRequest(lease, "controller-a", 44);
+            using var handler = new CampaignAuthorityFreezeClientHandler(broker, network.Object, identity, controller,
+                objectManager.Object, rosterService.Object, clock.Object, sessions.Object, CampaignHandoffTestServices.Scheduler(), asyncTasks.Object, coalescer.Object);
+            broker.Publish(this, request);
+            GameThread.Run(() => { }, blocking: true);
 
-        broker.Publish(this, request);
-        GameThread.Run(() => { }, blocking: true);
-        coalescer.Verify(value => value.Flush(network.Object), Times.Once);
-        asyncTasks.Verify(value => value.TryDrain(), Times.Once);
-        network.Verify(value => value.SendAll(It.IsAny<NetworkCampaignAuthorityFreezeAcknowledged>()), Times.Exactly(2));
+            Observe("request-drained-frozen=" + identity.IsLocallyFrozen(lease));
+            Assert.True(identity.IsLocallyFrozen(lease));
+            Assert.NotNull(acknowledgement);
+            Assert.Equal(new[] { "worker", "coalescer", "flush", "ack", "flush" }, operations);
+            Assert.Equal(request.HandoffSequence, acknowledgement.Value.HandoffSequence);
+            Assert.Equal(request.CandidateControllerId, acknowledgement.Value.CandidateControllerId);
+            Assert.Same(checkpoint, acknowledgement.Value.AllocationCheckpoint);
+            Assert.Same(rosters, acknowledgement.Value.RosterCheckpoint);
+            Assert.Equal(888, acknowledgement.Value.ClockCheckpoint.Ticks);
+            Assert.Same(sessionCheckpoint, acknowledgement.Value.SessionCheckpoint);
+            Assert.NotNull(acknowledgement.Value.SchedulerCheckpoint);
 
-        broker.Publish(this, request.ToCanceled());
-        GameThread.Run(() => { }, blocking: true);
-        Assert.False(identity.IsLocallyFrozen(lease));
+            broker.Publish(this, request);
+            GameThread.Run(() => { }, blocking: true);
+            coalescer.Verify(value => value.Flush(network.Object), Times.Once);
+            asyncTasks.Verify(value => value.TryDrain(), Times.Once);
+            network.Verify(value => value.SendAll(It.IsAny<NetworkCampaignAuthorityFreezeAcknowledged>()), Times.Exactly(2));
+
+            broker.Publish(this, request.ToCanceled());
+            GameThread.Run(() => { }, blocking: true);
+            Assert.False(identity.IsLocallyFrozen(lease));
+            Observe("canceled");
+        }
+        finally
+        {
+            OutputSinkManager.RemoveLogCallback(capture);
+            foreach (string row in evidence) output.WriteLine(row);
+        }
     }
 
     [Fact]
