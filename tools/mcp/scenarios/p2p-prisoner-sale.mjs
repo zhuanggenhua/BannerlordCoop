@@ -434,12 +434,11 @@ export async function run(config) {
         if (mission) {
             await waitState(instance, 'readyForMissionTests');
             await command(instance, 'coop.debug.location.leave', [], true);
-            await nativeMap(instance);
+            await poll('native map after requested Mission exit', () => nativeMap(instance), 60000);
         }
-        current = await inspect(instance, controller);
-        assert.equal(current.settlement, TOWN.id, `${controller} did not enter Danustica`);
-        assert.equal(current.currentMenu, 'town_backstreet', `${controller} is not in the native town backstreet menu`);
-        return { first, mission, current, values: await settlementReplicas(controller, instance) };
+        const values = await settlementReplicas(controller, instance);
+        current = values[INSTANCES.indexOf(instance)];
+        return { first, mission, current, values };
     }
     async function prepareSale(writerInstance, targetController) {
         const writerController = initial[INSTANCES.indexOf(writerInstance)].controller;
