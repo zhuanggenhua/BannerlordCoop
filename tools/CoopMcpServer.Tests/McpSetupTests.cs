@@ -7,6 +7,46 @@ namespace CoopMcpServer.Tests;
 public sealed class McpSetupTests
 {
     [Fact]
+    public async Task FixtureWaitsForAShortLivedWindowsExecutableFileLock()
+    {
+        var fixture = new SetupFixture();
+        string path = Path.Combine(fixture.Root, "exiting-child.exe");
+        File.WriteAllText(path, "fixture file, never executed");
+        var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+        Task release = Task.Run(async () => { await Task.Delay(150); file.Dispose(); });
+        try
+        {
+            fixture.Dispose();
+            Assert.False(Directory.Exists(fixture.Root));
+        }
+        finally
+        {
+            await release;
+            if (Directory.Exists(fixture.Root)) Directory.Delete(fixture.Root, true);
+        }
+    }
+
+    [Fact]
+    public void FixtureStillReportsAFileLockThatDoesNotClear()
+    {
+        var fixture = new SetupFixture();
+        string path = Path.Combine(fixture.Root, "held-child.exe");
+        File.WriteAllText(path, "fixture file, never executed");
+        var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None);
+        try
+        {
+            var error = Record.Exception(fixture.Dispose);
+            Assert.True(error is IOException || error is UnauthorizedAccessException);
+            Assert.True(Directory.Exists(fixture.Root));
+        }
+        finally
+        {
+            file.Dispose();
+            Directory.Delete(fixture.Root, true);
+        }
+    }
+
+    [Fact]
     public async Task SetupPublishesOnlyStandaloneProjectAndPreservesLocalSettings()
     {
         using var fixture = new SetupFixture();
@@ -254,7 +294,16 @@ public sealed class McpSetupTests
             finally { if (!process.HasExited) process.Kill(entireProcessTree: true); }
         }
 
-        public void Dispose() { Directory.Delete(Root, true); }
+        public void Dispose()
+        {
+            var deadline = Stopwatch.StartNew();
+            while (true)
+            {
+                try { Directory.Delete(Root, true); return; }
+                catch (IOException) when (deadline.Elapsed < TimeSpan.FromSeconds(2)) { Thread.Sleep(25); }
+                catch (UnauthorizedAccessException) when (deadline.Elapsed < TimeSpan.FromSeconds(2)) { Thread.Sleep(25); }
+            }
+        }
     }
 
     private sealed record ProcessResult(int Code, string Output, string Error);
