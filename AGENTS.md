@@ -14,6 +14,15 @@ A Mount & Blade II: Bannerlord co-op mod.
 
 ## Architecture & Sync Invariants
 
+### Mandatory P2P Change Boundary
+
+Prefer the original project's established implementations and minimize changes to core modules. Do not rewrite without concrete source, test or runtime evidence. This user requirement applies to the current P2P work and subsequent development.
+
+- Protect Mission NPC Owner/Puppet, movement synchronization, action/damage routing, LiteNetLib, Protobuf, LZ4, the AutoSync generator, the main object registry, save snapshots and incremental catch-up. Reuse these implementations through adapters wherever possible.
+- Focus P2P changes on session responsibilities, authority permissions, Epochs, checkpoints, world-tick eligibility, message routing, Mission coordination and battle-result submission interfaces. This boundary does not waive review or testing.
+- Before changing an existing core module, record and explain: (1) its existing functionality, (2) concrete evidence that an adapter cannot solve the problem, (3) existing invariants the change could affect, and (4) the required regression tests. If the adapter suffices, use it instead of changing the core.
+- Do not expand scope for refactoring or consistent style. Prioritize remaining native P2P authority-migration acceptance before synchronization-precision optimization, thousand-agent battle performance or third-party Mod compatibility. An unrun or failed native scenario remains unaccepted.
+
 ### Co-op Server/Host Model
 
 `DedicatedAuthority` has **no party and no main hero on the map**. Everyone who plays in that mode joins as a remote client. Keep its player removal, cleanup and headless behavior scoped to that mode.
