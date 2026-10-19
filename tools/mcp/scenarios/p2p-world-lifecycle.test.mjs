@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { options, assertSemantic, assertPersistent, assertCycles, assertCycleWindow, assertSchedulerHandoff, assertColdLease, freshSaveName, combineCyclePages } from './p2p-world-lifecycle.mjs';
+import { captureProcessIdentities, collectSessionLogs, hasCompleteSessionEvidence, stopSession, options, assertSemantic, assertPersistent, assertCycles, assertCycleWindow, assertSchedulerHandoff, assertColdLease, freshSaveName, combineCyclePages } from './p2p-world-lifecycle.mjs';
 const hash = 'a'.repeat(64);
 const semantic = () => ({campaign:'campaign',ticks:120,partyCount:25,activePartyCount:23,missingPartyIds:0,duplicatePartyIds:[],
     worldIdentityHash:hash,worldRostersHash:hash,activeWorldRostersHash:hash,heroGoldHash:hash,volunteerHash:hash,aliveHeroes:10,
@@ -93,4 +93,114 @@ test('bounded cycle pagination rejects incomplete or mixed-run evidence',()=>{
     assert.equal(combineCyclePages([first,second]).rows.length,2);
     assert.throws(()=>combineCyclePages([first]));assert.throws(()=>combineCyclePages([first,{...second,instance:'other'}]));
     assert.throws(()=>combineCyclePages([first,{...second,offset:0}]));
+});
+
+
+// Actual Native01 start_run identity, before campaign readiness failed; B was not launched.
+const native01 = {runId:'52ed16a2137f4a99a78af8b2608114d1',state:'started',error:null,instances:[{
+    name:'server',identity:{pid:22872,startedUtc:'2026-10-19T09:57:27.793423Z',role:'server',platformId:'LocalA',
+        runToken:'52ed16a2137f4a99a78af8b2608114d1'},processAlive:true,status:null,processTreeAlive:true,cleanupComplete:false}]};
+function startupSession() {
+    return {runId:native01.runId,processes:[],launchStatus:{server:'UNKNOWN',client1:'NOT_STARTED'},
+        logs:{server:{text:''},client1:{text:''}},cleanupConfirmed:false,stopAttempted:false};
+}
+const nativeLog = pid => `[(${pid}) 17:57:27 INF Coop.Startup] Real process startup\r\n`;
+const readPage = (text,callId=10) => ({qaCallId:callId,result:{text,cursor:'cursor-'+callId,reset:false,hasMore:false}});
+const persistLog = async (instance,text) => ({path:instance+'.log',persistedText:text});
+const emitLog = async () => {};
+function joinedView() {
+    return {...structuredClone(native01),instances:[...structuredClone(native01.instances),
+        {name:'client1',identity:{...native01.instances[0].identity,pid:22873,role:'client',platformId:'testclient1'},
+            processAlive:true,status:null,processTreeAlive:true,cleanupComplete:false}]};
+}
+function stopView(view) {
+    return {...view,state:'stopped',instances:view.instances.map(row=>({...row,processAlive:false,processTreeAlive:false,cleanupComplete:true}))};
+}
+
+test('Native01 startup response captures A log identity before readiness and records B NOT_STARTED',async()=>{
+    const session=startupSession();captureProcessIdentities(session,native01,'start_run#1');
+    assert.equal(session.processes[0].identity.pid,22872);
+    assert.equal(session.identitySources[0].source,'start_run#1');
+    const reads=[];
+    await collectSessionLogs(session,async(instance)=>{reads.push(instance);return readPage(nativeLog(22872));},persistLog,emitLog);
+    assert.deepEqual(reads,['server']);assert.equal(session.logs.server.verification,'COMPLETE');
+    assert.equal(session.logs.client1.verification,'NOT_STARTED');assert.equal(hasCompleteSessionEvidence(session),false);
+});
+
+test('uncertain B launch remains UNKNOWN and fails, but readonly get_run can discover its exact identity',async()=>{
+    const session=startupSession();captureProcessIdentities(session,native01,'start_run#1');
+    session.launchStatus.client1='UNKNOWN';
+    const reads=[];
+    await assert.rejects(collectSessionLogs(session,async(instance)=>{reads.push(instance);return readPage(nativeLog(22872));},persistLog,emitLog),/process log evidence/);
+    assert.deepEqual(reads,['server']);assert.equal(session.logs.client1.verification,'UNKNOWN');
+    captureProcessIdentities(session,joinedView(),'get_run#11');
+    assert.equal(session.launchStatus.client1,'STARTED');assert.equal(session.processes[1].identity.pid,22873);
+    assert.equal(hasCompleteSessionEvidence(session),false);
+});
+
+test('later views cannot swap PID, start time, run token, role, platform or duplicate identities',()=>{
+    for(const change of [v=>v.instances[0].identity.pid++,v=>v.instances[0].identity.startedUtc='different',
+        v=>v.instances[0].identity.runToken='other',v=>v.instances[0].identity.role='client',
+        v=>v.instances[0].identity.platformId='other',v=>v.runId='other']) {
+        const session=startupSession();captureProcessIdentities(session,native01,'start_run#1');
+        const changed=structuredClone(native01);change(changed);assert.throws(()=>captureProcessIdentities(session,changed,'get_run#2'));
+        assert.deepEqual(session.processes[0].identity,native01.instances[0].identity);
+    }
+    const duplicate=joinedView();duplicate.instances[1].identity.pid=22872;
+    assert.throws(()=>captureProcessIdentities(startupSession(),duplicate,'get_run#2'),/share a PID/);
+});
+
+test('empty, wrong-PID and genuine Harmony error logs fail without suppressing raw text',async()=>{
+    const error=`[(22872) 17:57:27 ERR Coop.Startup] HarmonyException: native init failed\r\n`;
+    for(const text of ['',nativeLog(99999),error]) {
+        const session=startupSession();captureProcessIdentities(session,native01,'start_run#1');const errors=[];
+        await assert.rejects(collectSessionLogs(session,async()=>readPage(text),persistLog,async row=>errors.push(row)),/process log evidence/);
+        assert.equal(session.logs.server.text,text);assert.equal(session.logs.server.verification,'FAILED');
+        assert.equal(errors.length,1);assert.equal(session.logs.client1.verification,'NOT_STARTED');
+        if(text===error)assert.equal(session.logs.server.diagnostics.errorLines.length,1);
+    }
+});
+
+test('stop can discover uncertain B and requires complete logs from both real processes',async()=>{
+    const session=startupSession();captureProcessIdentities(session,native01,'start_run#1');session.launchStatus.client1='UNKNOWN';
+    const stopped=stopView(joinedView()), reads=[];
+    await stopSession(session,{stopRun:async()=>{captureProcessIdentities(session,stopped,'stop_run#9');return stopped;},
+        readProcesses:()=>[],collectLogs:archived=>collectSessionLogs(session,async instance=>{
+            reads.push(instance);return readPage(nativeLog(instance==='server'?22872:22873));},persistLog,emitLog,{archived}),save:async()=>{}});
+    assert.equal(session.cleanupConfirmed,true);assert.deepEqual(reads,['server','client1']);
+    assert.equal(session.logs.client1.verification,'COMPLETE');assert.equal(hasCompleteSessionEvidence(session),false);
+    session.twoProcessReady=true;assert.equal(hasCompleteSessionEvidence(session),true);
+});
+
+test('successful OS cleanup and failed log verification remain separate and preserve startup failure',async()=>{
+    const session=startupSession();captureProcessIdentities(session,native01,'start_run#1');
+    const original={message:'HarmonyException: native initialization failed'}, summary={failed:original};
+    let saved=false;
+    await assert.rejects(stopSession(session,{stopRun:async()=>stopView(native01),readProcesses:()=>[],
+        collectLogs:async()=>{throw new Error('archive verification failed');},save:async()=>{saved=true;}}),/archive verification failed/);
+    assert.equal(session.cleanupConfirmed,true);assert.equal(session.cleanupError,undefined);
+    assert.match(session.logVerificationError,/archive verification failed/);assert.equal(saved,true);
+    assert.equal(summary.failed,original);assert.equal(hasCompleteSessionEvidence(session),false);
+    await assert.rejects(stopSession(session,{}),/must not be retried/);
+});
+
+test('live process or unconfirmed stop fails cleanup and never asserts archive success',async()=>{
+    for(const remaining of [[{ProcessId:22872}],[]]) {
+        const session=startupSession();captureProcessIdentities(session,native01,'start_run#1');let logReads=0;
+        const stopped=stopView(native01);if(remaining.length===0)stopped.instances[0].processTreeAlive=true;
+        await assert.rejects(stopSession(session,{stopRun:async()=>stopped,readProcesses:()=>remaining,
+            collectLogs:async()=>{logReads++;},save:async()=>{}}));
+        assert.equal(session.cleanupConfirmed,false);assert.ok(session.cleanupError);
+        assert.equal(session.logVerificationError,undefined);assert.equal(logReads,0);
+    }
+});
+
+test('dual-client acceptance requires both known identities, both strict logs, readiness and cleanup',async()=>{
+    const session=startupSession();captureProcessIdentities(session,joinedView(),'get_run#2');
+    await collectSessionLogs(session,async instance=>readPage(nativeLog(instance==='server'?22872:22873)),persistLog,emitLog);
+    session.twoProcessReady=true;session.cleanupConfirmed=true;assert.equal(hasCompleteSessionEvidence(session),true);
+    for(const change of [s=>s.logs.client1.verification='FAILED',s=>s.launchStatus.client1='UNKNOWN',s=>s.twoProcessReady=false,
+        s=>s.cleanupConfirmed=false,s=>s.logVerificationError='archive failed',s=>s.processes.pop()]) {
+        const bad=structuredClone(session);change(bad);assert.equal(hasCompleteSessionEvidence(bad),false);
+    }
 });

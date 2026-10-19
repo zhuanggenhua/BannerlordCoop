@@ -177,6 +177,72 @@ export function freshSaveName(now = new Date(), suffix = randomUUID().slice(0,8)
     assert.match(name,/^[A-Za-z0-9_-]{1,64}$/); return name;
 }
 
+export function captureProcessIdentities(session, view, source) {
+    assert.equal(view.runId, session.runId, 'Process receipt belongs to another run');
+    session.processes ??= []; session.identitySources ??= [];
+    session.launchStatus ??= Object.fromEntries(INSTANCES.map(name => [name, 'NOT_STARTED']));
+    for (const row of view.instances ?? []) {
+        assert.ok(INSTANCES.includes(row.name), 'Unexpected native instance');
+        if (!row.identity) { assert.ok(!row.processAlive, 'Live process has no identity'); continue; }
+        assert.ok(Number.isSafeInteger(row.identity.pid) && row.identity.pid > 0, 'Missing actual native PID');
+        assert.equal(row.identity.runToken, session.runId, 'Native process token does not match run');
+        assert.ok(row.identity.startedUtc && row.identity.role && row.identity.platformId, 'Incomplete native identity');
+        const index = session.processes.findIndex(value => value.name === row.name);
+        if (index >= 0) assert.deepEqual(row.identity, session.processes[index].identity, 'Native process identity changed: ' + row.name);
+        assert.ok(!session.processes.some(value => value.name !== row.name && value.identity.pid === row.identity.pid), 'Two instances share a PID');
+        if (index < 0) session.processes.push(row); else session.processes[index] = row;
+        session.launchStatus[row.name] = 'STARTED';
+        session.identitySources.push({ source, instance: row.name, identity: structuredClone(row.identity) });
+    }
+}
+
+export async function collectSessionLogs(session, readLogs, persist, emit, { archived = false, rawRecord } = {}) {
+    const failures = [];
+    for (const instance of INSTANCES) {
+        const log = session.logs[instance], process = session.processes?.find(value => value.name === instance);
+        if (!process) {
+            log.verification = session.launchStatus[instance] === 'NOT_STARTED' ? 'NOT_STARTED' : 'UNKNOWN';
+            if (log.verification === 'UNKNOWN') failures.push(instance + ': launch identity remains unknown');
+            continue;
+        }
+        try {
+            await collectNativeLog(log, cursor => readLogs(instance, cursor),
+                { archived, source: { runId: session.runId, instance, rawRecord } });
+            Object.assign(log, await persist(instance, log.text));
+            log.diagnostics = logDiagnostics(log.text);
+            log.completeness = assertProcessLogCompleteness(log.text, process.identity.pid);
+            assert.equal(log.diagnostics.errorLines.length + log.diagnostics.realTick + log.diagnostics.duplicateIds + log.diagnostics.aiBatch, 0,
+                'Runtime ERR/FTL or critical diagnostics require investigation');
+            log.verification = 'COMPLETE';
+        } catch (error) {
+            log.verification = 'FAILED'; log.error = error.stack; failures.push(instance + ': ' + error.message);
+            await emit({ phase: 'log_evidence_error', instance, error: error.stack, collection: log.collections?.at(-1) });
+        }
+    }
+    assert.deepEqual(failures, [], 'Incomplete or failed process log evidence');
+}
+
+export function hasCompleteSessionEvidence(session) {
+    return session.twoProcessReady === true && session.cleanupConfirmed === true && !session.cleanupError &&
+        !session.logVerificationError && INSTANCES.every(instance => session.launchStatus[instance] === 'STARTED' &&
+            session.processes?.some(value => value.name === instance) && session.logs[instance].verification === 'COMPLETE');
+}
+
+export async function stopSession(session, { stopRun, readProcesses, collectLogs, save }) {
+    assert.equal(session.stopAttempted, false, 'Uncertain stop mutations must not be retried'); session.stopAttempted = true;
+    try {
+        const stopped = await stopRun(); session.stopped = stopped;
+        assert.equal(stopped.state, 'stopped'); assert.ok(stopped.instances.length > 0);
+        assert.deepEqual(stopped.instances.map(row => row.name).sort(), session.processes.map(row => row.name).sort(), 'Stop receipt omitted an observed process');
+        assert.ok(stopped.instances.every(row => row.cleanupComplete && !row.processAlive && !row.processTreeAlive));
+        session.afterStopProcesses = await readProcesses();
+        assert.equal(session.afterStopProcesses.length, 0, 'Bannerlord process remained after stop'); session.cleanupConfirmed = true;
+    } catch (error) { session.cleanupError = error.stack; throw error; }
+    try { await collectLogs(true); }
+    catch (error) { session.logVerificationError = error.stack; throw error; }
+    finally { await save(); }
+}
+
 export async function run(config) {
     assert.ok((await stat(join(config.repo,'.git'))).isDirectory(), 'Coordinator checkout required');
     assert.equal(await realpath(config.repo),await realpath(execFileSync('git',['rev-parse','--show-toplevel'],{cwd:config.repo,encoding:'utf8',windowsHide:true}).trim()));
@@ -198,15 +264,21 @@ export async function run(config) {
     async function call(name,args,mutation=false) {
         assert.ok(!(readDeadline && mutation),'Poll callbacks cannot mutate');
         const timeout = readDeadline ? readDeadline-Date.now() : 360000; assert.ok(timeout>0,'Read deadline expired');
-        const id = ++callId; await emit({phase:'request',callId:id,name,args,mutation}); let raw;
+        const id = ++callId;
+        if(name==='start_client' && session)session.launchStatus.client1='UNKNOWN';
+        await emit({phase:'request',callId:id,name,args,mutation}); let raw;
         try { raw = await client.callTool({name,arguments:args},undefined,{timeout}); }
         catch(error) { await emit({phase:'transport_error',callId:id,name,error:error.stack,outcomeUncertain:mutation}); throw error; }
         const data = raw.structuredContent ?? JSON.parse(raw.content.find(item=>item.type==='text').text);
+        await emit({phase:'response',callId:id,name,args,data,raw});
         if(name==='start_run' && data.runId) {
-            session = {runId:data.runId,saveName:args.save_name,logs:Object.fromEntries(INSTANCES.map(n=>[n,{text:'',resets:0}])),cleanupConfirmed:false,stopAttempted:false};
-            summary.sessions.push(session);
+            session = {runId:data.runId,saveName:args.save_name,processes:[],launchStatus:Object.fromEntries(INSTANCES.map(n=>[n,'NOT_STARTED'])),
+                logs:Object.fromEntries(INSTANCES.map(n=>[n,{text:'',verification:'NOT_STARTED'}])),cleanupConfirmed:false,stopAttempted:false};
+            summary.sessions.push(session); session.launchStatus.server='UNKNOWN';captureProcessIdentities(session,data,'start_run#'+id);
         }
-        await emit({phase:'response',callId:id,name,args,data,raw}); assert.ok(!raw.isError,JSON.stringify(data)); return {...data,qaCallId:id};
+        if(name==='start_client' && data.run)captureProcessIdentities(session,data.run,'start_client#'+id);
+        if((name==='get_run'||name==='stop_run') && session)captureProcessIdentities(session,data,name+'#'+id);
+        assert.ok(!raw.isError,JSON.stringify(data)); return {...data,qaCallId:id};
     }
     async function command(instance,name,args=[],mutation=false) {
         const result = await call('execute_command',{run_id:session.runId,instance,name,arguments:args},mutation);
@@ -235,18 +307,9 @@ export async function run(config) {
     }
     async function pause(label,npcIds) { await command('server','coop.debug.set_time_mode',['Pause','force-live-test'],true);return snapshot(label,npcIds); }
     async function collectLogs(archived=false) {
-        const failures=[];
-        for(const n of INSTANCES){const log=session.logs[n];try{
-            await collectNativeLog(log,cursor=>call('read_logs',{run_id:session.runId,instance:n,cursor,max_bytes:65536}),
-                {archived,source:{runId:session.runId,instance:n,rawRecord:config.record}});
-            const path=config.record+'.'+session.runId+'.'+n+'.log';await writeFile(path,log.text);log.path=path;log.sha256=createHash('sha256').update(log.text).digest('hex');log.diagnostics=logDiagnostics(log.text);
-            log.completeness=assertProcessLogCompleteness(log.text,session.processes?.find(value=>value.name===n)?.identity.pid);
-        }catch(error){log.error=error.stack;failures.push(n+': '+error.message);await emit({phase:'log_evidence_error',instance:n,error:error.stack,collection:log.collections?.at(-1)});}}
-        assert.deepEqual(failures,[],'Incomplete process log evidence');
-        assert.ok(INSTANCES.every(n=>{
-            const value=session.logs[n].diagnostics;
-            return value.errorLines.length===0&&value.realTick+value.duplicateIds+value.aiBatch===0;
-        }),'Runtime ERR/FTL or critical diagnostics require investigation');
+        return collectSessionLogs(session,(instance,cursor)=>call('read_logs',{run_id:session.runId,instance,cursor,max_bytes:65536}),
+            async(instance,text)=>{const path=config.record+'.'+session.runId+'.'+instance+'.log';await writeFile(path,text);
+                return {path,sha256:createHash('sha256').update(text).digest('hex')};},emit,{archived,rawRecord:config.record});
     }
     async function screenshot(n,label) {
         const requested=await call('screenshot',{run_id:session.runId,instance:n},true);assert.equal(requested.ok,true);const id=requested.result.captureId;assert.ok(id);
@@ -269,17 +332,15 @@ export async function run(config) {
         const launch=await call('start_client',{run_id:session.runId,client_index:1},true);assert.equal(launch.outcome,'launched');await wait('client1','readyToJoin');
         const joined=await call('join_client',{run_id:session.runId,instance:'client1'},true);assert.equal(joined.ok,true);await wait('client1','readyForCampaignTests');
         initial=await both();assert.deepEqual(initial.map(row=>row.controller),controllers);await awaitWriter(controllers[0]);
-        const view=await call('get_run',{run_id:session.runId});assert.equal(view.instances.length,2);session.processes=view.instances;session.osProcesses=processes();
+        const view=await call('get_run',{run_id:session.runId});assert.equal(view.instances.length,2);session.osProcesses=processes();
         assertProcessEvidence(session.osProcesses,view.instances.map(row=>row.identity.pid));
         const assemblies=row=>row.status.loadedAssemblies.map(x=>[x.name,x.mvid]).sort();assert.deepEqual(assemblies(view.instances[0]),assemblies(view.instances[1]));
         for(const n of INSTANCES){const catalog=JSON.stringify(await call('list_commands',{run_id:session.runId,instance:n}));for(const name of REQUIRED)assert.ok(catalog.includes(name),'Missing '+name);}
+        session.twoProcessReady=true;
     }
     async function stop() {
-        assert.equal(session.stopAttempted,false,'Uncertain stop mutations must not be retried');session.stopAttempted=true;
-        const stopped=await call('stop_run',{run_id:session.runId},true);session.stopped=stopped;assert.equal(stopped.state,'stopped');assert.ok(stopped.instances.length>0);
-        if(session.processes)assert.equal(stopped.instances.length,2);
-        assert.ok(stopped.instances.every(row=>row.cleanupComplete&&!row.processAlive&&!row.processTreeAlive));session.afterStopProcesses=processes();
-        assert.equal(session.afterStopProcesses.length,0,'Bannerlord process remained after stop');session.cleanupConfirmed=true;await collectLogs(true);await save();
+        return stopSession(session,{stopRun:()=>call('stop_run',{run_id:session.runId},true),readProcesses:processes,
+            collectLogs,save});
     }
     async function cycleEvidence() {
         const receipts=[];
@@ -340,11 +401,11 @@ export async function run(config) {
         }
     } catch(error) {
         summary.failed={message:error.message,stack:error.stack};await emit({phase:'scenario_failure',...summary.failed});
-        if(session&&!summary.features.some(row=>row.status==='FAIL')){try{await collectLogs();}catch(diagnostic){summary.failureLogError=diagnostic.stack;}for(const n of INSTANCES){try{await screenshot(n,'startup-or-between-features-failure');}catch(diagnostic){await emit({phase:'capture_failure',error:diagnostic.stack});}}}
+        if(session&&!summary.features.some(row=>row.status==='FAIL')){try{await call('get_run',{run_id:session.runId});}catch(diagnostic){await emit({phase:'startup_identity_error',error:diagnostic.stack});}try{await collectLogs();}catch(diagnostic){summary.failureLogError=diagnostic.stack;}for(const n of INSTANCES.filter(n=>session.processes.some(row=>row.name===n))){try{await screenshot(n,'startup-or-between-features-failure');}catch(diagnostic){await emit({phase:'capture_failure',error:diagnostic.stack});}}}
     } finally {
-        if(session&&!session.stopAttempted){try{await stop();}catch(error){summary.cleanupError=error.stack;}}
+        if(session&&!session.stopAttempted){try{await stop();}catch(error){if(session.cleanupConfirmed)summary.logVerificationError=error.stack;else summary.cleanupError=error.stack;}}
         try{await client.close();}catch(error){summary.transportCloseError=error.stack;}
-        summary.completedUtc=new Date().toISOString();summary.passed=!summary.failed&&!summary.cleanupError&&!summary.transportCloseError&&summary.sessions.length>0&&summary.sessions.every(row=>row.cleanupConfirmed);
+        summary.completedUtc=new Date().toISOString();summary.passed=!summary.failed&&!summary.cleanupError&&!summary.logVerificationError&&!summary.transportCloseError&&summary.sessions.length>0&&summary.sessions.every(hasCompleteSessionEvidence);
         await save();console.log(JSON.stringify({passed:summary.passed,features:summary.features.map(row=>[row.name,row.status]),summaryPath}));if(!summary.passed)process.exitCode=1;
     }
     return summary;
