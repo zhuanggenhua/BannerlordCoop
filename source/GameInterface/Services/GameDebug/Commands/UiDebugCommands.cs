@@ -115,13 +115,13 @@ internal class UiDebugCommands
 
         public string Description => "Reports evidence map state.";
 
-        public CoopCommandSide Side => CoopCommandSide.Client;
+        public CoopCommandSide Side => CoopCommandSide.Both;
 
         public IExpectedArgs[] ExpectedArgs { get; } = Array.Empty<IExpectedArgs>();
 
         public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
         {
-            if (ModInformation.IsServer)
+            if (ModInformation.IsDedicatedAuthority)
                 return Failed("Run this command on a client.");
 
 
@@ -316,13 +316,13 @@ internal class UiDebugCommands
 
         public string Description => "Reports map movement state.";
 
-        public CoopCommandSide Side => CoopCommandSide.Client;
+        public CoopCommandSide Side => CoopCommandSide.Both;
 
         public IExpectedArgs[] ExpectedArgs { get; } = Array.Empty<IExpectedArgs>();
 
         public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
         {
-            if (ModInformation.IsServer)
+            if (ModInformation.IsDedicatedAuthority)
                 return Failed("Run this command on a client.");
 
             var mainParty = MobileParty.MainParty;
