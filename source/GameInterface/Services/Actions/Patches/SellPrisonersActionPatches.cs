@@ -1,5 +1,6 @@
 ﻿using Common;
 using Common.Logging;
+using GameInterface.Services.CampaignAuthority;
 using HarmonyLib;
 using Serilog;
 using TaleWorlds.CampaignSystem.Actions;
@@ -14,5 +15,5 @@ internal class SellPrisonersActionPatches
     // Needs to be expanded in future to handle the references to Hero.MainHero and Clan.PlayerClan
     // Should be generic for all client heroes
     [HarmonyPatch(nameof(SellPrisonersAction.ApplyInternal))]
-    static bool Prefix() => ModInformation.IsServer;
+    internal static bool Prefix() => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
 }

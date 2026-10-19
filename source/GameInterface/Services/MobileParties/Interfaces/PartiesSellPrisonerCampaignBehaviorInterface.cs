@@ -1,5 +1,6 @@
 ﻿using Common;
 using Common.Logging;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Heroes.Extensions;
 using GameInterface.Services.MobileParties.Extensions;
 using Serilog;
@@ -24,10 +25,17 @@ public interface IPartiesSellPrisonerCampaignBehaviorInterface : IGameAbstractio
 public class PartiesSellPrisonerCampaignBehaviorInterface : IPartiesSellPrisonerCampaignBehaviorInterface
 {
     private static readonly ILogger Logger = LogManager.GetLogger<PartiesSellPrisonerCampaignBehaviorInterface>();
+    private readonly ICampaignAuthorityContext authorityContext;
+
+    public PartiesSellPrisonerCampaignBehaviorInterface(ICampaignAuthorityContext authorityContext)
+    {
+        if (authorityContext == null) throw new ArgumentNullException(nameof(authorityContext));
+        this.authorityContext = authorityContext;
+    }
 
     public void OnSettlementEntered(PartiesSellPrisonerCampaignBehavior behavior, MobileParty mobileParty, Settlement settlement)
     {
-        GameThread.RunSafe(() =>
+        RunIfCurrentAuthority(() =>
         {
             // Replace IsMainParty check
             if (mobileParty != null && !mobileParty.IsPlayerParty()
@@ -53,7 +61,7 @@ public class PartiesSellPrisonerCampaignBehaviorInterface : IPartiesSellPrisoner
 
     public void DailyTickSettlement(PartiesSellPrisonerCampaignBehavior behavior, Settlement settlement)
     {
-        GameThread.RunSafe(() =>
+        RunIfCurrentAuthority(() =>
         {
             if (!settlement.IsFortification) return;
 
@@ -94,6 +102,29 @@ public class PartiesSellPrisonerCampaignBehaviorInterface : IPartiesSellPrisoner
             {
                 SellPrisonersAction.ApplyForSelectedPrisoners(settlement.Party, null, troopRoster);
             }
+        });
+    }
+
+    internal void RunIfCurrentAuthority(Action action)
+    {
+        if (authorityContext.TryGetCurrentLease(out var lease) && lease.IsValid)
+        {
+            if (!authorityContext.TryGetLocalAuthorityLease(out var localLease) || localLease != lease) return;
+
+            GameThread.RunSafe(() =>
+            {
+                if (!authorityContext.TryGetLocalAuthorityLease(out var currentLease) || currentLease != lease) return;
+                authorityContext.TryExecuteWithCurrentLease(lease, action);
+            });
+            return;
+        }
+
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return;
+
+        GameThread.RunSafe(() =>
+        {
+            if (authorityContext.TryGetCurrentLease(out var currentLease) && currentLease.IsValid) return;
+            if (CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) action();
         });
     }
 }

@@ -1,5 +1,6 @@
 using Autofac;
 using Common;
+using Common.Util;
 using GameInterface;
 using GameInterface.Services.Actions.Patches;
 using GameInterface.Services.CampaignAuthority;
@@ -21,6 +22,7 @@ public sealed class CampaignAuthorityActionGuardTests
         WithAuthority(localAuthority: true, legacyIsServer: false, () =>
         {
             Assert.True(GiveGoldActionPatches.Prefix());
+            Assert.True(SellPrisonersActionPatches.Prefix());
             Assert.True(AddHeroToPartyActionPatches.Prefix());
             Assert.True(RemoveCompanionActionPatches.Prefix());
             Assert.True(ChangeRelationActionPatches.ApplyInternalPrefix(
@@ -36,12 +38,25 @@ public sealed class CampaignAuthorityActionGuardTests
         WithAuthority(localAuthority: false, legacyIsServer: true, () =>
         {
             Assert.False(GiveGoldActionPatches.Prefix());
+            Assert.False(SellPrisonersActionPatches.Prefix());
             Assert.False(AddHeroToPartyActionPatches.Prefix());
             Assert.False(RemoveCompanionActionPatches.Prefix());
             Assert.False(ChangeRelationActionPatches.ApplyInternalPrefix(
                 originalHero: null!,
                 originalGainedRelationWith: null!,
                 relationChange: 1));
+        });
+    }
+
+    [Fact]
+    public void RemoteReplicaCannotApplyPrisonerSalesUnderAllowedThread()
+    {
+        WithAuthority(localAuthority: false, legacyIsServer: true, () =>
+        {
+            using (new AllowedThread())
+            {
+                Assert.False(SellPrisonersActionPatches.Prefix());
+            }
         });
     }
 
@@ -88,4 +103,5 @@ public sealed class CampaignAuthorityActionGuardTests
             else ContainerProvider.Clear();
         }
     }
+
 }

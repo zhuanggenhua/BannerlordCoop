@@ -12,7 +12,7 @@ namespace GameInterface.Services.MobileParties.Patches.Disable;
 internal class DisablePartiesSellPrisonerCampaignBehavior
 {
     [HarmonyPatch(nameof(PartiesSellPrisonerCampaignBehavior.RegisterEvents))]
-    static bool Prefix() => ModInformation.IsServer;
+    internal static bool Prefix() => true;
 }
 
 [HarmonyPatch(typeof(PartiesSellPrisonerCampaignBehavior))]
