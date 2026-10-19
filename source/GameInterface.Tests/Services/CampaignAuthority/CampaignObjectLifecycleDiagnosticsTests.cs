@@ -112,6 +112,28 @@ public sealed class CampaignObjectLifecycleDiagnosticsTests
         Assert.True(CampaignObjectLifecycleDiagnostics.LoggingFailures > failuresBefore);
     }
 
+    private sealed class UnformattableException : Exception
+    {
+        public override string ToString() => throw new FormatException("diagnostic ToString failed");
+    }
+
+    [Fact]
+    public void ThrowingExceptionFormatterCannotReplaceOriginalOrEscapeDiagnosticRead()
+    {
+        var sink = new Sink(); var logger = Logger(sink); var original = new UnformattableException();
+        long before = CampaignObjectLifecycleDiagnostics.ObservationFailures;
+        Assert.Same(original, CampaignObjectLifecycleDiagnostics.Complete(new CampaignObjectLifecycleDiagnostics.Removal(), true, false, original, logger));
+        Assert.True(CampaignObjectLifecycleDiagnostics.ObservationFailures > before);
+        Assert.Contains("exception formatting unavailable", sink.Events.Last().RenderMessage());
+        var manager = new Mock<IObjectManager>(); string id;
+        manager.Setup(m => m.TryGetId(It.IsAny<object>(), out id)).Throws(original);
+        before = CampaignObjectLifecycleDiagnostics.ObservationFailures;
+        var state = CampaignObjectLifecycleDiagnostics.Capture(manager.Object, Party(), logger);
+        Assert.Contains("exception formatting unavailable", state.ObservationError);
+        Assert.True(CampaignObjectLifecycleDiagnostics.ObservationFailures >= before + 2);
+        manager.Verify(m => m.Remove(It.IsAny<object>()), Times.Never);
+    }
+
     [Fact]
     public void FailureCountersAreVisibleInExistingCycleAcceptanceKeys()
     {

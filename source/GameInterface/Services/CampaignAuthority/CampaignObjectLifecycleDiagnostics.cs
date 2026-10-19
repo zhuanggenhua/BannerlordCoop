@@ -53,7 +53,7 @@ internal static class CampaignObjectLifecycleDiagnostics
         catch (Exception error)
         {
             // This is only a failed diagnostic read, not an exception from the original Remove.
-            state.ObservationError = error.ToString();
+            state.ObservationError = ExceptionText(error);
             RecordFailure("observation");
         }
         Write(logger, "[LifecycleProbe] Remove.before {ObjectType} {ObjectIdentity} id={RegisteredId} handle={RegisteredHandle} hadId={HadId} hadHandle={HadHandle} observationError={ObservationError}\n{CallStack}",
@@ -65,7 +65,7 @@ internal static class CampaignObjectLifecycleDiagnostics
     {
         if (state != null)
             Write(logger, "[LifecycleProbe] Remove.after {ObjectType} {ObjectIdentity} id={RegisteredId} handle={RegisteredHandle} ranOriginal={RanOriginal} result={RemoveResult} originalException={OriginalException} observationError={ObservationError}",
-                state.Type, state.Identity, state.Id, state.Handle, ranOriginal, result, exception?.ToString(), state.ObservationError);
+                state.Type, state.Identity, state.Id, state.Handle, ranOriginal, result, ExceptionText(exception), state.ObservationError);
         return exception;
     }
 
@@ -80,6 +80,17 @@ internal static class CampaignObjectLifecycleDiagnostics
     {
         if (party != null) return;
         Write(logger, "[LifecycleProbe] NullParty {OriginalMethod}\n{CallStack}", method.Name, Environment.StackTrace);
+    }
+
+    private static string ExceptionText(Exception exception)
+    {
+        if (exception == null) return null;
+        try { return exception.ToString(); }
+        catch
+        {
+            RecordFailure("observation");
+            return "<exception formatting unavailable: " + exception.GetType().FullName + ">";
+        }
     }
 
     internal static void RecordFailure(string kind, CampaignCycleDiagnostics collector = null)
