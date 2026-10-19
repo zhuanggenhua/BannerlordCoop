@@ -9,6 +9,7 @@ using Coop.Core.Client.Services.Session;
 using Coop.Core.Common.Session;
 using Coop.Core.Server.Connections;
 using Coop.Core.Server.Services.Session;
+using Coop.Core.Server.States.Messages;
 using Coop.Tests.Mocks;
 using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Entity;
@@ -246,6 +247,7 @@ public class CampaignAuthorityHandoffFaultTests
                 schedulerCheckpointService: CampaignHandoffTestServices.Scheduler(),
                 asyncTasks: CampaignHandoffTestServices.Drained());
             Publish(this, new CampaignReady());
+            Publish(this, new CampaignInitializationCompleted());
             ReportGuest(CampaignSimulationAvailability.MapReady, 1);
             Assert.True(ModInformation.IsListenAuthority);
             Assert.True(connections.Object.HasCompletedCampaignSynchronization(Guest));

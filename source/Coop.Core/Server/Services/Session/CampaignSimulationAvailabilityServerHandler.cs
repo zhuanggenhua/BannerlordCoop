@@ -21,6 +21,7 @@ using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using Coop.Core.Server.States.Messages;
 
 namespace Coop.Core.Server.Services.Session;
 
@@ -50,6 +51,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private readonly Dictionary<int, string> peerControllerIds = new Dictionary<int, string>();
     private readonly Timer reconciliationTimer;
     private bool campaignReady;
+    private bool campaignInitializationComplete;
     private bool mapReady;
     private long localRevision;
     private bool hasLoggedSelection;
@@ -101,6 +103,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         this.schedulerCheckpointService = schedulerCheckpointService;
         this.asyncTasks = asyncTasks;
         messageBroker.Subscribe<CampaignReady>(Handle_CampaignReady);
+        messageBroker.Subscribe<CampaignInitializationCompleted>(Handle_CampaignInitializationCompleted);
         messageBroker.Subscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Subscribe<NetworkCampaignSimulationAvailabilityReport>(Handle_AvailabilityReport);
         messageBroker.Subscribe<NetworkCampaignAuthorityHandoffBarrierApplied>(Handle_HandoffBarrierApplied);
@@ -115,6 +118,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         reconciliationTimer.Dispose();
         mapTimeTracker?.SetObserverClockSuspended(false);
         messageBroker.Unsubscribe<CampaignReady>(Handle_CampaignReady);
+        messageBroker.Unsubscribe<CampaignInitializationCompleted>(Handle_CampaignInitializationCompleted);
         messageBroker.Unsubscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Unsubscribe<NetworkCampaignSimulationAvailabilityReport>(Handle_AvailabilityReport);
         messageBroker.Unsubscribe<NetworkCampaignAuthorityHandoffBarrierApplied>(Handle_HandoffBarrierApplied);
@@ -130,6 +134,23 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     {
         lock (localReportGate) campaignReady = true;
         ReportLocalAvailability();
+    }
+
+    private void Handle_CampaignInitializationCompleted(MessagePayload<CampaignInitializationCompleted> _)
+    {
+        lock (localReportGate)
+        {
+            if (campaignInitializationComplete) return;
+            campaignInitializationComplete = true;
+        }
+
+        if (sessionIdentity != null && sessionIdentity.TryGetConfirmedLease(out var lease))
+            Logger.Information("Campaign initialization completed after object registration at authority lease epoch {Epoch}",
+                lease.Epoch);
+        else
+            Logger.Information("Campaign initialization completed after object registration");
+
+        ReconcileCurrentAvailability();
     }
 
     private void Handle_MapReadinessChanged(MessagePayload<CampaignMapSimulationReadinessChanged> payload)
@@ -216,7 +237,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         ReportLocalAvailability(reconcile: true);
     }
 
-    private void OnAvailabilityTimer()
+    internal void OnAvailabilityTimer()
     {
         if (Volatile.Read(ref disposed) != 0) return;
 
@@ -323,7 +344,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
 
     private void ReconcileLease(CampaignAuthoritySelection selection)
     {
-        if (!ModInformation.IsListenAuthority || network == null || sessionIdentity == null) return;
+        if (!ModInformation.IsListenAuthority || network == null || sessionIdentity == null ||
+            !IsCampaignInitializationReady()) return;
 
         if (!GameThread.Instance.IsGameThread)
         {
@@ -346,6 +368,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
 
         lock (leaseGate)
         {
+            if (!IsCampaignInitializationReady()) return;
             if (!sessionIdentity.TryGetConfirmedLease(out var currentLease)) return;
             BroadcastPendingLease();
 
@@ -417,6 +440,11 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
                 sessionIdentity.TryGetConfirmedLease(out var pausedLease))
                 TrySendHandoffBarrier(pausedLease, selection.ControllerId);
         }
+    }
+
+    private bool IsCampaignInitializationReady()
+    {
+        lock (localReportGate) return campaignReady && campaignInitializationComplete;
     }
 
     private bool TryCommitLease(AuthorityLease currentLease, string authorityControllerId, bool isPaused)

@@ -12,6 +12,7 @@ using GameInterface.Services.Modules.Validators;
 using GameInterface.Services.UI.Interfaces;
 using Serilog;
 using GameInterface.Services.Players;
+using Coop.Core.Server.States.Messages;
 
 namespace Coop.Core.Server.States;
 
@@ -90,6 +91,7 @@ public class InitialServerState : ServerStateBase
             mapEventLoadCleaner.FinalizePlayerMapEvents();
         emptyLordPartyResetter.ResetEmptyLordParties();
         campaignRegistered = true;
+        messageBroker.Publish(this, new CampaignInitializationCompleted());
         Logic.SetState<ServerRunningState>();
     }
 

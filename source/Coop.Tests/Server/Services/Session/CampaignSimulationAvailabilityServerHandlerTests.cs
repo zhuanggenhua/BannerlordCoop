@@ -7,6 +7,7 @@ using Common.Tests.Utils;
 using Coop.Core.Common.Session;
 using Coop.Core.Server.Connections;
 using Coop.Core.Server.Services.Session;
+using Coop.Core.Server.States.Messages;
 using Coop.Tests.Mocks;
 using Common.Network;
 using Common.Network.Coalescing;
@@ -26,6 +27,66 @@ namespace Coop.Tests.Server.Services.Session;
 [Collection(ModInformationRoleCollection.Name)]
 public class CampaignSimulationAvailabilityServerHandlerTests
 {
+    [Fact]
+    public void AvailabilityTimerKeepsRestoredLeaseWritableUntilCampaignObjectsAreRegistered()
+    {
+        var previousMode = ModInformation.SessionMode;
+        ModInformation.SessionMode = SessionMode.ListenAuthority;
+        try
+        {
+            var broker = new TestMessageBroker();
+            var identity = new SessionIdentity();
+            Assert.True(identity.TryApply(new AuthorityLease("room-a", "authority-a", "host", 1), "host"));
+            var coordinator = new CampaignAuthorityAvailabilityCoordinator(
+                identity, new CampaignAuthorityCandidateSelector());
+            var controller = new ControllerIdProvider();
+            controller.SetControllerId("host");
+            var host = new Player("host", "hero-host", "party-host", "clan-host", "character-host");
+            var players = new Mock<IPlayerManager>();
+            players.Setup(value => value.TryGetPlayer("host", out host)).Returns(true);
+            var objectManager = new ObjectManager(
+                Serilog.Log.ForContext<ObjectManager>(),
+                new CampaignAuthorityContext(identity, controller));
+            using var handler = new CampaignSimulationAvailabilityServerHandler(
+                broker,
+                coordinator,
+                Mock.Of<IConnectionCollection>(),
+                players.Object,
+                controller,
+                Mock.Of<INetwork>(),
+                identity,
+                objectManager,
+                asyncTasks: CampaignHandoffTestServices.Drained());
+
+            // The timer's candidate-expiry pass runs before CampaignReady; it must not pause
+            // the restored writer before the InitialServerState registry pass.
+            handler.OnAvailabilityTimer();
+            GameThread.Run(() => { }, blocking: true);
+            broker.Publish(this, new CampaignReady());
+            handler.OnAvailabilityTimer();
+            GameThread.Run(() => { }, blocking: true);
+
+            var roster = new object();
+            Assert.True(objectManager.AddExisting("TroopRoster_preinit", roster));
+            bool hasHandle = objectManager.TryGetHandle(roster, out var handle);
+            Assert.True(!identity.CurrentLease.IsPaused && hasHandle && handle != 0,
+                $"Pre-initialization reconciliation fenced the restored lease or registered a roster without a handle (paused={identity.CurrentLease.IsPaused}, epoch={identity.Epoch}, hasHandle={hasHandle}, handle={handle}).");
+
+            broker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
+            broker.Publish(this, new CampaignInitializationCompleted());
+            GameThread.Run(() => { }, blocking: true);
+
+            Assert.False(identity.CurrentLease.IsPaused);
+            Assert.Equal(1, identity.Epoch);
+            Assert.True(objectManager.TryGetHandle(roster, out handle));
+            Assert.NotEqual(0u, handle);
+        }
+        finally
+        {
+            ModInformation.SessionMode = previousMode;
+        }
+    }
+
     [Fact]
     public void DisconnectedWriterWithoutFinalCheckpointStopsObserverClockWithoutChangingLease()
     {
@@ -57,6 +118,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                 broker, coordinator, connections.Object, players.Object, controller,
                 network.Object, identity, mapTimeTracker: clock, asyncTasks: CampaignHandoffTestServices.Drained());
             broker.Publish(this, new CampaignReady());
+            broker.Publish(this, new CampaignInitializationCompleted());
             broker.Publish(guestPeer, new NetworkCampaignSimulationAvailabilityReport(CampaignSimulationAvailability.MapReady, 1));
             GameThread.Run(() => { }, blocking: true);
             connected = false;
@@ -138,6 +200,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
 
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
             messageBroker.Publish(this, new CampaignReady());
+            messageBroker.Publish(this, new CampaignInitializationCompleted());
             Assert.True(coordinator.IsFreshMapReady("host"));
             GameThread.Run(() => { }, blocking: true);
 
@@ -207,6 +270,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
 
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
             messageBroker.Publish(this, new CampaignReady());
+            messageBroker.Publish(this, new CampaignInitializationCompleted());
             now = now.AddSeconds(2);
             handler.RefreshLocalAvailabilityAndReconcile();
             now = now.AddSeconds(2);
@@ -317,6 +381,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
 
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
             messageBroker.Publish(this, new CampaignReady());
+            messageBroker.Publish(this, new CampaignInitializationCompleted());
             messageBroker.Publish(guestPeer, new NetworkCampaignSimulationAvailabilityReport(
                 CampaignSimulationAvailability.MapReady,
                 1));
@@ -432,6 +497,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                 controllerId);
 
             messageBroker.Publish(this, new CampaignReady());
+            messageBroker.Publish(this, new CampaignInitializationCompleted());
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
             messageBroker.Publish(peer, new NetworkCampaignSimulationAvailabilityReport(
                 CampaignSimulationAvailability.MapReady,
