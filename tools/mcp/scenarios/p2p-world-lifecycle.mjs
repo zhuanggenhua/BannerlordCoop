@@ -84,6 +84,19 @@ export function assertCycles(receipts) {
         daily:rows.filter(row => field(row,'kind')==='DailyTick').length,
         partyDaily:rows.filter(row => field(row,'kind')==='DailyTickParty').length, receipts };
 }
+export function combineCyclePages(pages) {
+    assert.ok(pages.length > 0); const first=pages[0], rows=[];
+    assert.ok(first.totalRows <= 32768 && first.totalRows >= 0);
+    for(const page of pages) {
+        for(const key of ['instance','campaign','processId','totalRows','overflowed'])assert.equal(page[key],first[key],'Cycle pages changed: '+key);
+        assert.equal(page.offset,rows.length);assert.ok(page.rows.length<=256);
+        rows.push(...page.rows);assert.equal(page.nextOffset,rows.length);
+        assert.equal(page.hasMore,rows.length<first.totalRows);
+        assert.ok(page.rows.length>0||!page.hasMore,'Cycle page did not advance');
+    }
+    assert.equal(pages.at(-1).hasMore,false,'Incomplete cycle pages');assert.equal(rows.length,first.totalRows);
+    return {...first,rows};
+}
 export function freshSaveName(now = new Date(), suffix = randomUUID().slice(0,8)) {
     const name = 'P2P_Cold_' + now.toISOString().replace(/[-:.]/g,'') + '_' + suffix;
     assert.match(name,/^[A-Za-z0-9_-]{1,64}$/); return name;
@@ -190,7 +203,17 @@ export async function run(config) {
         assert.ok(stopped.instances.every(row=>row.cleanupComplete&&!row.processAlive&&!row.processTreeAlive));session.afterStopProcesses=processes();
         assert.equal(session.afterStopProcesses.length,0,'Bannerlord process remained after stop');session.cleanupConfirmed=true;await collectLogs();await save();
     }
-    async function cycleEvidence() {const receipts=await Promise.all(INSTANCES.map(n=>command(n,'coop.debug.authority.cycles').then(jsonOutput)));return assertCycles(receipts);}
+    async function cycleEvidence() {
+        const receipts=[];
+        for(const instance of INSTANCES){const pages=[];let offset=0;
+            for(let index=0;index<128;index++){
+                const page=jsonOutput(await command(instance,'coop.debug.authority.cycles',[String(offset)]));pages.push(page);
+                if(!page.hasMore)break;assert.ok(page.nextOffset>offset,'Cycle page did not advance');offset=page.nextOffset;
+            }
+            receipts.push(combineCyclePages(pages));
+        }
+        return assertCycles(receipts);
+    }
     async function naturalDay(instance) {
         const node=controllers[INSTANCES.indexOf(instance)],other=INSTANCES.find(n=>n!==instance);await awaitWriter(node);
         const before={writer:await state(instance),observer:await state(other)};await command('server','coop.debug.set_time_mode',['Play_2x','force-live-test'],true);

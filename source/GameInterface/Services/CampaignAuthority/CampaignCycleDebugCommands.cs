@@ -19,16 +19,23 @@ public sealed class CampaignCycleDebugCommands : ICoopCommand
     public string Name => "cycles";
     public string Description => "Reads native completed hourly/daily dispatcher counts; does not invoke events or change scheduler callbacks.";
     public CoopCommandSide Side => CoopCommandSide.Both;
-    public IExpectedArgs[] ExpectedArgs { get; } = Array.Empty<IExpectedArgs>();
+    public IExpectedArgs[] ExpectedArgs { get; } =
+    { new ExpectedArgs("offset", "Optional nonnegative row offset; at most 256 rows per response.", false) };
     public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
     {
         if (Campaign.Current == null) return new(false, "A campaign is required.", "campaign_missing");
         var collector = CampaignCycleDispatchPatches.For(Campaign.Current);
+        var rows = collector.Snapshot();
+        int offset = 0;
+        if (args.Count > 0 && (!int.TryParse(args[0], out offset) || offset < 0 || offset > rows.Length))
+            return new(false, "Invalid cycle evidence offset.", "invalid_cycle_offset");
+        var page = rows.Skip(offset).Take(256).ToArray();
         var output = JsonConvert.SerializeObject(new
         {
             instance = collector.InstanceId, campaign = Campaign.Current.UniqueGameId,
             processId = System.Diagnostics.Process.GetCurrentProcess().Id,
-            overflowed = collector.Overflowed, rows = collector.Snapshot(),
+            overflowed = collector.Overflowed, rows = page, offset, totalRows = rows.Length,
+            nextOffset = offset + page.Length, hasMore = offset + page.Length < rows.Length,
             coverage = "Completed native dispatcher calls only; no listener subscriptions, artificial ticks, or world mutations.",
         });
         return collector.Overflowed ? new(false, output, "cycle_evidence_overflow") : new(true, output);
@@ -69,7 +76,7 @@ public sealed class CampaignSemanticStateCommand : ICoopCommand
                 character = hero.CharacterObject.StringId, party = party.StringId,
                 gold = hero.Gold, x = party.Position.X, y = party.Position.Y,
                 settlement = party.CurrentSettlement?.StringId,
-                members = Stacks(party.MemberRoster), prisoners = Stacks(party.PrisonRoster),
+                members = CaptureStacks(party.MemberRoster), prisoners = CaptureStacks(party.PrisonRoster),
             };
         }).ToArray();
         if (actorRows.Any(row => row == null)) return new(false, "A registered player cannot be resolved.", "player_missing");
@@ -77,7 +84,7 @@ public sealed class CampaignSemanticStateCommand : ICoopCommand
         var parties = campaign.MobileParties.OrderBy(party => party.StringId, StringComparer.Ordinal).Select(party => new
         {
             id = party.StringId, hero = party.LeaderHero?.StringId, clan = party.ActualClan?.StringId,
-            active = party.IsActive, members = Stacks(party.MemberRoster), prisoners = Stacks(party.PrisonRoster),
+            active = party.IsActive, members = CaptureStacks(party.MemberRoster), prisoners = CaptureStacks(party.PrisonRoster),
         }).ToArray();
         return new(true, JsonConvert.SerializeObject(new
         {
@@ -93,7 +100,7 @@ public sealed class CampaignSemanticStateCommand : ICoopCommand
             {
                 party = party.StringId, hero = party.LeaderHero?.StringId, clan = party.ActualClan?.StringId,
                 x = party.Position.X, y = party.Position.Y, gold = party.PartyTradeGold,
-                members = Stacks(party.MemberRoster), prisoners = Stacks(party.PrisonRoster),
+                members = CaptureStacks(party.MemberRoster), prisoners = CaptureStacks(party.PrisonRoster),
             }).ToArray(),
             aliveHeroes = heroes.Length,
             heroGoldHash = Hash(heroes.Select(hero => new { id = hero.StringId, hero.Gold })),
@@ -106,7 +113,7 @@ public sealed class CampaignSemanticStateCommand : ICoopCommand
         }));
     }
 
-    private static object[] Stacks(TroopRoster roster) => Enumerable.Range(0, roster.Count)
+    internal static object[] CaptureStacks(TroopRoster roster) => Enumerable.Range(0, roster.Count)
         .Select(index => roster.GetElementCopyAtIndex(index)).OrderBy(element => element.Character.StringId, StringComparer.Ordinal)
         .Select(element => (object)new { id = element.Character.StringId, element.Number, element.WoundedNumber, element.Xp }).ToArray();
 

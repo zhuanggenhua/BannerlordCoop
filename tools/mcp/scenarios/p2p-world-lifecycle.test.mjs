@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { options, assertSemantic, assertPersistent, assertCycles, assertColdLease, freshSaveName } from './p2p-world-lifecycle.mjs';
+import { options, assertSemantic, assertPersistent, assertCycles, assertColdLease, freshSaveName, combineCyclePages } from './p2p-world-lifecycle.mjs';
 const hash = 'a'.repeat(64);
 const semantic = () => ({campaign:'campaign',ticks:120,partyCount:25,activePartyCount:23,missingPartyIds:0,duplicatePartyIds:[],
     worldIdentityHash:hash,worldRostersHash:hash,activeWorldRostersHash:hash,heroGoldHash:hash,volunteerHash:hash,aliveHeroes:10,
@@ -46,4 +46,11 @@ test('cold start needs a fresh room, epoch or authority fence',()=>{
 test('generated save basenames are unique, native-valid and never the supplied source name',()=>{
     const now=new Date('2026-10-19T01:00:00.000Z');const a=freshSaveName(now,'abcdefgh'),b=freshSaveName(now,'ijklmnop');
     assert.notEqual(a,b);assert.match(a,/^[A-Za-z0-9_-]{1,64}$/);assert.notEqual(a,'P1B_DirectIP_Recruit');
+});
+test('bounded cycle pagination rejects incomplete or mixed-run evidence',()=>{
+    const first={instance:'id',campaign:'campaign',processId:1,totalRows:2,overflowed:false,offset:0,nextOffset:1,hasMore:true,rows:[row('a',1)]};
+    const second={...first,offset:1,nextOffset:2,hasMore:false,rows:[row('a',2)]};
+    assert.equal(combineCyclePages([first,second]).rows.length,2);
+    assert.throws(()=>combineCyclePages([first]));assert.throws(()=>combineCyclePages([first,{...second,instance:'other'}]));
+    assert.throws(()=>combineCyclePages([first,{...second,offset:0}]));
 });

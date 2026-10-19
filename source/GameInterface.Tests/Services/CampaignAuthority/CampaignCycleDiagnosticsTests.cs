@@ -1,11 +1,30 @@
 ﻿using Common;
 using GameInterface.Services.CampaignAuthority;
+using Newtonsoft.Json;
+using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.Roster;
 using Xunit;
 
 namespace GameInterface.Tests.Services.CampaignAuthority;
 
 public sealed class CampaignCycleDiagnosticsTests
 {
+    [Fact]
+    public void SemanticCaptureReadsNativeXpWithoutChangingCachedRosterOrVersion()
+    {
+        var troop = new CharacterObject { StringId = "recruit" };
+        var roster = new TroopRoster();
+        roster.AddToCounts(troop, 4, xpChange: 100);
+        var cached = roster.GetTroopRoster();
+        int version = roster.VersionNo;
+        roster.SetElementXp(0, 128);
+        var captured = CampaignSemanticStateCommand.CaptureStacks(roster);
+        Assert.Equal(JsonConvert.SerializeObject(new[] { new { id = "recruit", Number = 4, WoundedNumber = 0, Xp = 128 } }),
+            JsonConvert.SerializeObject(captured));
+        Assert.Equal(100, cached[0].Xp);
+        Assert.Equal(version, roster.VersionNo);
+    }
+
     [Fact]
     public void RepeatedPartyDayRemainsVisibleAcrossEpochsAndNodes()
     {
