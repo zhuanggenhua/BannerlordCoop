@@ -1,0 +1,265 @@
+{
+  "status": "PASS-bounded-three-active-rounds",
+  "runtimeCommit": "64d3f01fd0b4952777e1b07bea6403413cd448eb",
+  "runId": "5e60f2a77ccd4995b559a9d0ab9bbd76",
+  "raw": {
+    "path": ".mcp-local/p2p-udp-active-13.jsonl",
+    "sha256": "ae56e8f0b9c9732f0e0ab4ef71455afb2f64d946e6936fdf3a998ece918f7a5d"
+  },
+  "summary": {
+    "path": ".mcp-local/p2p-udp-active-13.jsonl.summary.json",
+    "sha256": "99cb08bd4cc3ac961b7aaf78c639ee975f9825fe55fdbc2a068c880319983481"
+  },
+  "wholeScenarioStatus": "FAIL",
+  "wholeScenarioFailure": "writer testclient1 did not converge: Expected values to be strictly equal:\n+ actual - expected\n\n+ ''\n- 'testclient1'",
+  "features": [
+    {
+      "name": "two-process-exact-baseline",
+      "status": "PASS",
+      "worlds": [
+        {
+          "ticks": 78699005337596,
+          "parties": 1455,
+          "unregisteredParties": 0,
+          "partyIdentityHash": "6EE51AD7F87FAE6A75FE669D5BC6A73B6479F7E2B86774DB556820453EC8BBB3",
+          "rosterCountsHash": "32BAA82FD3C69833919774F69BFEE5E365AB32D081F3BB20AB0910A23B32C0EC",
+          "rosterXpHash": "DB6512EA7238218EAF0BB9791772AAD763952F8445FB3AC53C44D02E8E668E56",
+          "volunteerHash": "8B02AE362044D89EA592A4E5B12E3D7AF1F7B7E3BE7F644312FE6E14BE86C0AF",
+          "heroGoldHash": "5AB1411D68FE0DEC250F6AF074A31F448455F917C64322DFE2B640E82C775754",
+          "nextHandle": 45029,
+          "allocationCounterHash": "3F80439D0A5E49E707C00152A19D8437948D2C6AC9DD50BA35435E94FEBDA374"
+        },
+        {
+          "ticks": 78699005337596,
+          "parties": 1455,
+          "unregisteredParties": 0,
+          "partyIdentityHash": "6EE51AD7F87FAE6A75FE669D5BC6A73B6479F7E2B86774DB556820453EC8BBB3",
+          "rosterCountsHash": "32BAA82FD3C69833919774F69BFEE5E365AB32D081F3BB20AB0910A23B32C0EC",
+          "rosterXpHash": "DB6512EA7238218EAF0BB9791772AAD763952F8445FB3AC53C44D02E8E668E56",
+          "volunteerHash": "8B02AE362044D89EA592A4E5B12E3D7AF1F7B7E3BE7F644312FE6E14BE86C0AF",
+          "heroGoldHash": "5AB1411D68FE0DEC250F6AF074A31F448455F917C64322DFE2B640E82C775754",
+          "nextHandle": 45029,
+          "allocationCounterHash": "3F80439D0A5E49E707C00152A19D8437948D2C6AC9DD50BA35435E94FEBDA374"
+        }
+      ]
+    },
+    {
+      "name": "loss-delay-reorder-round-1",
+      "status": "PASS",
+      "worlds": [
+        {
+          "ticks": 78699108454488,
+          "parties": 1450,
+          "unregisteredParties": 0,
+          "partyIdentityHash": "D19BE00A9A1489C12BB15E737F8E0D9772ACA36D9D6C961CD676797716A9A726",
+          "rosterCountsHash": "5C6FDBC66A9F0FF6192922E86A5B826202CB88E51068982EB97E286E353E6F90",
+          "rosterXpHash": "E21DD67BC76C7E7592E805C0FB116A902BF24BFFCBFDAC47E770045F31E91F78",
+          "volunteerHash": "F1598C19357680D39F216201103B71C83FA002C8CB0DEEC5A5F1748D1A7743C9",
+          "heroGoldHash": "B3F1E4739B4DE3AB0BE8DCC4994AD7678918FB669C3C8B446E534B403FFC920A",
+          "nextHandle": 45106,
+          "allocationCounterHash": "9347C8CE3FC25ECA7070733831DF58D4DB271EE593EB92D6AFCA5B3AF77E81CE"
+        },
+        {
+          "ticks": 78699108454488,
+          "parties": 1450,
+          "unregisteredParties": 0,
+          "partyIdentityHash": "D19BE00A9A1489C12BB15E737F8E0D9772ACA36D9D6C961CD676797716A9A726",
+          "rosterCountsHash": "5C6FDBC66A9F0FF6192922E86A5B826202CB88E51068982EB97E286E353E6F90",
+          "rosterXpHash": "E21DD67BC76C7E7592E805C0FB116A902BF24BFFCBFDAC47E770045F31E91F78",
+          "volunteerHash": "F1598C19357680D39F216201103B71C83FA002C8CB0DEEC5A5F1748D1A7743C9",
+          "heroGoldHash": "B3F1E4739B4DE3AB0BE8DCC4994AD7678918FB669C3C8B446E534B403FFC920A",
+          "nextHandle": 45106,
+          "allocationCounterHash": "9347C8CE3FC25ECA7070733831DF58D4DB271EE593EB92D6AFCA5B3AF77E81CE"
+        }
+      ]
+    },
+    {
+      "name": "loss-delay-reorder-round-2",
+      "status": "PASS",
+      "worlds": [
+        {
+          "ticks": 78699223375127,
+          "parties": 1467,
+          "unregisteredParties": 0,
+          "partyIdentityHash": "F5929E220F6C799CF18463008D33667AA83F4073ABC622EA3621EFE299272EAC",
+          "rosterCountsHash": "E11722AC25887008B9B708172BC1ED4988446AD67DF84F8B24F0198CE6B48B99",
+          "rosterXpHash": "AA47E4B8DC118D0385FCE51368B561F920067462D456934FCA21A43CA47B9F70",
+          "volunteerHash": "DD315C062F157FCC1A49CE3A4D40FF1FDCD50BEA984C1C7DC18746D8DF0A4A6F",
+          "heroGoldHash": "EF1D58091A09929DCC85128295D279059C997E059686876E2BB540794AF2A9C7",
+          "nextHandle": 45403,
+          "allocationCounterHash": "DF5A84D505BA1E9405D00331CE1EA4520C0D7E21ABF57A694F6D9EF79983FA48"
+        },
+        {
+          "ticks": 78699223375127,
+          "parties": 1467,
+          "unregisteredParties": 0,
+          "partyIdentityHash": "F5929E220F6C799CF18463008D33667AA83F4073ABC622EA3621EFE299272EAC",
+          "rosterCountsHash": "E11722AC25887008B9B708172BC1ED4988446AD67DF84F8B24F0198CE6B48B99",
+          "rosterXpHash": "AA47E4B8DC118D0385FCE51368B561F920067462D456934FCA21A43CA47B9F70",
+          "volunteerHash": "DD315C062F157FCC1A49CE3A4D40FF1FDCD50BEA984C1C7DC18746D8DF0A4A6F",
+          "heroGoldHash": "EF1D58091A09929DCC85128295D279059C997E059686876E2BB540794AF2A9C7",
+          "nextHandle": 45403,
+          "allocationCounterHash": "DF5A84D505BA1E9405D00331CE1EA4520C0D7E21ABF57A694F6D9EF79983FA48"
+        }
+      ]
+    },
+    {
+      "name": "loss-delay-reorder-round-3",
+      "status": "PASS",
+      "worlds": [
+        {
+          "ticks": 78699340540779,
+          "parties": 1469,
+          "unregisteredParties": 0,
+          "partyIdentityHash": "6B71C6CF48D902CDFF52CBB7EFBD38CD59B49FC80B6C7D972E196E98A72651FD",
+          "rosterCountsHash": "A0BC597A1D416BC7B81660FC96F0CA1F7333C2444291FC03F403B6F39B9198BD",
+          "rosterXpHash": "B0E53F5F0C8F2FAD529484DB267D7679DAE112DE9A363601573AB3AB1309638B",
+          "volunteerHash": "413C8BA4F73F8F7B2132BA57C59B2762E244662F3ADC6893DD601F677CC2E633",
+          "heroGoldHash": "1A52C788D104DD086139A29A3FD3ADC28FBEE45DD44C7E3DEED8A674725EE4DC",
+          "nextHandle": 45572,
+          "allocationCounterHash": "CAF06784EB3BEC2749601F3B823FD9F1CC43DF0B8E9E4D54CFFDD806A2236DC6"
+        },
+        {
+          "ticks": 78699340540779,
+          "parties": 1469,
+          "unregisteredParties": 0,
+          "partyIdentityHash": "6B71C6CF48D902CDFF52CBB7EFBD38CD59B49FC80B6C7D972E196E98A72651FD",
+          "rosterCountsHash": "A0BC597A1D416BC7B81660FC96F0CA1F7333C2444291FC03F403B6F39B9198BD",
+          "rosterXpHash": "B0E53F5F0C8F2FAD529484DB267D7679DAE112DE9A363601573AB3AB1309638B",
+          "volunteerHash": "413C8BA4F73F8F7B2132BA57C59B2762E244662F3ADC6893DD601F677CC2E633",
+          "heroGoldHash": "1A52C788D104DD086139A29A3FD3ADC28FBEE45DD44C7E3DEED8A674725EE4DC",
+          "nextHandle": 45572,
+          "allocationCounterHash": "CAF06784EB3BEC2749601F3B823FD9F1CC43DF0B8E9E4D54CFFDD806A2236DC6"
+        }
+      ]
+    }
+  ],
+  "processes": [
+    {
+      "name": "server",
+      "identity": {
+        "pid": 26092,
+        "startedUtc": "2026-10-19T05:11:11.5468511Z",
+        "role": "server",
+        "platformId": "LocalA",
+        "runToken": "5e60f2a77ccd4995b559a9d0ab9bbd76"
+      },
+      "buildVersion": "0.1.7+64d3f01fd0b4952777e1b07bea6403413cd448eb",
+      "loadedAssemblies": [
+        {
+          "name": "Common",
+          "version": "1.0.0.0",
+          "mvid": "cf9de952-7d26-4f64-9000-6d6855b0a204",
+          "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Common.dll"
+        },
+        {
+          "name": "Coop",
+          "version": "1.0.0.0",
+          "mvid": "a9f534a5-dcc5-4e70-864d-ffbeeefd6469",
+          "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.dll"
+        },
+        {
+          "name": "Coop.Core",
+          "version": "1.0.0.0",
+          "mvid": "6b671de0-f8af-4b79-a5a8-fb81375d3a11",
+          "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Core.dll"
+        },
+        {
+          "name": "Coop.Steam",
+          "version": "1.0.0.0",
+          "mvid": "d0498fda-c8d2-4c2d-b8b3-fe564ab9187f",
+          "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Steam.dll"
+        },
+        {
+          "name": "GameInterface",
+          "version": "1.0.0.0",
+          "mvid": "ad80ff3e-30a4-4dcc-ac3e-26e5a8245935",
+          "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\GameInterface.dll"
+        },
+        {
+          "name": "Missions",
+          "version": "1.0.0.0",
+          "mvid": "aa4f3a6c-d011-4202-a040-a436d2e9a2ee",
+          "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Missions.dll"
+        }
+      ]
+    },
+    {
+      "name": "client1",
+      "identity": {
+        "pid": 21324,
+        "startedUtc": "2026-10-19T05:11:56.3838029Z",
+        "role": "client",
+        "platformId": "testclient1",
+        "runToken": "5e60f2a77ccd4995b559a9d0ab9bbd76"
+      },
+      "buildVersion": "0.1.7+64d3f01fd0b4952777e1b07bea6403413cd448eb",
+      "loadedAssemblies": [
+        {
+          "name": "Common",
+          "version": "1.0.0.0",
+          "mvid": "cf9de952-7d26-4f64-9000-6d6855b0a204",
+          "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Common.dll"
+        },
+        {
+          "name": "Coop",
+          "version": "1.0.0.0",
+          "mvid": "a9f534a5-dcc5-4e70-864d-ffbeeefd6469",
+          "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.dll"
+        },
+        {
+          "name": "Coop.Core",
+          "version": "1.0.0.0",
+          "mvid": "6b671de0-f8af-4b79-a5a8-fb81375d3a11",
+          "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Core.dll"
+        },
+        {
+          "name": "Coop.Steam",
+          "version": "1.0.0.0",
+          "mvid": "d0498fda-c8d2-4c2d-b8b3-fe564ab9187f",
+          "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Coop.Steam.dll"
+        },
+        {
+          "name": "GameInterface",
+          "version": "1.0.0.0",
+          "mvid": "ad80ff3e-30a4-4dcc-ac3e-26e5a8245935",
+          "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\GameInterface.dll"
+        },
+        {
+          "name": "Missions",
+          "version": "1.0.0.0",
+          "mvid": "aa4f3a6c-d011-4202-a040-a436d2e9a2ee",
+          "location": "E:\\Steam\\steamapps\\common\\Mount & Blade II Bannerlord\\Modules\\Coop\\bin\\Win64_Shipping_Client\\Missions.dll"
+        }
+      ]
+    }
+  ],
+  "network": {
+    "dropped": 4530,
+    "delayed": 2025,
+    "reordered": 2023,
+    "errorCount": 0
+  },
+  "screenshots": [
+    {
+      "instance": "server",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\5e60f2a77ccd4995b559a9d0ab9bbd76\\server-765dd645a8744d09911bd47362f2b98d.bmp",
+      "sha256": "a0e84e49b772c803225a9d43da8af69b5b86bed6be273056bf4e9e47a6283f8a"
+    },
+    {
+      "instance": "client1",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\5e60f2a77ccd4995b559a9d0ab9bbd76\\client1-44cf323db747450fa5689b9f72027675.bmp",
+      "sha256": "5426f3b909cfbfd2e150b4f5a8e167522b9ba25c5e3a4fb97a678c90f5c39091"
+    }
+  ],
+  "visualInspection": {
+    "observation": "A native map and HUD; B own town menu over native map and HUD, paused; no semantic claim about temporal trails from still frames."
+  },
+  "cleanupConfirmed": true,
+  "limits": [
+    "Active11 TroopRoster missing-handle did not reproduce; no root cause fix claimed.",
+    "Final-barrier timeout reconnect still fails; repeated lifetime-patch ERRs remain and are not ignored.",
+    "No natural-day completeness or lossless pre-final-ACK recovery claim."
+  ],
+  "networkScope": "Entire recorded scenario, including the later final-barrier hold/blackout, not exclusively the three active rounds."
+}
