@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { nativeWorkerOverrideStatus, validateNativeWorkerOverride } from './orchestrator.mjs';
 
 const repo = realpathSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'));
 const git = (...args) => {
@@ -17,7 +18,7 @@ mkdirSync(output, { recursive: true });
 const report = {
     schemaVersion: 1, kind: 'orchestration-self-check', utc: new Date().toISOString(),
     head: git('rev-parse', 'HEAD'), branch: git('branch', '--show-current'),
-    modelPolicy: 'inherit-parent', nativeToolCallsPerformedByThisScript: false,
+    modelPolicy: 'inherit-parent', nativeWorkerPolicy: null, nativeToolCallsPerformedByThisScript: false,
     independentModelInferencePerformed: false, gameLaunchOrDeploymentPerformed: false,
     checks: [], tests: [], output,
 };
@@ -31,6 +32,18 @@ try {
     const streams = JSON.parse(readFileSync(path.join(repo, 'tools/coordination/p2p-workstreams.json'), 'utf8'));
     const expected = ['authority', 'checkpoint', 'ai', 'pause', 'e2e', 'fault', 'review'];
     requireCheck(streams.modelPolicy === 'inherit-parent' && streams.maxWorkers === 3, 'Inherited model and three-worker limit');
+    const configuredNativeWorkerOverride = validateNativeWorkerOverride(streams.nativeWorkerOverride);
+    const stateFile = path.join(common, 'codex-coordination', 'state.json');
+    const persistedState = existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, 'utf8')) : null;
+    const persistedNativeWorkerOverride = validateNativeWorkerOverride(persistedState?.nativeWorkerOverride);
+    if (persistedState) requireCheck(persistedState.modelPolicy === 'inherit-parent', 'Persisted default model policy remains inherited');
+    report.nativeWorkerPolicy = {
+        configuredDefault: streams.modelPolicy,
+        persistedDefault: persistedState?.modelPolicy ?? null,
+        configuredOverride: configuredNativeWorkerOverride,
+        persistedOverride: persistedNativeWorkerOverride,
+        status: nativeWorkerOverrideStatus(configuredNativeWorkerOverride, persistedNativeWorkerOverride, Boolean(persistedState)),
+    };
     requireCheck(expected.every(id => streams.workstreams.filter(item => item.id === id).length === 1), 'All seven workstreams registered exactly once');
     git('merge-base', '--is-ancestor', streams.acceptedBaseline.commit, 'HEAD');
     report.gameCodeChangesSinceBaseline = git('diff', '--name-only', streams.acceptedBaseline.commit, 'HEAD', '--', 'source')

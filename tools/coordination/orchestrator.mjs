@@ -38,6 +38,28 @@ function requireText(value, name) {
   return value;
 }
 
+export function validateNativeWorkerOverride(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== 'object' || Array.isArray(value) ||
+      !same(Object.keys(value), ['model', 'reasoningEffort', 'source']) ||
+      value.model !== 'gpt-6-luna' || value.reasoningEffort !== 'xhigh' || value.source !== 'explicit-user') {
+    throw new Error('nativeWorkerOverride must be { model: gpt-6-luna, reasoningEffort: xhigh, source: explicit-user }');
+  }
+  return { model: value.model, reasoningEffort: value.reasoningEffort, source: value.source };
+}
+
+function workerOverrideConfig(repo) {
+  const config = json(path.join(repo, 'tools', 'coordination', 'p2p-workstreams.json'));
+  if (config.modelPolicy !== 'inherit-parent') throw new Error('modelPolicy must remain inherit-parent');
+  return validateNativeWorkerOverride(config.nativeWorkerOverride);
+}
+
+export function nativeWorkerOverrideStatus(configured, persisted, initialized = true) {
+  if (!initialized) return configured ? 'uninitialized' : 'inherit-parent';
+  if (JSON.stringify(configured ?? null) === JSON.stringify(persisted ?? null)) return configured ? 'applied' : 'inherit-parent';
+  return 'pending-explicit-apply';
+}
+
 export class Coordinator {
   constructor(repo) {
     this.repo = canonical(run('git', ['rev-parse', '--show-toplevel'], path.resolve(repo)));
@@ -76,6 +98,7 @@ export class Coordinator {
   initialized(state) {
     if (!state) throw new Error('run init first');
     if (state.version !== 1) throw new Error('unsupported coordination state');
+    validateNativeWorkerOverride(state.nativeWorkerOverride);
     return state;
   }
 
@@ -96,7 +119,9 @@ export class Coordinator {
         this.clean(this.repo);
         const observedHead = this.git(['rev-parse', 'HEAD']);
         this.git(['merge-base', '--is-ancestor', existing.acceptedBaseline.commit, observedHead]);
-        return { value: { ...existing, observedHead } };
+        const configuredNativeWorkerOverride = workerOverrideConfig(this.repo);
+        return { value: { ...existing, observedHead, configuredNativeWorkerOverride,
+          nativeWorkerOverrideStatus: nativeWorkerOverrideStatus(configuredNativeWorkerOverride, existing.nativeWorkerOverride) } };
       }
       this.clean(this.repo);
       const branch = this.git(['branch', '--show-current']);
@@ -115,22 +140,45 @@ export class Coordinator {
       const root = this.git(['worktree', 'list', '--porcelain']).split('\n').find(line => line.startsWith('worktree ')).slice(9);
       const managedRoot = path.join(path.dirname(root), `${path.basename(root)}-worktrees`);
       fs.mkdirSync(managedRoot, { recursive: true });
-      const state = { version: 1, coordinatorRoot: this.repo, coordinatorBranch: branch, initialHead: head, managedRoot: canonical(managedRoot), modelPolicy: 'inherit-parent', maxWorkers: 3, acceptedBaseline: { ...config.acceptedBaseline, files: accepted }, workstreams: config.workstreams, tasks: {} };
-      return { state, value: state };
+      const nativeWorkerOverride = validateNativeWorkerOverride(config.nativeWorkerOverride);
+      const state = { version: 1, coordinatorRoot: this.repo, coordinatorBranch: branch, initialHead: head, managedRoot: canonical(managedRoot), modelPolicy: 'inherit-parent', nativeWorkerOverride, maxWorkers: 3, acceptedBaseline: { ...config.acceptedBaseline, files: accepted }, workstreams: config.workstreams, tasks: {} };
+      return { state, value: { ...state, configuredNativeWorkerOverride: nativeWorkerOverride,
+        nativeWorkerOverrideStatus: nativeWorkerOverrideStatus(nativeWorkerOverride, state.nativeWorkerOverride) } };
     });
   }
 
   status() {
     return this.transaction(state => {
       this.initialized(state);
-      return { value: { ...state, observedHead: this.git(['rev-parse', 'HEAD']), clean: !this.git(['status', '--porcelain']) } };
+      const configuredNativeWorkerOverride = workerOverrideConfig(this.repo);
+      return { value: { ...state, configuredNativeWorkerOverride,
+        nativeWorkerOverrideStatus: nativeWorkerOverrideStatus(configuredNativeWorkerOverride, state.nativeWorkerOverride),
+        observedHead: this.git(['rev-parse', 'HEAD']), clean: !this.git(['status', '--porcelain']) } };
+    });
+  }
+
+  applyConfiguredNativeWorkerOverride() {
+    return this.transaction(state => {
+      this.coordinator(state);
+      this.clean(this.repo);
+      this.initialized(state);
+      const nativeWorkerOverride = workerOverrideConfig(this.repo);
+      const updated = { ...state, nativeWorkerOverride };
+      return { state: updated, value: { nativeWorkerOverride,
+        nativeWorkerOverrideStatus: nativeWorkerOverride ? 'applied' : 'inherit-parent',
+        affects: 'tasks created after this update only' } };
     });
   }
 
   next() {
     return this.transaction(state => {
       this.initialized(state);
-      return { value: state.workstreams.map(stream => ({ ...stream, modelPolicy: state.modelPolicy, completed: this.finished(state, stream.id), ready: !this.finished(state, stream.id) && stream.dependencies.every(dependency => this.finished(state, dependency)) && !Object.values(state.tasks).some(task => task.stream === stream.id && !task.independent && task.status !== 'closed'), blockedBy: stream.dependencies.filter(dependency => !this.finished(state, dependency)) })) };
+      const configuredNativeWorkerOverride = workerOverrideConfig(this.repo);
+      return { value: state.workstreams.map(stream => ({ ...stream, modelPolicy: state.modelPolicy,
+        nativeWorkerOverride: state.nativeWorkerOverride ?? null,
+        configuredNativeWorkerOverride,
+        nativeWorkerOverrideStatus: nativeWorkerOverrideStatus(configuredNativeWorkerOverride, state.nativeWorkerOverride),
+        completed: this.finished(state, stream.id), ready: !this.finished(state, stream.id) && stream.dependencies.every(dependency => this.finished(state, dependency)) && !Object.values(state.tasks).some(task => task.stream === stream.id && !task.independent && task.status !== 'closed'), blockedBy: stream.dependencies.filter(dependency => !this.finished(state, dependency)) })) };
     });
   }
 
@@ -165,7 +213,8 @@ export class Coordinator {
       if (!within(state.managedRoot, worktree) || fs.existsSync(worktree)) throw new Error('worktree directory already exists or is unsafe');
       if (this.git(['branch', '--list', branch])) throw new Error('branch already exists');
       const baseCommit = this.git(['rev-parse', 'HEAD']);
-      const task = { id, stream, objective: objective ?? definition.next, queueItem: definition.next, independent: Boolean(scopeAuthorization?.trim()) || Boolean(parent), followupOf, scope: taskScope, readOnly, scopeAuthorization, worktree, branch, baseCommit, status: 'created', owner: 'coordinator', modelPolicy: 'inherit-parent', createdAt: new Date().toISOString(), registeredBy: 'codex-coordination' };
+      const workerModelOverride = validateNativeWorkerOverride(state.nativeWorkerOverride);
+      const task = { id, stream, objective: objective ?? definition.next, queueItem: definition.next, independent: Boolean(scopeAuthorization?.trim()) || Boolean(parent), followupOf, scope: taskScope, readOnly, scopeAuthorization, worktree, branch, baseCommit, status: 'created', owner: 'coordinator', modelPolicy: workerModelOverride ? 'explicit-user' : 'inherit-parent', ...(workerModelOverride ? { workerModelOverride } : {}), createdAt: new Date().toISOString(), registeredBy: 'codex-coordination' };
       this.git(['worktree', 'add', '-b', branch, worktree, baseCommit]);
       try {
         for (const relative of ['mb2', 'source/packages']) {
@@ -202,6 +251,8 @@ export class Coordinator {
       if (!['native', 'cli'].includes(adapter)) throw new Error('adapter must be native or cli');
       if (task.integration) throw new Error('integrated task remains coordinator-owned; create --followup-of for worker changes');
       if (!['created', 'needs_fix', 'interrupted'].includes(task.status)) throw new Error('task is not assignable');
+      const workerModelOverride = task.modelPolicy === 'explicit-user' ? validateNativeWorkerOverride(task.workerModelOverride) : null;
+      if (workerModelOverride && adapter !== 'native') throw new Error('explicit native worker model override requires the native adapter');
       const occupied = Object.values(state.tasks).filter(other => other.id !== id && occupiesSlot(other));
       if (occupied.length >= state.maxWorkers) throw new Error('three worker slots already occupied');
       if (occupied.some(other => other.agentId === agentId)) throw new Error('worker agent already reserved');
@@ -212,7 +263,10 @@ export class Coordinator {
       task.owner = agentId;
       task.adapter = adapter;
       task.status = 'assigned';
-      task.prompt = `Task ${id}: ${task.objective}. Work only in ${task.worktree}, branch ${task.branch}, base ${task.baseCommit}. Scope: ${task.scope.join(', ')}. Model: inherit parent. No deployment, games, push or PR. Compile with -p:ModName=. Commit verified work; submit handoff.schema.json with actual tests, exit codes and log hashes. Native agent calls are performed by the root chat, not this Node process.`;
+      const modelText = workerModelOverride
+        ? `${workerModelOverride.model}, reasoning effort ${workerModelOverride.reasoningEffort} (explicit user selection)`
+        : 'inherit parent';
+      task.prompt = `Task ${id}: ${task.objective}. Work only in ${task.worktree}, branch ${task.branch}, base ${task.baseCommit}. Scope: ${task.scope.join(', ')}. Model: ${modelText}. No deployment, games, push or PR. Compile with -p:ModName=. Commit verified work; submit handoff.schema.json with actual tests, exit codes and log hashes. Native agent calls are performed by the root chat, not this Node process.`;
       return { state, value: task };
     });
   }
@@ -493,10 +547,11 @@ export class Coordinator {
 }
 
 const help = `Usage: node tools/coordination/orchestrator.mjs --root <repo> <command> [options]
-Commands: init | status | next | create | assign | submit | review | integrate | verify | recover-verification | close | interrupt | cleanup
+Commands: init | status | next | apply-configured-worker-model | create | assign | submit | review | integrate | verify | recover-verification | close | interrupt | cleanup
 create --id slug --stream authority [--scope path] [--read-only] [--scope-authorization coordinator-reason] [--objective text]
 create --id fix-slug --followup-of failed-integrated-task [--scope narrower-path]
 assign --id slug --agent native-agent-id [--adapter native|cli]
+apply-configured-worker-model updates the default for future task snapshots only
 submit --id slug --handoff absolute-handoff.json
 review --id slug --reviewer independent-agent-id --decision pass|needs_fix --notes text
 integrate --id slug
@@ -505,7 +560,7 @@ recover-verification --reason text (only after the recorded owner PID has exited
 close --id slug | cleanup --id slug
 interrupt --id slug --reason text [--agent-status idle|completed|interrupted]
 The root chat invokes native agents; this CLI registers their exclusive worktrees.
-All persistent state is in the Git common directory. Model policy: inherit-parent.`;
+All persistent state is in the Git common directory. Model policy defaults to inherit-parent; an explicit native override is recorded per task.`;
 
 export function main(args = process.argv.slice(2)) {
   const options = { scope: [] };
@@ -525,6 +580,7 @@ export function main(args = process.argv.slice(2)) {
   const command = positional[0];
   let result;
   if (['init', 'status', 'next'].includes(command)) result = board[command]();
+  else if (command === 'apply-configured-worker-model') result = board.applyConfiguredNativeWorkerOverride();
   else if (command === 'create') result = board.create({ id: options.id, stream: options.stream, scope: options.scope.length ? options.scope : undefined, readOnly: options.readOnly, scopeAuthorization: options['scope-authorization'], objective: options.objective, followupOf: options['followup-of'] });
   else if (command === 'assign') result = board.assign(options.id, { agentId: options.agent, adapter: options.adapter });
   else if (command === 'submit') result = board.submit(options.id, json(path.resolve(requireText(options.handoff, 'handoff file'))));

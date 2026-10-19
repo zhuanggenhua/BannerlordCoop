@@ -6,14 +6,14 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { Coordinator } from './orchestrator.mjs';
+import { Coordinator, nativeWorkerOverrideStatus, validateNativeWorkerOverride } from './orchestrator.mjs';
 
 function git(cwd, ...args) {
   const result = spawnSync('git', args, { cwd, encoding: 'utf8', windowsHide: true });
   assert.equal(result.status, 0, result.stderr);
   return result.stdout.trim();
 }
-function fixture(t, { junctions = false } = {}) {
+function fixture(t, { junctions = false, nativeWorkerOverride, initialize = true } = {}) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coop-board-'));
   const repo = path.join(directory, 'repo');
   fs.mkdirSync(repo);
@@ -41,12 +41,13 @@ function fixture(t, { junctions = false } = {}) {
   const baseline = git(repo, 'rev-parse', 'HEAD');
   const streams = ['authority', 'checkpoint', 'ai', 'pause', 'e2e', 'fault', 'review'].map(id => ({ id, next: `Next ${id}`, accepted: ['already done'], scope: [`source/${id}`], dependencies: id === 'e2e' ? ['authority'] : [] }));
   const config = { maxWorkers: 3, modelPolicy: 'inherit-parent', acceptedBaseline: { commit: baseline, report: 'accepted.txt', evidence: ['accepted.txt'] }, workstreams: streams };
+  if (nativeWorkerOverride !== undefined) config.nativeWorkerOverride = nativeWorkerOverride;
   fs.mkdirSync(path.join(repo, 'tools', 'coordination'), { recursive: true });
   fs.writeFileSync(path.join(repo, 'tools', 'coordination', 'p2p-workstreams.json'), JSON.stringify(config));
   git(repo, 'add', '.');
   git(repo, 'commit', '-m', 'Configure task board');
   const board = new Coordinator(repo);
-  board.init();
+  if (initialize) board.init();
   return { repo, board, directory, targets };
 }
 
@@ -155,9 +156,72 @@ test('init records the accepted baseline without creating repeat tasks', t => {
   const state = board.status();
   assert.equal(state.clean, true);
   assert.equal(state.modelPolicy, 'inherit-parent');
+  assert.equal(state.nativeWorkerOverride, null);
+  assert.equal(state.configuredNativeWorkerOverride, null);
+  assert.equal(state.nativeWorkerOverrideStatus, 'inherit-parent');
   assert.equal(Object.keys(state.tasks).length, 0);
   assert.equal(state.acceptedBaseline.files.length, 2);
   assert.equal(board.next().find(item => item.id === 'e2e').ready, false);
+  const task = board.create({ id: 'inherit-model', stream: 'authority' });
+  assert.equal(task.modelPolicy, 'inherit-parent');
+  assert.equal(task.workerModelOverride, undefined);
+  const assigned = board.assign(task.id, { agentId: '/root/inherit-model' });
+  assert.match(assigned.prompt, /Model: inherit parent/);
+});
+
+test('native worker override is validated and copied to new task and assignment prompt only', t => {
+  const override = { model: 'gpt-6-luna', reasoningEffort: 'xhigh', source: 'explicit-user' };
+  assert.deepEqual(validateNativeWorkerOverride(undefined), null);
+  assert.deepEqual(validateNativeWorkerOverride(override), override);
+  assert.equal(nativeWorkerOverrideStatus(override, null, false), 'uninitialized');
+  assert.equal(nativeWorkerOverrideStatus(override, null), 'pending-explicit-apply');
+  assert.equal(nativeWorkerOverrideStatus(override, override), 'applied');
+  assert.throws(() => validateNativeWorkerOverride({ ...override, source: 'config-default' }), /nativeWorkerOverride/);
+  assert.throws(() => validateNativeWorkerOverride({ ...override, extra: true }), /nativeWorkerOverride/);
+  const { board } = fixture(t, { nativeWorkerOverride: override });
+  assert.deepEqual(board.status().nativeWorkerOverride, override);
+  assert.equal(board.status().nativeWorkerOverrideStatus, 'applied');
+  const nativeTask = board.create({ id: 'native-luna', stream: 'authority' });
+  assert.equal(nativeTask.modelPolicy, 'explicit-user');
+  assert.deepEqual(nativeTask.workerModelOverride, override);
+  assert.match(board.assign(nativeTask.id, { agentId: '/root/native-luna' }).prompt,
+    /Model: gpt-6-luna, reasoning effort xhigh \(explicit user selection\)/);
+  const cliTask = board.create({ id: 'cli-luna', stream: 'checkpoint' });
+  assert.throws(() => board.assign(cliTask.id, { agentId: '/root/cli-luna', adapter: 'cli' }), /requires the native adapter/);
+});
+
+test('existing board init leaves recorded task policy unchanged until explicit future-default apply', t => {
+  const { board, repo } = fixture(t);
+  const previousTask = board.create({ id: 'before-model-policy', stream: 'authority' });
+  assert.equal(previousTask.modelPolicy, 'inherit-parent');
+  const configPath = path.join(repo, 'tools', 'coordination', 'p2p-workstreams.json');
+  const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+  config.nativeWorkerOverride = { model: 'gpt-6-luna', reasoningEffort: 'xhigh', source: 'explicit-user' };
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+  git(repo, 'add', '.');
+  git(repo, 'commit', '-m', 'Configure explicit native worker model');
+  const initialized = board.init();
+  assert.equal(initialized.nativeWorkerOverride, null);
+  assert.equal(initialized.nativeWorkerOverrideStatus, 'pending-explicit-apply');
+  assert.equal(board.status().tasks[previousTask.id].modelPolicy, 'inherit-parent');
+  assert.deepEqual(board.next()[0].configuredNativeWorkerOverride, config.nativeWorkerOverride);
+  const cli = spawnSync(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), 'orchestrator.mjs'),
+    '--root', repo, 'apply-configured-worker-model'], { cwd: repo, encoding: 'utf8', windowsHide: true });
+  assert.equal(cli.status, 0, cli.stderr);
+  const applied = JSON.parse(cli.stdout);
+  assert.equal(applied.nativeWorkerOverrideStatus, 'applied');
+  assert.equal(applied.affects, 'tasks created after this update only');
+  assert.equal(board.status().maxWorkers, 3);
+  assert.equal(board.status().tasks[previousTask.id].modelPolicy, 'inherit-parent');
+  const futureTask = board.create({ id: 'after-model-policy', stream: 'checkpoint' });
+  assert.equal(futureTask.modelPolicy, 'explicit-user');
+  assert.deepEqual(futureTask.workerModelOverride, config.nativeWorkerOverride);
+});
+
+test('invalid configured native worker model is rejected before board initialization', t => {
+  const { board } = fixture(t, { nativeWorkerOverride: { model: 'gpt-6-luna', reasoningEffort: 'max', source: 'explicit-user' }, initialize: false });
+  assert.throws(() => board.init(), /nativeWorkerOverride/);
+  assert.equal(fs.existsSync(board.stateFile), false);
 });
 
 test('real task worktrees are unique and scopes cannot overlap', t => {
