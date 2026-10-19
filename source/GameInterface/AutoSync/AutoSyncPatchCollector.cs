@@ -3,6 +3,7 @@ using HarmonyLib;
 using Serilog;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 
 namespace GameInterface.AutoSync;
@@ -79,7 +80,7 @@ class AutoSyncPatchCollector : IAutoSyncPatchCollector
         {
             // Harmony metadata is the source of truth. The static set can outlive a
             // container, while an external unpatch can remove Harmony's live entry.
-            var ownedCount = CountInstalledPatches(method, patch, patchType, out var otherOwner);
+            var ownedCount = CountInstalledPatches(method, patch, patchType, out var otherOwner, out var hasUntrackedGenericPatch);
             if (ownedCount > 1)
             {
                 Logger.Error("Harmony patch {PatchDeclaringType}.{PatchName} has {PatchCount} live registrations for {DeclaringType}.{MethodName} owned by {HarmonyId}",
@@ -94,6 +95,13 @@ class AutoSyncPatchCollector : IAutoSyncPatchCollector
                 return;
             }
 
+            if (hasUntrackedGenericPatch)
+            {
+                Logger.Error("Cannot verify the closed generic identity for Harmony patch {PatchDeclaringType}.{PatchName} on {DeclaringType}.{MethodName} owned by {HarmonyId}; refusing to install a duplicate",
+                    patch.DeclaringType, patch.Name, method.DeclaringType, method.Name, harmony.Id);
+                return;
+            }
+
             if (ownedCount == 1)
             {
                 PatchedMethods.Add(key);
@@ -104,38 +112,56 @@ class AutoSyncPatchCollector : IAutoSyncPatchCollector
                 Logger.Warning("Harmony patch {PatchDeclaringType}.{PatchName} for {DeclaringType}.{MethodName} owned by {HarmonyId} was missing and will be reinstalled",
                     patch.DeclaringType, patch.Name, method.DeclaringType, method.Name, harmony.Id);
 
+            // Harmony 2.4.2 stores generic patch methods by module/token. Its PatchMethod getter
+            // resolves that token without a declaring-type context, so live metadata reports the
+            // open generic definition. Record the exact closed request while installing so that
+            // a later collector can safely associate that metadata with this target and owner.
+            if (!PatchedMethods.Add(key))
+            {
+                Logger.Error("Harmony patch bookkeeping for {PatchDeclaringType}.{PatchName} on {DeclaringType}.{MethodName} owned by {HarmonyId} changed during installation",
+                    patch.DeclaringType, patch.Name, method.DeclaringType, method.Name, harmony.Id);
+                return;
+            }
+
             var harmonyMethod = new HarmonyMethod(patch);
-            switch (patchType)
+            try
             {
-                case HarmonyPatchType.Transpiler:
-                    harmony.Patch(method, transpiler: harmonyMethod);
-                    break;
-                case HarmonyPatchType.Prefix:
-                    harmony.Patch(method, prefix: harmonyMethod);
-                    break;
-                case HarmonyPatchType.Postfix:
-                    harmony.Patch(method, postfix: harmonyMethod);
-                    break;
-                default:
-                    throw new ArgumentOutOfRangeException(nameof(patchType), patchType, "Unsupported Harmony patch type.");
-            }
+                switch (patchType)
+                {
+                    case HarmonyPatchType.Transpiler:
+                        harmony.Patch(method, transpiler: harmonyMethod);
+                        break;
+                    case HarmonyPatchType.Prefix:
+                        harmony.Patch(method, prefix: harmonyMethod);
+                        break;
+                    case HarmonyPatchType.Postfix:
+                        harmony.Patch(method, postfix: harmonyMethod);
+                        break;
+                    default:
+                        throw new ArgumentOutOfRangeException(nameof(patchType), patchType, "Unsupported Harmony patch type.");
+                }
 
-            ownedCount = CountInstalledPatches(method, patch, patchType, out otherOwner);
-            if (otherOwner != null)
+                ownedCount = CountInstalledPatches(method, patch, patchType, out otherOwner, out hasUntrackedGenericPatch);
+                if (otherOwner != null)
+                {
+                    Logger.Error("Harmony patch {PatchDeclaringType}.{PatchName} for {DeclaringType}.{MethodName} is also owned by {OtherHarmonyId} after installation under {HarmonyId}",
+                        patch.DeclaringType, patch.Name, method.DeclaringType, method.Name, otherOwner, harmony.Id);
+                    PatchedMethods.Remove(key);
+                    return;
+                }
+
+                if (ownedCount != 1)
+                {
+                    Logger.Error("Harmony did not register exactly one patch {PatchDeclaringType}.{PatchName} for {DeclaringType}.{MethodName} owned by {HarmonyId}; found {PatchCount}",
+                        patch.DeclaringType, patch.Name, method.DeclaringType, method.Name, harmony.Id, ownedCount);
+                    PatchedMethods.Remove(key);
+                }
+            }
+            catch
             {
-                Logger.Error("Harmony patch {PatchDeclaringType}.{PatchName} for {DeclaringType}.{MethodName} is also owned by {OtherHarmonyId} after installation under {HarmonyId}",
-                    patch.DeclaringType, patch.Name, method.DeclaringType, method.Name, otherOwner, harmony.Id);
-                return;
+                PatchedMethods.Remove(key);
+                throw;
             }
-
-            if (ownedCount != 1)
-            {
-                Logger.Error("Harmony did not register exactly one patch {PatchDeclaringType}.{PatchName} for {DeclaringType}.{MethodName} owned by {HarmonyId}; found {PatchCount}",
-                    patch.DeclaringType, patch.Name, method.DeclaringType, method.Name, harmony.Id, ownedCount);
-                return;
-            }
-
-            PatchedMethods.Add(key);
         }
         catch (Exception ex)
         {
@@ -144,9 +170,16 @@ class AutoSyncPatchCollector : IAutoSyncPatchCollector
         }
     }
 
-    private int CountInstalledPatches(MethodBase method, MethodInfo patch, HarmonyPatchType patchType, out string otherOwner)
+    private int CountInstalledPatches(
+        MethodBase method,
+        MethodInfo patch,
+        HarmonyPatchType patchType,
+        out string otherOwner,
+        out bool hasUntrackedGenericPatch)
     {
         otherOwner = null;
+        hasUntrackedGenericPatch = false;
+        var key = (harmony.Id, method, patch, patchType);
         var patchInfo = Harmony.GetPatchInfo(method);
         if (patchInfo == null) return 0;
 
@@ -163,14 +196,44 @@ class AutoSyncPatchCollector : IAutoSyncPatchCollector
         var ownedCount = 0;
         foreach (var livePatch in livePatches)
         {
-            if (livePatch.PatchMethod != patch) continue;
+            var liveMethod = livePatch.PatchMethod;
+            if (liveMethod != patch && !IsOpenMethodDefinitionOf(liveMethod, patch)) continue;
+
             if (livePatch.owner == harmony.Id)
-                ownedCount++;
+            {
+                if (liveMethod == patch || PatchedMethods.Contains(key))
+                    ownedCount++;
+                else
+                    hasUntrackedGenericPatch = true;
+            }
             else
                 otherOwner ??= livePatch.owner;
         }
 
         return ownedCount;
+    }
+
+    private static bool IsOpenMethodDefinitionOf(MethodInfo liveMethod, MethodInfo requestedMethod)
+    {
+        if (!liveMethod.ContainsGenericParameters || requestedMethod.ContainsGenericParameters)
+            return false;
+        if (liveMethod.Module != requestedMethod.Module || liveMethod.MetadataToken != requestedMethod.MetadataToken)
+            return false;
+
+        var liveDeclaringType = liveMethod.DeclaringType;
+        var requestedDeclaringType = requestedMethod.DeclaringType;
+        if (requestedDeclaringType?.IsConstructedGenericType != true
+            || requestedDeclaringType.GetGenericTypeDefinition() != typeof(global::GameInterface.Registry.Auto.LifetimePatches<>))
+            return false;
+
+        var sameDeclaringType = liveDeclaringType == requestedDeclaringType
+            || (liveDeclaringType?.IsGenericTypeDefinition == true
+                && requestedDeclaringType?.IsConstructedGenericType == true
+                && requestedDeclaringType.GetGenericTypeDefinition() == liveDeclaringType);
+        if (!sameDeclaringType) return false;
+
+        return !liveMethod.IsGenericMethod
+            && !requestedMethod.IsGenericMethod;
     }
 
     public void UnpatchAll()
@@ -189,11 +252,18 @@ class AutoSyncPatchCollector : IAutoSyncPatchCollector
         {
             try
             {
-                var ownedCount = CountInstalledPatches(method, patch, patchType, out var otherOwner);
+                var ownedCount = CountInstalledPatches(method, patch, patchType, out var otherOwner, out var hasUntrackedGenericPatch);
                 if (ownedCount == 0)
                 {
                     PatchedMethods.Remove((harmony.Id, method, patch, patchType));
                     patches.Remove((method, patch));
+                    continue;
+                }
+
+                if (hasUntrackedGenericPatch)
+                {
+                    Logger.Error("Cannot unpatch {PatchDeclaringType}.{PatchName} from {DeclaringType}.{MethodName}: the closed generic identity is not known",
+                        patch.DeclaringType, patch.Name, method.DeclaringType, method.Name);
                     continue;
                 }
 

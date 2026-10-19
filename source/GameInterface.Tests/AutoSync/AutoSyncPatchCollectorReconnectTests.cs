@@ -1,5 +1,6 @@
 using GameInterface.AutoSync;
 using HarmonyLib;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -125,6 +126,62 @@ public class AutoSyncPatchCollectorReconnectTests
         }
     }
 
+    [Fact]
+    public void PatchAll_RebuiltCollectorRecognizesOpenHarmonyMetadataForLifetimePatch()
+    {
+        var target = typeof(GenericPatchTarget).GetConstructor(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance, null, Type.EmptyTypes, null)!;
+        var firstPatchMethod = GetLifetimeCreatePrefix(typeof(GenericPatchTarget));
+        var rebuiltPatchMethod = GetLifetimeCreatePrefix(typeof(GenericPatchTarget));
+        var harmony = CreateHarmony();
+        var firstCollector = new AutoSyncPatchCollector(harmony);
+        var rebuiltCollector = new AutoSyncPatchCollector(new Harmony(harmony.Id));
+        firstCollector.AddPrefix(target, firstPatchMethod);
+        rebuiltCollector.AddPrefix(target, rebuiltPatchMethod);
+
+        try
+        {
+            firstCollector.PatchAll();
+            var installed = Assert.Single(Harmony.GetPatchInfo(target)!.Prefixes.Where(p => p.owner == harmony.Id));
+            Assert.True(installed.PatchMethod.ContainsGenericParameters);
+            Assert.Equal(firstPatchMethod.Module.ModuleVersionId, installed.PatchMethod.Module.ModuleVersionId);
+            Assert.Equal(firstPatchMethod.MetadataToken, installed.PatchMethod.MetadataToken);
+            Assert.Equal(firstPatchMethod.DeclaringType!.GetGenericTypeDefinition(), installed.PatchMethod.DeclaringType);
+            Assert.False(installed.PatchMethod.Equals(firstPatchMethod));
+
+            rebuiltCollector.PatchAll();
+
+            Assert.Single(Harmony.GetPatchInfo(target)!.Prefixes.Where(p => p.owner == harmony.Id));
+        }
+        finally
+        {
+            harmony.UnpatchAll(harmony.Id);
+        }
+    }
+
+    [Fact]
+    public void PatchAll_UnknownOpenGenericMetadataIsNotTreatedAsVerifiedInstallation()
+    {
+        var target = typeof(UntrackedGenericPatchTarget).GetConstructor(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance, null, Type.EmptyTypes, null)!;
+        var manualPatchMethod = GetLifetimeCreatePrefix(typeof(UntrackedGenericPatchTarget));
+        var collectorPatchMethod = GetLifetimeCreatePrefix(typeof(UntrackedGenericPatchTarget));
+        var harmony = CreateHarmony();
+        var collector = new AutoSyncPatchCollector(harmony);
+
+        try
+        {
+            harmony.Patch(target, prefix: new HarmonyMethod(manualPatchMethod));
+            collector.AddPrefix(target, collectorPatchMethod);
+            collector.PatchAll();
+
+            var installed = Assert.Single(Harmony.GetPatchInfo(target)!.Prefixes.Where(p => p.owner == harmony.Id));
+            Assert.True(installed.PatchMethod.ContainsGenericParameters);
+        }
+        finally
+        {
+            harmony.UnpatchAll(harmony.Id);
+        }
+    }
+
     private static AutoSyncPatchCollector CreateCollector(Harmony harmony)
     {
         var collector = new AutoSyncPatchCollector(harmony);
@@ -132,6 +189,14 @@ public class AutoSyncPatchCollectorReconnectTests
         collector.AddPrefix(TargetMethod(), Method(nameof(PatchPrefix)));
         collector.AddPostfix(TargetMethod(), Method(nameof(PatchPostfix)));
         return collector;
+    }
+
+    private static MethodInfo GetLifetimeCreatePrefix(Type managedType)
+    {
+        var patchDefinition = typeof(IAutoSyncPatchCollector).Assembly
+            .GetType("GameInterface.Registry.Auto.LifetimePatches`1", throwOnError: true)!;
+        var patchType = patchDefinition.MakeGenericType(managedType);
+        return AccessTools.Method(patchType, "CreatePrefix")!;
     }
 
     private static Harmony CreateHarmony() => new($"AutoSyncPatchCollectorReconnectTests.{System.Guid.NewGuid():N}");
@@ -174,5 +239,15 @@ public class AutoSyncPatchCollectorReconnectTests
     {
         transpilerCalls++;
         return instructions;
+    }
+
+    private sealed class GenericPatchTarget
+    {
+        public GenericPatchTarget() { }
+    }
+
+    private sealed class UntrackedGenericPatchTarget
+    {
+        public UntrackedGenericPatchTarget() { }
     }
 }
