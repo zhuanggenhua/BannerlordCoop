@@ -153,6 +153,29 @@ export function assertPacketEvidence(stats) {
     for (const row of stats.samples) assert.match(row.sha256, /^[0-9a-f]{64}$/);
 }
 
+export function authorityBarrierEvents(text) {
+    return [...text.matchAll(/Sent campaign authority handoff barrier (\d+) for paused epoch (\d+)/g)]
+        .map(match => ({ sequence: Number(match[1]), epoch: Number(match[2]) }));
+}
+
+export function assertHeldBarrierFaultPoint({
+    events, baselineMaxSequence, pausedEpoch, heldBaseline, toHostBaseline, sentToHostBaseline, policyUtc, stats,
+}) {
+    assert.deepEqual(stats.errors, [], 'Fault proxy reported an error before the barrier fault point');
+    assert.ok(stats.policies.some(policy => policy.utc === policyUtc && policy.holdToClient === true && !policy.blackout),
+        'A-to-B hold policy was not active');
+    const barrier = events.find(event => event.sequence > baselineMaxSequence && event.epoch === pausedEpoch);
+    assert.ok(barrier, 'No new final barrier for the current paused epoch was logged');
+    assert.ok(stats.heldTotal > heldBaseline && stats.heldCurrentCount > 0 && stats.heldCurrentBytes > 0,
+        'No A-to-B UDP datagram was actually held');
+    assert.ok(stats.heldSamples.some(sample => sample.direction === 'toClient' && sample.heldUtc &&
+        sample.policyUtc === policyUtc && sample.bytes > 0 && /^[0-9a-f]{64}$/.test(sample.sha256)),
+        'No hashed A-to-B hold sample was recorded under this policy');
+    assert.ok(stats.received.toHost > toHostBaseline && stats.sent.toHost > sentToHostBaseline,
+        'Candidate-to-host UDP did not continue flowing while A-to-B was held');
+    return barrier;
+}
+
 export function assertProcessEvidence(rows, expectedPids) {
     const games = rows.filter(row => row.Name?.toLowerCase() === 'bannerlord.exe');
     assert.equal(games.length, 2, 'Expected exactly two native Bannerlord processes');
@@ -187,6 +210,7 @@ export async function run(config) {
         codeHead: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: config.repo, encoding: 'utf8', windowsHide: true }).trim(),
         features: [], screenshots: [], probes: [], failed: null, cleanupConfirmed: false, passed: false,
         losslessWriterRecovery: 'NOT_IMPLEMENTED',
+        barrierFaultPointVerdict: 'NOT_RUN',
         stressCoverage: config['barrier-only'] ? 'NOT_RUN' : 'requires all configured active rounds',
         simulationCoverage: config['barrier-only'] ? 'NOT_RUN' : 'sole writer five-second intervals', scope: 'Real loopback UDP faults, existing map authority protocol; no combat, native daily or cold-save acceptance.' };
     const proxy = new UdpFaultProxy({ listenPort: profile.port });
@@ -414,27 +438,119 @@ export async function run(config) {
             });
         } else {
             await feature('committed-checkpoint-candidate-timeout-and-reconnect', async () => {
-                await awaitWriter(initial[0].controller); await pause();
-                proxy.setFault({ blackout: true });
+                await awaitWriter(initial[0].controller); const unqueuedSnapshot = await pause();
+                await collectLogs();
+                const barrierBaselineText = logs.server.text;
+                const barrierBaselineEvents = authorityBarrierEvents(barrierBaselineText);
+                const baselineMaxSequence = barrierBaselineEvents.reduce((maximum, event) => Math.max(maximum, event.sequence), 0);
+                const barrierBaseline = {
+                    capturedUtc: new Date().toISOString(),
+                    logPrefixLength: barrierBaselineText.length,
+                    logPrefixSha256: createHash('sha256').update(barrierBaselineText).digest('hex'),
+                    eventCount: barrierBaselineEvents.length,
+                    maxSequence: baselineMaxSequence,
+                };
+                const queueBeforeHold = {
+                    heldTotal: proxy.stats.heldTotal,
+                    heldCurrentCount: proxy.stats.heldCurrentCount,
+                    heldCurrentBytes: proxy.stats.heldCurrentBytes,
+                };
+                assert.equal(queueBeforeHold.heldCurrentCount, 0, 'Unexpected held datagrams before candidate fault point');
+                assert.equal(queueBeforeHold.heldCurrentBytes, 0);
+                const heldBaseline = proxy.stats.heldTotal;
+                const toHostBaseline = proxy.stats.received.toHost;
+                const sentToHostBaseline = proxy.stats.sent.toHost;
+                summary.barrierFaultPointVerdict = 'NOT_REACHED';
+                proxy.setFault({ holdToClient: true });
+                const holdPolicyUtc = proxy.stats.policies.at(-1).utc;
                 await command('server', 'coop.debug.authority.availability', ['yield'], true);
                 const frozen = await poll('A committed a paused lease before candidate ACK', async () => {
                     const value = await state('server'); assert.equal(paused(value), true); assert.equal(value.localAuthority, false); return value;
                 }, 10000);
+                const pausedEpoch = epoch(frozen);
+                let barrierFaultPoint;
+                try {
+                    barrierFaultPoint = await poll('new final barrier queued under one-way hold', async () => {
+                        await collectLogs();
+                        const barrier = assertHeldBarrierFaultPoint({
+                            events: authorityBarrierEvents(logs.server.text),
+                            baselineMaxSequence,
+                            pausedEpoch,
+                            heldBaseline,
+                            toHostBaseline,
+                            sentToHostBaseline,
+                            policyUtc: holdPolicyUtc,
+                            stats: proxy.stats,
+                        });
+                        return {
+                            barrier,
+                            queuedAtBarrier: {
+                                heldTotal: proxy.stats.heldTotal,
+                                heldCurrentCount: proxy.stats.heldCurrentCount,
+                                heldCurrentBytes: proxy.stats.heldCurrentBytes,
+                                policyUtc: holdPolicyUtc,
+                                samples: structuredClone(proxy.stats.heldSamples.filter(sample => sample.policyUtc === holdPolicyUtc)),
+                            },
+                            candidateToHost: {
+                                received: proxy.stats.received.toHost,
+                                sent: proxy.stats.sent.toHost,
+                            },
+                        };
+                    }, 15000);
+                } catch (error) {
+                    summary.barrierFaultPointVerdict = proxy.stats.errors.length
+                        ? 'FAULTPOINT_SETUP_FAILED'
+                        : 'FAULTPOINT_NOT_REACHED';
+                    throw new Error(summary.barrierFaultPointVerdict + ': ' + error.message, { cause: error });
+                }
+                summary.barrierFaultPointVerdict = 'REACHED';
+                const queuedAtBlackout = structuredClone(barrierFaultPoint.queuedAtBarrier);
+                const droppedBeforeBlackout = proxy.stats.dropped;
+                proxy.setFault({ blackout: true });
+                const blackoutPolicyUtc = proxy.stats.policies.at(-1).utc;
+                const afterBlackout = {
+                    policyUtc: blackoutPolicyUtc,
+                    heldCurrentCount: proxy.stats.heldCurrentCount,
+                    heldCurrentBytes: proxy.stats.heldCurrentBytes,
+                    droppedDelta: proxy.stats.dropped - droppedBeforeBlackout,
+                };
+                assert.equal(afterBlackout.heldCurrentCount, 0, 'Blackout left held packets queued');
+                assert.equal(afterBlackout.heldCurrentBytes, 0);
+                assert.ok(afterBlackout.droppedDelta >= queuedAtBlackout.heldCurrentCount,
+                    'Blackout did not record dropping every held packet');
                 const held = await holdThroughTimeout(true);
-                const barriers = () => [...logs.server.text.matchAll(/Sent campaign authority handoff barrier (\d+) for paused epoch (\d+)/g)]
-                    .map(match => ({ sequence:Number(match[1]), epoch:Number(match[2]) })).filter(row => row.epoch === epoch(frozen));
-                const oldBarriers = barriers(); assert.ok(oldBarriers.length > 0, 'No actual final barrier was sent before timeout');
+                const oldBarriers = authorityBarrierEvents(logs.server.text).filter(row => row.epoch === pausedEpoch);
+                assert.ok(oldBarriers.some(row => row.sequence > baselineMaxSequence),
+                    'No actual new final barrier was held before timeout');
                 proxy.setFault();
                 await reconnect();
                 await waitState('client1', 'readyForCampaignTests');
                 const recovered = await awaitWriter(initial[1].controller); assert.equal(epoch(recovered[0]), epoch(frozen) + 1);
-                await collectLogs(); const freshBarriers = barriers();
+                await collectLogs();
+                const freshBarriers = authorityBarrierEvents(logs.server.text).filter(row => row.epoch === pausedEpoch);
                 assert.ok(freshBarriers.some(row => row.sequence > Math.max(...oldBarriers.map(old => old.sequence))),
                     'Reconnected candidate did not receive a fresh final barrier sequence');
                 const snapshot = await pause(), probe = await allocation('client1');
                 await command('server', 'coop.debug.authority.availability', ['auto'], true);
                 const returned = await awaitWriter(initial[0].controller); assert.equal(epoch(returned[0]), epoch(recovered[0]) + 2);
-                return { frozen, held, oldBarriers, freshBarriers, recovered, snapshot, probe, returned, final: await pause() };
+                return {
+                    unqueuedSnapshot,
+                    barrierBaseline,
+                    queueBeforeHold,
+                    pausedEpoch,
+                    barrierFaultPoint,
+                    queuedAtBlackout,
+                    afterBlackout,
+                    frozen,
+                    held,
+                    oldBarriers,
+                    freshBarriers,
+                    recovered,
+                    snapshot,
+                    probe,
+                    returned,
+                    final: await pause(),
+                };
             });
         }
         assertPacketEvidence(proxy.stats);

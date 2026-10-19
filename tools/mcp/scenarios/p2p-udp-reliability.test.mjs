@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { options, proxyProfile, assertActors, assertWriter, assertWorld, assertPlayers, assertFrozenHost,
-    assertPacketEvidence, assertProcessEvidence, logDiagnostics, jsonOutput, assertReconnectResult } from './p2p-udp-reliability.mjs';
+    assertPacketEvidence, assertProcessEvidence, logDiagnostics, jsonOutput, assertReconnectResult,
+    authorityBarrierEvents, assertHeldBarrierFaultPoint } from './p2p-udp-reliability.mjs';
 
 const argv = ['--repo','.', '--server','mcp.exe','--config','profiles.json','--sdk-root','node_modules','--record','new.jsonl'];
 const initial = [ { controller:'A', mainHero:'hero_A', mainParty:'party_A', roomHost:'A' },
@@ -104,6 +105,32 @@ test('barrier-only selects one paused handoff without accepting multi-round stre
     assert.throws(()=>options([...argv,'--barrier-only','--rounds','3']));
     assert.throws(()=>options([...argv,'--barrier-only','--lost-writer']));
     assert.throws(()=>options([...argv,'--rounds','1']));
+});
+
+test('candidate fault point requires a new current-epoch barrier, held A-to-B UDP, and live B-to-A traffic', () => {
+    const stats = {
+        errors: [],
+        policies: [{ utc: 'hold-policy-utc', holdToClient: true }],
+        heldTotal: 4, heldCurrentCount: 2, heldCurrentBytes: 180,
+        heldSamples: [{ direction: 'toClient', heldUtc: 'held-utc', policyUtc: 'hold-policy-utc', bytes: 90, sha256: 'a'.repeat(64) }],
+        received: { toHost: 8 }, sent: { toHost: 7 },
+    };
+    const events = authorityBarrierEvents([
+        'Sent campaign authority handoff barrier 7 for paused epoch 6',
+        'Sent campaign authority handoff barrier 10 for paused epoch 8',
+    ].join('\n'));
+    const input = {
+        events, baselineMaxSequence: 9, pausedEpoch: 8, heldBaseline: 2,
+        toHostBaseline: 7, sentToHostBaseline: 6, policyUtc: 'hold-policy-utc', stats,
+    };
+    assert.deepEqual(assertHeldBarrierFaultPoint(input), { sequence: 10, epoch: 8 });
+    assert.throws(() => assertHeldBarrierFaultPoint({ ...input, events: [{ sequence: 9, epoch: 8 }] }),
+        /No new final barrier/);
+    assert.throws(() => assertHeldBarrierFaultPoint({ ...input, pausedEpoch: 7 }), /No new final barrier/);
+    assert.throws(() => assertHeldBarrierFaultPoint({ ...input, heldBaseline: 4 }), /No A-to-B UDP datagram/);
+    assert.throws(() => assertHeldBarrierFaultPoint({ ...input, stats: { ...stats, errors: ['hold overflow'] } }),
+        /Fault proxy reported an error/);
+    assert.throws(() => assertHeldBarrierFaultPoint({ ...input, toHostBaseline: 8 }), /Candidate-to-host UDP/);
 });
 
 test('actual teardown reconnect fallback accepts its exact outcome without invented structured fields', () => {
