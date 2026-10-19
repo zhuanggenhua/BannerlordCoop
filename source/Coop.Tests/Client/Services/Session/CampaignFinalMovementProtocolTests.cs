@@ -34,6 +34,7 @@ public class CampaignFinalMovementProtocolTests
     [InlineData("unprepared")]
     [InlineData("failed-install")]
     [InlineData("clock")]
+    [InlineData("drain")]
     public void ObserverCannotConfirmPausedLeaseWithoutInstalledFinalMovement(string failure)
     {
         var broker = new TestMessageBroker();
@@ -45,10 +46,12 @@ public class CampaignFinalMovementProtocolTests
         movement.Setup(m => m.TryPrepare(checkpoint, Source, 777, out install)).Returns(failure != "unprepared");
         var clock = new Mock<IMapTimeTrackerInterface>();
         clock.Setup(c => c.TryApplyAuthorityHandoffBaseline(777)).Returns(failure != "clock");
-        using var handler = new AuthorityLeaseSnapshotHandler(broker, identity, movement.Object, clock.Object);
+        var tasks = Mock.Of<ICampaignAsyncTaskDrain>(t => t.TryDrain() == (failure != "drain"));
+        using var handler = new AuthorityLeaseSnapshotHandler(broker, identity, movement.Object, clock.Object, asyncTasks: tasks);
         broker.Publish(this, new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint));
         GameThread.Run(() => { }, blocking: true);
         Assert.Equal(Source, identity.CurrentLease);
+        if (failure == "drain") movement.Verify(m => m.TryPrepare(It.IsAny<CampaignMovementCheckpoint>(), Source, 777, out install), Times.Never);
     }
 
     [Fact]
@@ -73,7 +76,7 @@ public class CampaignFinalMovementProtocolTests
             Assert.Equal(Paused, identity.CurrentLease);
             ack = Assert.IsType<NetworkCampaignMovementBaselineApplied>(m);
         });
-        using var handler = new AuthorityLeaseSnapshotHandler(broker, identity, movement.Object, clock, network.Object, controller);
+        using var handler = new AuthorityLeaseSnapshotHandler(broker, identity, movement.Object, clock, network.Object, controller, CampaignHandoffTestServices.Drained());
         broker.Publish(this, new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint));
         GameThread.Run(() => { }, blocking: true);
         Assert.True(installed);

@@ -2,6 +2,7 @@ using Common;
 using Common.Network;
 using GameInterface.Services.Entity;
 using GameInterface.Services.CampaignAuthority.Movement;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Time.Interfaces;
 using Common.Logging;
 using Common.Messaging;
@@ -21,10 +22,11 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
     private readonly IMapTimeTrackerInterface clock;
     private readonly INetwork network;
     private readonly IControllerIdProvider controller;
+    private readonly ICampaignAsyncTaskDrain asyncTasks;
 
     public AuthorityLeaseSnapshotHandler(IMessageBroker messageBroker, ISessionIdentity sessionIdentity,
         ICampaignMovementCheckpointService movement = null, IMapTimeTrackerInterface clock = null,
-        INetwork network = null, IControllerIdProvider controller = null)
+        INetwork network = null, IControllerIdProvider controller = null, ICampaignAsyncTaskDrain asyncTasks = null)
     {
         this.messageBroker = messageBroker;
         this.sessionIdentity = sessionIdentity;
@@ -32,6 +34,7 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
         this.clock = clock;
         this.network = network;
         this.controller = controller;
+        this.asyncTasks = asyncTasks;
         messageBroker.Subscribe<NetworkAuthorityLeaseSnapshot>(Handle_AuthorityLeaseSnapshot);
     }
 
@@ -59,6 +62,7 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
                      snapshot.MovementCheckpoint?.SourceLease != current)))) return;
             if (sessionIdentity.RoomHostControllerId != null && sessionIdentity.RoomHostControllerId.Length > 0 &&
                 sessionIdentity.RoomHostControllerId != snapshot.RoomHostControllerId) return;
+            if (asyncTasks == null || !asyncTasks.TryDrain()) return;
             var checkpoint = snapshot.MovementCheckpoint;
             if (checkpoint == null || !checkpoint.Precedes(lease) ||
                 !movement.TryPrepare(checkpoint, checkpoint.SourceLease, checkpoint.Ticks, out var install) ||

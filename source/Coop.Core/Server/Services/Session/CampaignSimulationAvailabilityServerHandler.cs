@@ -398,7 +398,9 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
                 {
                     if (!HasFinalMovementAcknowledgements(currentLease)) return;
                     if (movement != null && (finalMovementCheckpoint == null ||
-                        !finalMovementCheckpoint.Precedes(currentLease) || !movement.IsInstalled(finalMovementCheckpoint))) return;
+                        !finalMovementCheckpoint.Precedes(currentLease) || mapTimeTracker == null ||
+                        !mapTimeTracker.TryGetCurrentTicks(out long finalTicks) || finalTicks != finalMovementCheckpoint.Ticks ||
+                        !movement.IsInstalled(finalMovementCheckpoint))) return;
                     ResetPendingBarrier();
                     TryCommitLease(currentLease, roomHostControllerId, isPaused: false);
                     return;
@@ -744,11 +746,12 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             }
 
             // Earlier remote world deltas have already applied in this same game-thread FIFO.
+            if (asyncTasks == null || !asyncTasks.TryDrain()) return;
             Func<bool> installMovement = null;
             if (movement != null && (ack.MovementCheckpoint == null || ack.ClockCheckpoint == null ||
                 !movement.TryPrepare(ack.MovementCheckpoint, lease, ack.ClockCheckpoint.Ticks, out installMovement))) return;
             if (ack.AllocationCheckpoint == null || ack.RosterCheckpoint == null || ack.SessionCheckpoint == null ||
-                ack.SchedulerCheckpoint == null || asyncTasks == null || !asyncTasks.TryDrain() ||
+                ack.SchedulerCheckpoint == null ||
                 ack.ClockCheckpoint == null || ack.ClockCheckpoint.Ticks < 0 ||
                 objectManager == null || !objectManager.TryApplyAllocationCheckpoint(ack.AllocationCheckpoint) ||
                 rosterCheckpointService == null || !rosterCheckpointService.TryApply(ack.RosterCheckpoint) ||
