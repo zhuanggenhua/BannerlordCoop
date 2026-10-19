@@ -1,0 +1,38 @@
+# Final movement baseline for authority handoff
+
+This change supplies the missing frozen party position/navigation checkpoint. It does not establish native Mission acceptance. M05's original evidence, including the stable paused epoch 6 differences for 4/24 sampled NPCs, remains unchanged. The first engine-frame divergence and the effectiveness of this fix require a fresh two-process run on the integrated build.
+
+## Change boundary
+
+1. The existing `MobilePartyBehaviorSnapshot` already resolves references, preserves ordinary movement targets and provides the complete join physical/navigation state. Ordinary replication deliberately does not teleport a moving party on every update, and a ListenHost observer does not enter every client correction branch. Existing handoff checkpoints cover allocation, rosters, session, scheduler and clock, but omit final NPC positions/navigation.
+2. An adapter suffices. `CampaignMovementCheckpointService` uses the original `MobilePartyJoinState`, `NetworkMobilePartyJoinState`, `PartyBehaviorWireMapper`, snapshot reference preparation and snapshot installation. The sole snapshot seam extracts its existing full-membership preparation into a reusable deferred apply. Ordinary behavior handling, prediction, ForcePosition, network transport, generator and registry algorithms are unchanged.
+3. Preserve full active-party coverage, existing handles and object identity, all movement targets and navigation modes, receive-only `AllowedThread`, and native local actor identity. Capture rejects stale target references rather than applying the join path's normalization to a live authority. No new objects or fallback Hold commands are created. Position and all reused navigation fields are verified exactly after installation, including serialized float values. Failure leaves the handoff unacknowledged; no timeout or disconnect supplies a missing acknowledgement.
+4. Regression coverage includes the real snapshot/wire-mapper install path, missing late dependencies before earlier mutations, extra active parties, stale epoch/clock, payload corruption, duplicate installation, existing join behavior/membership suites, paused lease installation, final barrier ordering/duplicates, frozen writer capture, wire round trips, and exact all-member acknowledgement gating. Native acceptance additionally requires full active-party coordinate hashes, clock, roster/XP/gold and Epoch comparisons during A→B→A and all-away Mission pause/return.
+
+## Protocol
+
+`CampaignMovementCheckpoint` binds its protobuf payload to the previous writer's complete lease, final clock ticks, party count and SHA256. All active mobile parties are sorted by existing numeric handle. The payload uses the already registered native protobuf surrogates.
+
+- Local room-host writer: drain existing asynchronous tasks and flush buffered authority updates, capture the final movement state under the existing lease transaction, then commit the paused lease.
+- Remote writer: freeze and flush through the existing ordered path, capture final movement beside the five existing checkpoints and include it in the freeze acknowledgement. The host pre-resolves every movement dependency before mutating other checkpoints, installs the received movement, checks exact state and only then commits the paused lease.
+- Paused lease publication carries that same final movement to **every** remaining campaign replica, including Mission observers. A replica rejects a stale/conflicting lease before installation. It prepares all party references and coverage, aligns the existing authority clock baseline, installs the snapshot under receive-only suppression and verifies the final payload before confirming the paused lease and sending `NetworkCampaignMovementBaselineApplied`.
+- The host records the exact synchronized `NetPeer` instances/controllers that must acknowledge. The receipt must match room, paused authority GUID, paused Epoch, controller, ticks, payload hash and still-current peer. Missing, duplicate, old or disconnected peer receipts cannot release the gate. The host cannot resume directly and cannot send a candidate barrier until every required member has acknowledged.
+- A remote candidate still passes the original final ordered barrier. The movement checkpoint must match the baseline installed by the paused lease, all dependencies are prepared before the five other checkpoints, and acknowledgement follows exact movement verification. A repeated barrier cannot reapply or emit a second candidate acknowledgement. Activation then follows the existing room-host lease commit.
+
+Exact duplicate movement checkpoints verify current state without writing it again. A conflicting checkpoint for an already installed source lease is refused. Failed or throwing applications never issue a success acknowledgement. This is safe fencing, not a transactional rollback of the five pre-existing checkpoint services: if an earlier service already changed state before a later service fails, the room remains unactivated and needs diagnosis.
+
+## Integration
+
+Register `GameInterface.Services.CampaignAuthority.Movement.MovementModule` in `GameInterfaceModule`. The root coordinator owns that shared registration. Existing session handlers resolve the new service from Autofac. Their optional service arguments preserve existing non-migration test and legacy construction paths; migration production composition must include the module. No local loopback client or independent game server is introduced.
+
+The service exposes `LastCaptured`, `LastApplied` and `IsInstalled` for read-only inspection. Capture/install logs record source Epoch, ticks, count and SHA256. Failed exact post-install verification logs the first concrete expected/actual party state. The room-host handler logs expected member acknowledgement count, each accepted controller and remaining count. `PendingMovementAcknowledgements` exposes the current outstanding count on the game thread.
+
+## Automated evidence
+
+Worker logs and TRX files are retained under ignored `artifacts/movement-r3/`; the handoff records final commands, exit codes and hashes. Initial missing-namespace compilation failures are retained separately and are not test passes. A controlled production mutation replacing `HasFinalMovementAcknowledgements` with `true` made all three new host gate tests fail (candidate barrier sent early, host resumed early, disconnected member bypassed). The source was restored and the same tests were rerun with the gate enabled. This negative control is distinct from a native failure or proof of network fault acceptance.
+
+## Remaining native and recovery work
+
+No worker launched or deployed a game. The coordinator must verify the integrated version through the physical game lock, preserving M05 and all earlier failures. Check full-party position hashes at stable all-away pause and final handoff, and inspect capture/install/acknowledgement/activation logs to find the first divergence. A new strict capture refusal must be investigated by party identity and dependency, not replaced with normalization, fixed sleeps or an omitted object.
+
+The current all-member gate intentionally stays fenced if a required peer disappears before acknowledging. Reconnection/recovery needs an explicit verified checkpoint/peer replacement protocol; removal of that receipt requirement is not a safe recovery implementation. Full Campaign/RNG/AI transactional state and durable committed checkpoint recovery are outside this change. Actual changedHP, battle damage, engine lifecycle repairs and broad Mission/battle acceptance are also outside it.

@@ -1,4 +1,5 @@
-﻿using Common;
+using Common;
+using GameInterface.Services.CampaignAuthority.Movement;
 using Common.Logging;
 using Common.Messaging;
 using Common.Network;
@@ -29,6 +30,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
     private readonly ICampaignSchedulerCheckpointService schedulerCheckpointService;
     private readonly ICampaignAsyncTaskDrain asyncTasks;
     private readonly ISendCoalescer sendCoalescer;
+    private readonly ICampaignMovementCheckpointService movement;
 
     public CampaignAuthorityFreezeClientHandler(
         IMessageBroker messageBroker,
@@ -41,7 +43,8 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
         ICampaignSessionCheckpointService sessionCheckpointService,
         ICampaignSchedulerCheckpointService schedulerCheckpointService,
         ICampaignAsyncTaskDrain asyncTasks,
-        ISendCoalescer sendCoalescer = null)
+        ISendCoalescer sendCoalescer = null,
+        ICampaignMovementCheckpointService movement = null)
     {
         this.messageBroker = messageBroker;
         this.network = network;
@@ -54,6 +57,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
         this.schedulerCheckpointService = schedulerCheckpointService;
         this.asyncTasks = asyncTasks;
         this.sendCoalescer = sendCoalescer;
+        this.movement = movement;
         messageBroker.Subscribe<NetworkCampaignAuthorityFreezeRequest>(Handle_FreezeRequest);
         messageBroker.Subscribe<NetworkCampaignAuthorityFreezeCanceled>(Handle_FreezeCanceled);
     }
@@ -126,8 +130,14 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
                     request.HandoffSequence);
                 return;
             }
+            CampaignMovementCheckpoint movementCheckpoint = null;
+            if (movement != null && !movement.TryCapture(lease, ticks, out movementCheckpoint))
+            {
+                Logger.Warning("Could not capture final movement for freeze {HandoffSequence}; authority remains frozen", request.HandoffSequence);
+                return;
+            }
             network.SendAll(request.ToAcknowledged(objectManager.CaptureAllocationCheckpoint(), rosterCheckpoint,
-                new CampaignClockCheckpoint(ticks), sessionCheckpoint, schedulerCheckpoint));
+                new CampaignClockCheckpoint(ticks), sessionCheckpoint, schedulerCheckpoint, movementCheckpoint));
             network.FlushPendingMessages();
             Logger.Information("Froze local campaign writes and acknowledged handoff {HandoffSequence} at epoch {Epoch} to controller {CandidateControllerId}",
                 request.HandoffSequence, request.Epoch, request.CandidateControllerId);

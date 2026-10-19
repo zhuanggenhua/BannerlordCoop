@@ -1,4 +1,4 @@
-﻿using Common.Messaging;
+using Common.Messaging;
 using ProtoBuf;
 
 namespace Common.Network.Session;
@@ -20,6 +20,7 @@ public readonly struct NetworkCampaignAuthorityHandoffBarrier : IServerToClientC
     [ProtoMember(8)] public readonly CampaignClockCheckpoint ClockCheckpoint;
     [ProtoMember(9)] public readonly CampaignSessionCheckpoint SessionCheckpoint;
     [ProtoMember(10)] public readonly CampaignSchedulerCheckpoint SchedulerCheckpoint;
+    [ProtoMember(11)] public readonly CampaignMovementCheckpoint MovementCheckpoint;
 
     public NetworkCampaignAuthorityHandoffBarrier(
         string roomId,
@@ -31,7 +32,8 @@ public readonly struct NetworkCampaignAuthorityHandoffBarrier : IServerToClientC
         CampaignRosterCheckpoint rosterCheckpoint = null,
         CampaignClockCheckpoint clockCheckpoint = null,
         CampaignSessionCheckpoint sessionCheckpoint = null,
-        CampaignSchedulerCheckpoint schedulerCheckpoint = null)
+        CampaignSchedulerCheckpoint schedulerCheckpoint = null,
+        CampaignMovementCheckpoint movementCheckpoint = null)
     {
         RoomId = roomId ?? string.Empty;
         PausedAuthorityId = pausedAuthorityId ?? string.Empty;
@@ -43,6 +45,7 @@ public readonly struct NetworkCampaignAuthorityHandoffBarrier : IServerToClientC
         ClockCheckpoint = clockCheckpoint;
         SessionCheckpoint = sessionCheckpoint;
         SchedulerCheckpoint = schedulerCheckpoint;
+        MovementCheckpoint = movementCheckpoint;
     }
 
     public NetworkCampaignAuthorityHandoffBarrierApplied ToApplied() => new NetworkCampaignAuthorityHandoffBarrierApplied(

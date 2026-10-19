@@ -1,4 +1,4 @@
-﻿using Common.Messaging;
+using Common.Messaging;
 using ProtoBuf;
 
 namespace Common.Network.Session;
@@ -30,10 +30,10 @@ public readonly struct NetworkCampaignAuthorityFreezeRequest : IServerToClientCo
     public NetworkCampaignAuthorityFreezeAcknowledged ToAcknowledged(
         RegistryAllocationCheckpoint allocationCheckpoint = null, CampaignRosterCheckpoint rosterCheckpoint = null,
         CampaignClockCheckpoint clockCheckpoint = null, CampaignSessionCheckpoint sessionCheckpoint = null,
-        CampaignSchedulerCheckpoint schedulerCheckpoint = null) =>
+        CampaignSchedulerCheckpoint schedulerCheckpoint = null, CampaignMovementCheckpoint movementCheckpoint = null) =>
         new NetworkCampaignAuthorityFreezeAcknowledged(
             RoomId, AuthorityId, AuthorityControllerId, Epoch, CandidateControllerId, HandoffSequence, allocationCheckpoint,
-            rosterCheckpoint, clockCheckpoint, sessionCheckpoint, schedulerCheckpoint);
+            rosterCheckpoint, clockCheckpoint, sessionCheckpoint, schedulerCheckpoint, movementCheckpoint);
 
     public NetworkCampaignAuthorityFreezeCanceled ToCanceled() =>
         new NetworkCampaignAuthorityFreezeCanceled(
@@ -55,6 +55,7 @@ public readonly struct NetworkCampaignAuthorityFreezeAcknowledged : IMessage
     [ProtoMember(9)] public readonly CampaignClockCheckpoint ClockCheckpoint;
     [ProtoMember(10)] public readonly CampaignSessionCheckpoint SessionCheckpoint;
     [ProtoMember(11)] public readonly CampaignSchedulerCheckpoint SchedulerCheckpoint;
+    [ProtoMember(12)] public readonly CampaignMovementCheckpoint MovementCheckpoint;
 
     public NetworkCampaignAuthorityFreezeAcknowledged(
         string roomId,
@@ -67,7 +68,8 @@ public readonly struct NetworkCampaignAuthorityFreezeAcknowledged : IMessage
         CampaignRosterCheckpoint rosterCheckpoint = null,
         CampaignClockCheckpoint clockCheckpoint = null,
         CampaignSessionCheckpoint sessionCheckpoint = null,
-        CampaignSchedulerCheckpoint schedulerCheckpoint = null)
+        CampaignSchedulerCheckpoint schedulerCheckpoint = null,
+        CampaignMovementCheckpoint movementCheckpoint = null)
     {
         RoomId = roomId ?? string.Empty;
         AuthorityId = authorityId ?? string.Empty;
@@ -80,6 +82,7 @@ public readonly struct NetworkCampaignAuthorityFreezeAcknowledged : IMessage
         ClockCheckpoint = clockCheckpoint;
         SessionCheckpoint = sessionCheckpoint;
         SchedulerCheckpoint = schedulerCheckpoint;
+        MovementCheckpoint = movementCheckpoint;
     }
 }
 

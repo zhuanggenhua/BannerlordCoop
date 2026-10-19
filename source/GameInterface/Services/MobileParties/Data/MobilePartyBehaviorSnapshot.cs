@@ -1,4 +1,4 @@
-﻿using Common;
+using Common;
 using Common.Logging;
 using Common.Util;
 using GameInterface.Services.ObjectManager;
@@ -27,6 +27,8 @@ public interface IMobilePartyBehaviorSnapshot
         out string failure);
     bool TryApply(MobileParty party, PartyBehaviorUpdateData data, out IInteractablePoint interactable);
     bool TryApplyJoinBaseline(MobilePartyJoinState[] states, Action beforeApply);
+    bool TryPrepareAuthorityBaseline(MobilePartyJoinState[] states, out Func<bool> apply);
+    bool TryCreateAuthorityState(MobileParty party, ISet<MobileParty> parties, ISet<Settlement> settlements, out MobilePartyJoinState state);
 }
 
 public sealed partial class MobilePartyBehaviorSnapshot : IMobilePartyBehaviorSnapshot
@@ -180,6 +182,16 @@ public sealed partial class MobilePartyBehaviorSnapshot : IMobilePartyBehaviorSn
         return true;
     }
 
+    public bool TryCreateAuthorityState(MobileParty party, ISet<MobileParty> parties,
+        ISet<Settlement> settlements, out MobilePartyJoinState state)
+    {
+        state = default;
+        if (parties == null || settlements == null ||
+            TryGetInvalidJoinReferences(party, parties, settlements, out _) ||
+            (party?.MoveTargetParty != null && !parties.Contains(party.MoveTargetParty))) return false;
+        return TryCreateJoinState(party, parties, settlements, out state, out _);
+    }
+
     private static PartyBehaviorUpdateData CreatePointJoinBehavior(MobileParty party, string partyId)
     {
         CampaignVec2 destination = party.MoveTargetParty?.Position ?? party.MoveTargetPoint;
@@ -289,10 +301,17 @@ public sealed partial class MobilePartyBehaviorSnapshot : IMobilePartyBehaviorSn
 
     public bool TryApplyJoinBaseline(MobilePartyJoinState[] states, Action beforeApply)
     {
+        if (beforeApply == null) return RejectJoinBaseline("the before-apply callback is null");
+        if (!TryPrepareAuthorityBaseline(states, out var apply)) return false;
+        try { beforeApply(); return apply(); }
+        catch (Exception ex) { return RejectJoinBaseline("before-apply callback failed", ex); }
+    }
+
+    public bool TryPrepareAuthorityBaseline(MobilePartyJoinState[] states, out Func<bool> apply)
+    {
+        apply = null;
         if (states == null)
             return RejectJoinBaseline("the baseline party-state array is null");
-        if (beforeApply == null)
-            return RejectJoinBaseline("the before-apply callback is null");
 
         var objectManager = Campaign.Current?.CampaignObjectManager;
         var parties = objectManager?.MobileParties;
@@ -364,9 +383,14 @@ public sealed partial class MobilePartyBehaviorSnapshot : IMobilePartyBehaviorSn
                 $"party coverage mismatch (baseline={seenParties.Count}, client={liveParties.Count})");
         }
 
+        apply = () => ApplyPreparedBaseline(states, resolved);
+        return true;
+    }
+
+    private bool ApplyPreparedBaseline(MobilePartyJoinState[] states, ResolvedBehaviorUpdate[] resolved)
+    {
         try
         {
-            beforeApply();
             using (new AllowedThread())
             {
                 for (int i = 0; i < resolved.Length; i++)

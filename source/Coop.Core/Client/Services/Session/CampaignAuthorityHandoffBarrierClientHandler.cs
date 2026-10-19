@@ -1,4 +1,5 @@
-﻿using Common;
+using Common;
+using GameInterface.Services.CampaignAuthority.Movement;
 using Common.Logging;
 using Common.Messaging;
 using Common.Network;
@@ -33,6 +34,9 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
     private readonly ICampaignSessionCheckpointService sessionCheckpointService;
     private readonly ICampaignSchedulerCheckpointService schedulerCheckpointService;
     private readonly ICampaignAsyncTaskDrain asyncTasks;
+    private readonly ICampaignMovementCheckpointService movement;
+    private long appliedEpoch;
+    private long appliedSequence;
     private bool campaignSynchronized;
     private bool mapReady;
 
@@ -46,7 +50,8 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         IMapTimeTrackerInterface mapTimeTracker,
         ICampaignSessionCheckpointService sessionCheckpointService,
         ICampaignSchedulerCheckpointService schedulerCheckpointService,
-        ICampaignAsyncTaskDrain asyncTasks)
+        ICampaignAsyncTaskDrain asyncTasks,
+        ICampaignMovementCheckpointService movement = null)
     {
         this.messageBroker = messageBroker;
         this.network = network;
@@ -58,6 +63,7 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         this.sessionCheckpointService = sessionCheckpointService;
         this.schedulerCheckpointService = schedulerCheckpointService;
         this.asyncTasks = asyncTasks;
+        this.movement = movement;
         messageBroker.Subscribe<ClientCampaignReady>(Handle_ClientCampaignReady);
         messageBroker.Subscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Subscribe<NetworkCampaignAuthorityHandoffBarrier>(Handle_HandoffBarrier);
@@ -109,6 +115,15 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         }
 
         if (barrier.SchedulerCheckpoint == null || !asyncTasks.TryDrain()) return;
+        if (lease.Epoch == appliedEpoch && barrier.BarrierSequence <= appliedSequence) return;
+        Func<bool> installMovement = null;
+        if (movement != null && (barrier.MovementCheckpoint == null ||
+            !barrier.MovementCheckpoint.Precedes(lease) ||
+            movement.LastApplied == null || movement.LastApplied.SourceLease != barrier.MovementCheckpoint.SourceLease ||
+            movement.LastApplied.Ticks != barrier.ClockCheckpoint.Ticks || movement.LastApplied.Sha256 != barrier.MovementCheckpoint.Sha256 ||
+            !movement.TryPrepare(barrier.MovementCheckpoint, barrier.MovementCheckpoint.SourceLease,
+                barrier.ClockCheckpoint.Ticks, out installMovement))) return;
+
 
         if (!objectManager.TryApplyAllocationCheckpoint(barrier.AllocationCheckpoint))
         {
@@ -145,6 +160,9 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
             return;
         }
 
+        if (installMovement != null && !installMovement()) return;
+        appliedEpoch = lease.Epoch;
+        appliedSequence = barrier.BarrierSequence;
         network.SendAll(barrier.ToApplied());
         network.FlushPendingMessages();
         Logger.Information("Applied campaign authority handoff barrier {BarrierSequence} for paused epoch {Epoch}",

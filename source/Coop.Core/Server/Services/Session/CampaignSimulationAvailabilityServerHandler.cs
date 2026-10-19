@@ -1,4 +1,5 @@
-﻿using Common;
+using Common;
+using GameInterface.Services.CampaignAuthority.Movement;
 using Common.Logging;
 using Common.Messaging;
 using Common.Network;
@@ -44,6 +45,11 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private readonly ICampaignSessionCheckpointService sessionCheckpointService;
     private readonly ICampaignSchedulerCheckpointService schedulerCheckpointService;
     private readonly ICampaignAsyncTaskDrain asyncTasks;
+    private readonly ICampaignMovementCheckpointService movement;
+    private CampaignMovementCheckpoint finalMovementCheckpoint;
+    private AuthorityLease pendingMovementLease;
+    private readonly Dictionary<int, (NetPeer peer, string controller)> pendingMovementAcks = new();
+    public int PendingMovementAcknowledgements => pendingMovementAcks.Count;
     private readonly object peerGate = new object();
     private readonly object localReportGate = new object();
     private readonly object selectionGate = new object();
@@ -86,7 +92,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         IMapTimeTrackerInterface mapTimeTracker = null,
         ICampaignSessionCheckpointService sessionCheckpointService = null,
         ICampaignSchedulerCheckpointService schedulerCheckpointService = null,
-        ICampaignAsyncTaskDrain asyncTasks = null)
+        ICampaignAsyncTaskDrain asyncTasks = null,
+        ICampaignMovementCheckpointService movement = null)
     {
         this.messageBroker = messageBroker;
         this.coordinator = coordinator;
@@ -102,12 +109,14 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         this.sessionCheckpointService = sessionCheckpointService;
         this.schedulerCheckpointService = schedulerCheckpointService;
         this.asyncTasks = asyncTasks;
+        this.movement = movement;
         messageBroker.Subscribe<CampaignReady>(Handle_CampaignReady);
         messageBroker.Subscribe<CampaignInitializationCompleted>(Handle_CampaignInitializationCompleted);
         messageBroker.Subscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Subscribe<NetworkCampaignSimulationAvailabilityReport>(Handle_AvailabilityReport);
         messageBroker.Subscribe<NetworkCampaignAuthorityHandoffBarrierApplied>(Handle_HandoffBarrierApplied);
         messageBroker.Subscribe<NetworkCampaignAuthorityFreezeAcknowledged>(Handle_FreezeAcknowledged);
+        messageBroker.Subscribe<NetworkCampaignMovementBaselineApplied>(Handle_MovementBaselineApplied);
         messageBroker.Subscribe<PlayerDisconnected>(Handle_PlayerDisconnected);
         reconciliationTimer = new Timer(_ => OnAvailabilityTimer(), null, 1000, 1000);
     }
@@ -123,6 +132,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         messageBroker.Unsubscribe<NetworkCampaignSimulationAvailabilityReport>(Handle_AvailabilityReport);
         messageBroker.Unsubscribe<NetworkCampaignAuthorityHandoffBarrierApplied>(Handle_HandoffBarrierApplied);
         messageBroker.Unsubscribe<NetworkCampaignAuthorityFreezeAcknowledged>(Handle_FreezeAcknowledged);
+        messageBroker.Unsubscribe<NetworkCampaignMovementBaselineApplied>(Handle_MovementBaselineApplied);
         messageBroker.Unsubscribe<PlayerDisconnected>(Handle_PlayerDisconnected);
         lock (selectionGate)
         {
@@ -386,6 +396,9 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
                     string.Equals(selection.ControllerId, roomHostControllerId, StringComparison.Ordinal) &&
                     coordinator.IsFreshMapReady(roomHostControllerId))
                 {
+                    if (!HasFinalMovementAcknowledgements(currentLease)) return;
+                    if (movement != null && (finalMovementCheckpoint == null ||
+                        !finalMovementCheckpoint.Precedes(currentLease) || !movement.IsInstalled(finalMovementCheckpoint))) return;
                     ResetPendingBarrier();
                     TryCommitLease(currentLease, roomHostControllerId, isPaused: false);
                     return;
@@ -431,6 +444,11 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             {
                 sendCoalescer?.Flush(network);
                 network.FlushPendingMessages();
+                if (movement != null)
+                {
+                    if (mapTimeTracker == null || !mapTimeTracker.TryGetCurrentTicks(out long frozenTicks) ||
+                        !movement.TryCapture(currentLease, frozenTicks, out finalMovementCheckpoint)) return;
+                }
                 committedPause = TryCommitLease(currentLease, string.Empty, isPaused: true);
             }) || !committedPause) return;
 
@@ -470,7 +488,12 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             return false;
         }
 
+        if (!isPaused && movement != null)
+            Logger.Information("Activated campaign authority epoch {Epoch} controller {ControllerId} final movement source epoch {SourceEpoch} ticks {Ticks} sha256 {Sha256} outstanding member receipts {Count}",
+                nextLease.Epoch, authorityControllerId, finalMovementCheckpoint?.Epoch, finalMovementCheckpoint?.Ticks,
+                finalMovementCheckpoint?.Sha256, pendingMovementAcks.Count);
         mapTimeTracker?.SetObserverClockSuspended(false);
+        if (nextLease.IsPaused && movement != null) BeginMovementAcknowledgements(nextLease);
         pendingLeaseBroadcast = nextLease;
         BroadcastPendingLease();
         Logger.Information("Committed {LeaseState} campaign authority lease epoch {Epoch} for controller {ControllerId}",
@@ -481,7 +504,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private void TrySendHandoffBarrier(AuthorityLease pausedLease, string candidateControllerId)
     {
         if (objectManager == null || rosterCheckpointService == null || mapTimeTracker == null ||
-            sessionCheckpointService == null || schedulerCheckpointService == null) return;
+            sessionCheckpointService == null || schedulerCheckpointService == null || !HasFinalMovementAcknowledgements(pausedLease)) return;
 
         if (!pausedLease.IsPaused || string.IsNullOrWhiteSpace(candidateControllerId) ||
             string.Equals(candidateControllerId, sessionIdentity.RoomHostControllerId, StringComparison.Ordinal) ||
@@ -544,6 +567,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
                 candidateControllerId);
             return;
         }
+        if (movement != null && (finalMovementCheckpoint == null || !finalMovementCheckpoint.Precedes(pausedLease) ||
+            finalMovementCheckpoint.Ticks != ticks || !movement.IsInstalled(finalMovementCheckpoint))) return;
 
         var barrier = new NetworkCampaignAuthorityHandoffBarrier(
             pausedLease.RoomId,
@@ -555,7 +580,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             rosterCheckpoint,
             new CampaignClockCheckpoint(ticks),
             sessionCheckpoint,
-            schedulerCheckpoint);
+            schedulerCheckpoint,
+            finalMovementCheckpoint);
 
         try
         {
@@ -718,6 +744,9 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             }
 
             // Earlier remote world deltas have already applied in this same game-thread FIFO.
+            Func<bool> installMovement = null;
+            if (movement != null && (ack.MovementCheckpoint == null || ack.ClockCheckpoint == null ||
+                !movement.TryPrepare(ack.MovementCheckpoint, lease, ack.ClockCheckpoint.Ticks, out installMovement))) return;
             if (ack.AllocationCheckpoint == null || ack.RosterCheckpoint == null || ack.SessionCheckpoint == null ||
                 ack.SchedulerCheckpoint == null || asyncTasks == null || !asyncTasks.TryDrain() ||
                 ack.ClockCheckpoint == null || ack.ClockCheckpoint.Ticks < 0 ||
@@ -732,6 +761,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
                 return;
             }
 
+            if (installMovement != null && !installMovement()) return;
+            finalMovementCheckpoint = ack.MovementCheckpoint;
             if (!TryCommitLease(lease, string.Empty, isPaused: true)) return;
             hasPendingFreeze = false;
             ResetPendingBarrier();
@@ -772,6 +803,52 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         }
     }
 
+    private void BeginMovementAcknowledgements(AuthorityLease paused)
+    {
+        pendingMovementLease = paused;
+        pendingMovementAcks.Clear();
+        lock (peerGate)
+        {
+            foreach (var entry in peerControllerIds)
+            {
+                if (playerManager.TryGetPeer(entry.Value, out var peer) && peer != null && peer.Id == entry.Key &&
+                    connections.HasCompletedCampaignSynchronization(peer))
+                    pendingMovementAcks.Add(peer.Id, (peer, entry.Value));
+            }
+        }
+        Logger.Information("Final movement paused epoch {Epoch} awaiting {Count} synchronized member acknowledgements sha256 {Sha256}",
+            paused.Epoch, pendingMovementAcks.Count, finalMovementCheckpoint?.Sha256);
+    }
+
+    private bool HasFinalMovementAcknowledgements(AuthorityLease paused) => movement == null ||
+        (pendingMovementLease == paused && pendingMovementAcks.Count == 0 && finalMovementCheckpoint != null);
+
+    private void Handle_MovementBaselineApplied(MessagePayload<NetworkCampaignMovementBaselineApplied> payload)
+    {
+        if (payload.Who is not NetPeer peer) return;
+        var ack = payload.What;
+        GameThread.EnqueueSafe(() => ApplyMovementAcknowledgement(peer, ack), context: nameof(CampaignSimulationAvailabilityServerHandler));
+    }
+
+    private void ApplyMovementAcknowledgement(NetPeer peer, NetworkCampaignMovementBaselineApplied ack)
+    {
+        lock (selectionGate)
+        lock (leaseGate)
+        {
+            if (movement == null || !sessionIdentity.TryGetConfirmedLease(out var paused) || !paused.IsPaused ||
+                pendingMovementLease != paused || finalMovementCheckpoint == null ||
+                !pendingMovementAcks.TryGetValue(peer.Id, out var expected) || !ReferenceEquals(expected.peer, peer) ||
+                ack.RoomId != paused.RoomId || ack.PausedAuthorityId != paused.AuthorityId || ack.PausedEpoch != paused.Epoch ||
+                ack.Ticks != finalMovementCheckpoint.Ticks || ack.Sha256 != finalMovementCheckpoint.Sha256 ||
+                ack.ControllerId != expected.controller || !TryGetSynchronizedPeer(ack.ControllerId, out var currentPeer) ||
+                !ReferenceEquals(peer, currentPeer)) return;
+            pendingMovementAcks.Remove(peer.Id);
+            Logger.Information("Confirmed final movement member {ControllerId} paused epoch {Epoch} remaining {Count} ticks {Ticks} sha256 {Sha256}",
+                ack.ControllerId, paused.Epoch, pendingMovementAcks.Count, ack.Ticks, ack.Sha256);
+            ReconcileLease(coordinator.Select());
+        }
+    }
+
     private void BroadcastPendingLease()
     {
         if (!pendingLeaseBroadcast.HasValue) return;
@@ -779,7 +856,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         var lease = pendingLeaseBroadcast.Value;
         try
         {
-            network.SendAll(new NetworkAuthorityLeaseSnapshot(lease, sessionIdentity.RoomHostControllerId));
+            network.SendAll(new NetworkAuthorityLeaseSnapshot(lease, sessionIdentity.RoomHostControllerId,
+                lease.IsPaused ? finalMovementCheckpoint : null));
             pendingLeaseBroadcast = null;
         }
         catch (Exception ex)
