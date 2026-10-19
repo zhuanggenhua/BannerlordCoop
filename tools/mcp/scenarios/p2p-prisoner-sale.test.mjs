@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
-import { assertSaleApplications, assertSaleTransition, assertStopped, options, saleApplications, OnceActions } from './p2p-prisoner-sale.mjs';
+import { assertPausedSnapshot, assertSaleApplications, assertSaleRegistrations, assertSaleTransition,
+    assertStopped, options, pollReadOnly, saleApplications, OnceActions } from './p2p-prisoner-sale.mjs';
 
 const clone = value => structuredClone(value);
 const ids = [
@@ -48,6 +49,46 @@ function snapshots() {
         actors: [[actor('A', 1120, []), actor('B', 700, [])], [actor('A', 1120, []), actor('B', 700, [])]] };
     return { before, after };
 }
+
+test('native Pause is independent of a live, unique, unfrozen authority lease', () => {
+    const activeLease = { ...lease, authorityControllerId: 'server', isPaused: false };
+    const states = [state('server', ids[0]), state('client1', ids[1])]
+        .map((value, index) => ({ ...value, lease: activeLease, localAuthority: index === 0 }));
+    const actors = [{ ...ids[0], controller: 'server' }, { ...ids[1], controller: 'client1' }];
+    const worlds = [world(), world()];
+    assert.equal(assertPausedSnapshot(['Pause', 'Pause'], states, actors, worlds, clone(worlds)), true);
+    assert.throws(() => assertPausedSnapshot(['Pause', 'Pause'], states, actors, worlds,
+        [world({ ticks: 601 }), world({ ticks: 601 })]), /World changed while campaign time is paused/);
+    assert.throws(() => assertPausedSnapshot(['Play_1x', 'Pause'], states, actors, worlds, clone(worlds)), /Pause/);
+
+    const leasePausedStates = clone(states);
+    for (const value of leasePausedStates) value.lease = { ...value.lease, isPaused: true };
+    assert.throws(() => assertPausedSnapshot(['Pause', 'Pause'], leasePausedStates, actors, worlds, clone(worlds)),
+        /retain an active authority lease/);
+
+    const frozenStates = clone(states); frozenStates[1].frozen = true;
+    assert.throws(() => assertPausedSnapshot(['Pause', 'Pause'], frozenStates, actors, worlds, clone(worlds)),
+        /must not freeze the authority world/);
+
+    const doubleWriterStates = clone(states); doubleWriterStates[1].localAuthority = true;
+    assert.throws(() => assertPausedSnapshot(['Pause', 'Pause'], doubleWriterStates, actors, worlds, clone(worlds)),
+        error => error.name === 'AssertionError');
+});
+
+test('registration polling cannot pass while the joining actor is inactive', async () => {
+    const complete = [player('A', 1000), player('B', 700)];
+    const pendingB = { ...player('B', 700), active: false };
+    const pending = [clone(complete), [clone(complete[0]), clone(pendingB)]];
+    const ready = [clone(complete), clone(complete)];
+    let now = 0, reads = 0;
+    const result = await pollReadOnly('registered actors', async () => {
+        const pair = reads++ === 0 ? pending : ready;
+        assertSaleRegistrations(pair, ids);
+        return pair;
+    }, { timeoutMs: 25, intervalMs: 5, now: () => now, sleep: async milliseconds => { now += milliseconds; } });
+    assert.equal(reads, 2);
+    assert.deepEqual(result, ready);
+});
 function appLine({ origin = 'A', writer = 'A', epoch = 3, authority = 'world-3', stream = 'a'.repeat(32), sequence = 1, party = 101,
     time = '12:00:00.000' } = {}) {
     return `[${time} INF] Prisoner sale applied originController="${origin}" writerController="${writer}" epoch=${epoch} authorityId=${authority} requestStream=${stream} requestSequence=${sequence} sellingPartyId=${party}`;
@@ -124,6 +165,7 @@ test('cleanup means both owned native process trees have exited', () => {
 test('scenario uses the production sale prefix, exact application ledger, one-shot mutations, and strict cleanup', async () => {
     const source = await readFile(new URL('./p2p-prisoner-sale.mjs', import.meta.url), 'utf8');
     assert.match(source, /coop\.debug\.prisoner_sale\.submit/);
+    assert.match(source, /coop\.debug\.get_time_mode/);
     assert.match(source, /application record/);
     assert.match(source, /'stop_run'/);
     assert.doesNotMatch(source, /PrisonerSaleProcessor|processor\.Sell|coop\.debug\.(?:teleport|set_gold)/);

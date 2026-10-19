@@ -56,6 +56,47 @@ export class OnceActions {
     }
 }
 
+export async function pollReadOnly(label, readAndAssert, {
+    timeoutMs = 30000, intervalMs = 500, now = Date.now, sleep = delay, onPending = async () => {},
+} = {}) {
+    const deadline = now() + timeoutMs; let lastError;
+    do {
+        try { return await readAndAssert(deadline); }
+        catch (error) { lastError = error; await onPending(error); }
+        if (now() < deadline) await sleep(Math.min(intervalMs, deadline - now()));
+    } while (now() < deadline);
+    throw new Error(`${label} did not converge: ${lastError?.message}`, { cause: lastError });
+}
+
+export function assertSaleRegistrations(pair, actors) {
+    assertPlayers(pair);
+    for (let viewpoint = 0; viewpoint < pair.length; viewpoint++) {
+        for (let i = 0; i < pair[viewpoint].length; i++) {
+            const row = pair[viewpoint][i];
+            assert.equal(row.controllerId, actors[i].controller);
+            assert.equal(row.active, true);
+            assert.equal(row.registeredPlayers, 2); assert.equal(row.heroRegistrations, 1);
+            assert.equal(row.partyRegistrations, 1); assert.equal(row.clanRegistrations, 1);
+            assert.equal(row.heroStringId, actors[i].mainHero); assert.equal(row.partyStringId, actors[i].mainParty);
+        }
+    }
+    return pair;
+}
+
+export function assertPausedSnapshot(timeModes, states, actors, worlds, previousWorlds) {
+    assert.deepEqual(timeModes, ['Pause', 'Pause'], 'Both native peers must report campaign time Pause');
+    assert.equal(states.length, 2);
+    for (const value of states) {
+        assert.equal(leasePaused(value), false, 'Native campaign Pause must retain an active authority lease');
+        assert.equal(value.frozen, false, 'Native campaign Pause must not freeze the authority world');
+    }
+    assertWriter(states, writer(states[0]), actors);
+    assertWorld(worlds);
+    if (previousWorlds === undefined) return false;
+    assert.deepEqual(worlds, previousWorlds, 'World changed while campaign time is paused');
+    return true;
+}
+
 function readToken(value) { return value.startsWith('"') ? JSON.parse(value) : value; }
 
 export function saleApplications(logTexts) {
@@ -237,15 +278,11 @@ export async function run(config) {
     const bothStates = () => Promise.all(INSTANCES.map(state));
 
     async function poll(label, readAndAssert, timeout = 30000) {
-        const deadline = Date.now() + timeout; let lastError;
-        do {
+        return pollReadOnly(label, async deadline => {
             const previousDeadline = readDeadline;
             try { readDeadline = deadline; return await readAndAssert(); }
-            catch (error) { lastError = error; await emit({ phase: 'poll_pending', label, reason: error.message }); }
             finally { readDeadline = previousDeadline; }
-            await delay(500);
-        } while (Date.now() < deadline);
-        throw new Error(`${label} did not converge: ${lastError?.message}`, { cause: lastError });
+        }, { timeoutMs: timeout, onPending: error => emit({ phase: 'poll_pending', label, reason: error.message }) });
     }
     async function awaitWriter(controller) {
         return poll('confirmed writer ' + controller, async () => {
@@ -255,25 +292,19 @@ export async function run(config) {
             return states;
         });
     }
-    async function registrations() {
+    async function readRegistrations() {
         const pair = await Promise.all(INSTANCES.map(instance => Promise.all(initial.map(actor => playerState(instance, actor.controller)))));
-        assertPlayers(pair);
-        for (let viewpoint = 0; viewpoint < pair.length; viewpoint++) {
-            for (let i = 0; i < pair[viewpoint].length; i++) {
-                const row = pair[viewpoint][i];
-                assert.equal(row.controllerId, initial[i].controller); assert.equal(row.active, true);
-                assert.equal(row.registeredPlayers, 2); assert.equal(row.heroRegistrations, 1);
-                assert.equal(row.partyRegistrations, 1); assert.equal(row.clanRegistrations, 1);
-                assert.equal(row.heroStringId, initial[i].mainHero); assert.equal(row.partyStringId, initial[i].mainParty);
-            }
-        }
+        assertSaleRegistrations(pair, initial);
         assertActors(await bothStates(), initial); return pair;
+    }
+    async function registrations(waitForReady = true) {
+        return waitForReady ? poll('registered player replicas', readRegistrations) : readRegistrations();
     }
     async function snapshot(label) {
         return poll(label, async () => {
             const states = await bothStates(); assertActors(states, initial);
             const worlds = await Promise.all(INSTANCES.map(world)); assertWorld(worlds);
-            const players = await registrations();
+            const players = await registrations(false);
             const actors = await Promise.all(INSTANCES.map(instance => Promise.all(initial.map(actor => inspect(instance, actor.controller)))));
             for (let viewpoint = 0; viewpoint < 2; viewpoint++) {
                 for (const row of actors[viewpoint]) {
@@ -287,11 +318,14 @@ export async function run(config) {
     }
     async function pause() {
         await command('server', 'coop.debug.set_time_mode', ['Pause', 'force-live-test'], true);
+        let previousWorlds;
         return poll('paused campaign clock', async () => {
             const states = await bothStates();
-            assert.equal(writer(states[0]), writer(states[1]));
-            for (const value of states) { assert.equal(leasePaused(value), true); assert.equal(value.frozen, false); }
+            const timeModes = await Promise.all(INSTANCES.map(instance => command(instance, 'coop.debug.get_time_mode')));
             const worlds = await Promise.all(INSTANCES.map(world)); assertWorld(worlds);
+            const stable = assertPausedSnapshot(timeModes, states, initial, worlds, previousWorlds);
+            previousWorlds = worlds;
+            assert.equal(stable, true, 'Waiting for an unchanged world across paused reads');
             return worlds;
         });
     }
@@ -378,7 +412,7 @@ export async function run(config) {
             const values = await Promise.all(INSTANCES.map(instance => inspect(instance, controller)));
             for (const value of values) assert.equal(value.settlement, TOWN.id);
             if (requireBackstreetInstance) assert.equal(values[INSTANCES.indexOf(requireBackstreetInstance)].currentMenu, 'town_backstreet');
-            await registrations(); return values;
+            await registrations(false); return values;
         });
     }
     async function ensureSettlement(instance, controller) {
@@ -505,6 +539,7 @@ export async function run(config) {
             const catalog = JSON.stringify(await call('list_commands', { run_id: runId, instance }));
             for (const name of ['coop.debug.authority.state', 'coop.debug.authority.world_state',
                 'coop.debug.authority.availability', 'coop.debug.players.party_state', 'coop.debug.set_time_mode',
+                'coop.debug.get_time_mode',
                 'coop.debug.location.list', 'coop.debug.location.enter', 'coop.debug.location.leave',
                 'coop.debug.prisoner_sale.prepare', 'coop.debug.prisoner_sale.inspect', 'coop.debug.prisoner_sale.submit'])
                 assert.ok(catalog.includes(name), `${instance} lacks ${name}`);
