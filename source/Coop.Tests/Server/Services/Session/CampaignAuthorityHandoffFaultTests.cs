@@ -31,6 +31,49 @@ namespace Coop.Tests.Server.Services.Session;
 public class CampaignAuthorityHandoffFaultTests
 {
     [Fact]
+    public void CommittedPausedCheckpointCanBeRetriedAfterCandidateReconnect()
+    {
+        using var scenario = new HandoffScenario(paused: true);
+        var originalPeer = scenario.Guest;
+        var first = scenario.LastSent<NetworkCampaignAuthorityHandoffBarrier>();
+        scenario.GuestConnected = false;
+        scenario.Publish(originalPeer, new PlayerDisconnected(originalPeer, default));
+        Assert.True(scenario.Identity.CurrentLease.IsPaused);
+        scenario.ReconnectGuest();
+        scenario.ReportGuest(CampaignSimulationAvailability.MapReady, 1);
+        var replacement = scenario.LastSent<NetworkCampaignAuthorityHandoffBarrier>();
+        Assert.True(replacement.BarrierSequence > first.BarrierSequence);
+        Assert.Equal(first.PausedEpoch, replacement.PausedEpoch);
+
+        scenario.Publish(originalPeer, first.ToApplied());
+        scenario.Publish(scenario.Guest, first.ToApplied());
+        Assert.True(scenario.Identity.CurrentLease.IsPaused);
+        scenario.Publish(scenario.Guest, replacement.ToApplied());
+        Assert.Equal("guest", scenario.Identity.AuthorityControllerId);
+        Assert.Equal(3, scenario.Identity.Epoch);
+        scenario.Publish(scenario.Guest, replacement.ToApplied());
+        Assert.Single(scenario.SentLeases, lease => !lease.IsPaused);
+    }
+
+    [Fact]
+    public void SupersededCandidatePeerCannotAcknowledgeItsOldBarrier()
+    {
+        using var scenario = new HandoffScenario(paused: true);
+        var originalPeer = scenario.Guest;
+        var first = scenario.LastSent<NetworkCampaignAuthorityHandoffBarrier>();
+        scenario.ReconnectGuest();
+        scenario.ReportGuest(CampaignSimulationAvailability.MapReady, 1);
+        var replacement = scenario.LastSent<NetworkCampaignAuthorityHandoffBarrier>();
+        Assert.True(replacement.BarrierSequence > first.BarrierSequence);
+        scenario.Publish(originalPeer, new PlayerDisconnected(originalPeer, default));
+        scenario.Publish(originalPeer, replacement.ToApplied());
+        scenario.Publish(scenario.Guest, first.ToApplied());
+        Assert.True(scenario.Identity.CurrentLease.IsPaused);
+        scenario.Publish(scenario.Guest, replacement.ToApplied());
+        Assert.Equal("guest", scenario.Identity.AuthorityControllerId);
+    }
+
+    [Fact]
     public void WithdrawnCandidateCannotUseDelayedOrForgedBarrierAcknowledgements()
     {
         using var scenario = new HandoffScenario(paused: true);
@@ -151,7 +194,7 @@ public class CampaignAuthorityHandoffFaultTests
         public readonly Mock<IMapTimeTrackerInterface> Clock = new Mock<IMapTimeTrackerInterface>();
         public readonly Mock<ICampaignSessionCheckpointService> Sessions = new Mock<ICampaignSessionCheckpointService>();
         public readonly CampaignSimulationAvailabilityServerHandler Handler;
-        public readonly NetPeer Guest;
+        public NetPeer Guest;
         public readonly NetPeer Impostor;
         public bool GuestConnected = true;
         public int AppliedRosters;
@@ -159,6 +202,9 @@ public class CampaignAuthorityHandoffFaultTests
         private readonly RegistryAllocationCheckpoint allocation = new RegistryAllocationCheckpoint(500, new Dictionary<string, int>());
         private readonly CampaignRosterCheckpoint roster = new CampaignRosterCheckpoint(Array.Empty<CampaignRosterState>());
         private readonly CampaignSessionCheckpoint session = new CampaignSessionCheckpoint("campaign", "{}");
+        private readonly Mock<IPlayerManager> players = new Mock<IPlayerManager>();
+        private readonly Mock<IConnectionCollection> connections = new Mock<IConnectionCollection>();
+        private readonly Player guest = new Player("guest", "guest-hero", "guest-party", "guest-clan", "guest-character");
 
         public HandoffScenario(bool paused)
         {
@@ -169,15 +215,13 @@ public class CampaignAuthorityHandoffFaultTests
             Guest = network.CreatePeer();
             Impostor = network.CreatePeer("127.0.0.2");
             var host = new Player("host", "host-hero", "host-party", "host-clan", "host-character");
-            var guest = new Player("guest", "guest-hero", "guest-party", "guest-clan", "guest-character");
+            var registeredGuest = guest;
             var impostor = new Player("other", "other-hero", "other-party", "other-clan", "other-character");
-            var players = new Mock<IPlayerManager>();
             players.Setup(manager => manager.TryGetPlayer("host", out host)).Returns(true);
-            players.Setup(manager => manager.TryGetPlayer(Guest, out guest)).Returns(true);
+            players.Setup(manager => manager.TryGetPlayer(Guest, out registeredGuest)).Returns(true);
             players.Setup(manager => manager.TryGetPlayer(Impostor, out impostor)).Returns(true);
             players.Setup(manager => manager.TryGetPeer("guest", out It.Ref<NetPeer>.IsAny))
                 .Returns((string _, out NetPeer peer) => { peer = Guest; return GuestConnected; });
-            var connections = new Mock<IConnectionCollection>();
             connections.Setup(value => value.HasCompletedCampaignSynchronization(Guest)).Returns(() => GuestConnected);
             connections.Setup(value => value.HasCompletedCampaignSynchronization(Impostor)).Returns(true);
             Objects.Setup(value => value.CaptureAllocationCheckpoint()).Returns(allocation);
@@ -205,7 +249,7 @@ public class CampaignAuthorityHandoffFaultTests
             ReportGuest(CampaignSimulationAvailability.MapReady, 1);
             Assert.True(ModInformation.IsListenAuthority);
             Assert.True(connections.Object.HasCompletedCampaignSynchronization(Guest));
-            Assert.True(players.Object.TryGetPlayer(Guest, out var registeredGuest));
+            Assert.True(players.Object.TryGetPlayer(Guest, out registeredGuest));
             Assert.Equal("guest", registeredGuest.ControllerId);
             Assert.True(coordinator.IsFreshMapReady("guest"));
             Assert.Equal("guest", coordinator.Select().ControllerId);
@@ -217,6 +261,15 @@ public class CampaignAuthorityHandoffFaultTests
                 : Enumerable.Empty<NetworkAuthorityLeaseSnapshot>();
 
         public T LastSent<T>() where T : IMessage => network.GetPeerMessagesFromType<T>(Guest).Last();
+
+        public void ReconnectGuest()
+        {
+            Guest = network.CreatePeer();
+            GuestConnected = true;
+            var registeredGuest = guest;
+            players.Setup(manager => manager.TryGetPlayer(Guest, out registeredGuest)).Returns(true);
+            connections.Setup(value => value.HasCompletedCampaignSynchronization(Guest)).Returns(() => GuestConnected);
+        }
 
         public NetworkCampaignAuthorityFreezeAcknowledged Acknowledge(NetworkCampaignAuthorityFreezeRequest request) =>
             request.ToAcknowledged(allocation, roster, new CampaignClockCheckpoint(999), session,

@@ -59,6 +59,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private long pendingBarrierEpoch;
     private string pendingBarrierAuthorityId = string.Empty;
     private string pendingBarrierCandidateControllerId = string.Empty;
+    private NetPeer pendingBarrierCandidatePeer;
     private bool hasPendingBarrier;
     private bool pendingBarrierAcknowledged;
     private AuthorityLease pendingFreezeLease;
@@ -459,11 +460,6 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             network == null || !coordinator.IsFreshMapReady(candidateControllerId))
             return;
 
-        if (hasPendingBarrier && pendingBarrierEpoch == pausedLease.Epoch &&
-            string.Equals(pendingBarrierAuthorityId, pausedLease.AuthorityId, StringComparison.Ordinal) &&
-            string.Equals(pendingBarrierCandidateControllerId, candidateControllerId, StringComparison.Ordinal))
-            return;
-
         if (!sessionIdentity.TryGetConfirmedLease(out var currentLease) || currentLease != pausedLease)
             return;
 
@@ -479,6 +475,12 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         }
 
         if (!connections.HasCompletedCampaignSynchronization(candidatePeer))
+            return;
+
+        if (hasPendingBarrier && pendingBarrierEpoch == pausedLease.Epoch &&
+            string.Equals(pendingBarrierAuthorityId, pausedLease.AuthorityId, StringComparison.Ordinal) &&
+            string.Equals(pendingBarrierCandidateControllerId, candidateControllerId, StringComparison.Ordinal) &&
+            ReferenceEquals(pendingBarrierCandidatePeer, candidatePeer))
             return;
 
         if (!rosterCheckpointService.TryCapture(out var rosterCheckpoint))
@@ -541,6 +543,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             pendingBarrierEpoch = pausedLease.Epoch;
             pendingBarrierAuthorityId = pausedLease.AuthorityId;
             pendingBarrierCandidateControllerId = candidateControllerId;
+            pendingBarrierCandidatePeer = candidatePeer;
             pendingBarrierAcknowledged = false;
             hasPendingBarrier = true;
             Logger.Information("Sent campaign authority handoff barrier {BarrierSequence} for paused epoch {Epoch} to controller {ControllerId}",
@@ -572,6 +575,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             lock (leaseGate)
             {
                 if (!hasPendingBarrier || pendingBarrierAcknowledged ||
+                    !ReferenceEquals(peer, pendingBarrierCandidatePeer) ||
                     !sessionIdentity.TryGetConfirmedLease(out var currentLease) || !currentLease.IsPaused ||
                     currentLease.Epoch != pendingBarrierEpoch ||
                     !coordinator.IsFreshMapReady(player.ControllerId))
@@ -717,6 +721,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         pendingBarrierEpoch = 0;
         pendingBarrierAuthorityId = string.Empty;
         pendingBarrierCandidateControllerId = string.Empty;
+        pendingBarrierCandidatePeer = null;
     }
 
     private static bool TryGetNextBarrierSequence(out long sequence)
