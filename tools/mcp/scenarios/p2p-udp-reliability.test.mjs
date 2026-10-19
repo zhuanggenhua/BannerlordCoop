@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { options, proxyProfile, assertActors, assertWriter, assertWorld, assertPlayers, assertFrozenHost,
-    assertPacketEvidence, assertProcessEvidence, logDiagnostics, jsonOutput } from './p2p-udp-reliability.mjs';
+    assertPacketEvidence, assertProcessEvidence, logDiagnostics, jsonOutput, assertReconnectResult } from './p2p-udp-reliability.mjs';
 
 const argv = ['--repo','.', '--server','mcp.exe','--config','profiles.json','--sdk-root','node_modules','--record','new.jsonl'];
 const initial = [ { controller:'A', mainHero:'hero_A', mainParty:'party_A', roomHost:'A' },
@@ -104,4 +104,14 @@ test('barrier-only selects one paused handoff without accepting multi-round stre
     assert.throws(()=>options([...argv,'--barrier-only','--rounds','3']));
     assert.throws(()=>options([...argv,'--barrier-only','--lost-writer']));
     assert.throws(()=>options([...argv,'--rounds','1']));
+});
+
+test('actual teardown reconnect fallback accepts its exact outcome without invented structured fields', () => {
+    const native={name:'coop.debug.connection.reconnect', arguments:[], found:true,
+        output:'Client co-op session restarted after teardown.',hasStructuredResult:false,structuredResult:null};
+    assert.equal(assertReconnectResult(native),native.output);
+    assert.equal(assertReconnectResult({...native,succeeded:true,errorCode:null}),native.output);
+    for(const patch of [{succeeded:false},{found:false},{errorCode:'failed'},
+        {output:'The process client-session starter is unavailable.'},{output:'Usage: coop.debug.connection.reconnect'},
+        {name:'other'},{arguments:['retry']}]) assert.throws(()=>assertReconnectResult({...native,...patch}));
 });

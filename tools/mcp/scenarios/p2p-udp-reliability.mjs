@@ -62,6 +62,18 @@ export function options(argv) {
     return config;
 }
 
+// Teardown fallback commands predate the structured succeeded/errorCode fields.
+export function assertReconnectResult(result) {
+    assert.equal(result?.name, 'coop.debug.connection.reconnect');
+    assert.equal(result.found, true); assert.deepEqual(result.arguments, []);
+    assert.ok(!result.errorCode);
+    if (Object.hasOwn(result, 'succeeded')) assert.equal(result.succeeded, true);
+    assert.ok(['Client co-op session restarted after teardown.',
+        'Client session is reconnecting to the configured server.'].includes(result.output),
+        'Reconnect did not report its exact documented success outcome');
+    return result.output;
+}
+
 export function proxyProfile(document, profileName) {
     const profile = document.profiles?.[profileName];
     assert.ok(profile && profile.listenAuthority === true, 'Selected profile must be ListenAuthority');
@@ -202,6 +214,12 @@ export async function run(config) {
         const response = await call('execute_command', { run_id: runId, instance, name, arguments: args }, mutation);
         assert.equal(response.ok, true, JSON.stringify(response)); assert.equal(response.result.succeeded, true, JSON.stringify(response));
         return response.result.output;
+    }
+    async function reconnect() {
+        const response = await call('execute_command', { run_id: runId, instance: 'client1',
+            name: 'coop.debug.connection.reconnect', arguments: [] }, true);
+        assert.equal(response.ok, true, JSON.stringify(response));
+        return assertReconnectResult(response.result);
     }
     const state = instance => command(instance, 'coop.debug.authority.state').then(jsonOutput);
     const both = () => Promise.all(INSTANCES.map(state));
@@ -383,7 +401,7 @@ export async function run(config) {
                 await command('server', 'coop.debug.authority.availability', ['auto'], true);
                 const held = await holdThroughTimeout(false); proxy.setFault();
                 const beforeLength = logs.client1.text.length;
-                await command('client1', 'coop.debug.connection.reconnect', [], true);
+                await reconnect();
                 const refusal = await poll('honest checkpoint-unavailable refusal', async () => {
                     await collectLogs(); const newText = logs.client1.text.slice(beforeLength);
                     assert.ok(newText.toLowerCase().includes(CHECKPOINT_REASON) || newText.includes('CampaignCheckpointUnavailable'),
@@ -407,7 +425,7 @@ export async function run(config) {
                     .map(match => ({ sequence:Number(match[1]), epoch:Number(match[2]) })).filter(row => row.epoch === epoch(frozen));
                 const oldBarriers = barriers(); assert.ok(oldBarriers.length > 0, 'No actual final barrier was sent before timeout');
                 proxy.setFault();
-                await command('client1', 'coop.debug.connection.reconnect', [], true);
+                await reconnect();
                 await waitState('client1', 'readyForCampaignTests');
                 const recovered = await awaitWriter(initial[1].controller); assert.equal(epoch(recovered[0]), epoch(frozen) + 1);
                 await collectLogs(); const freshBarriers = barriers();
