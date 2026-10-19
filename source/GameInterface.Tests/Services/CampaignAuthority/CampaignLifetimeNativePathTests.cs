@@ -61,6 +61,7 @@ public class CampaignLifetimeNativePathTests : IDisposable
         var authority = new Mock<ICampaignAuthorityContext>();
         var lease = new AuthorityLease("room", "writer", "A", 1);
         authority.Setup(value => value.TryGetLocalAuthorityLease(out lease)).Returns(true);
+        authority.Setup(value => value.TryGetCurrentLease(out lease)).Returns(true);
         var network = new Mock<INetwork>();
         network.Setup(value => value.SendAll(It.IsAny<IMessage>())).Callback<IMessage>(sent.Add);
         completion = new CampaignLifetimeCompletion(objects, MessageBroker.Instance, authority.Object);
@@ -231,6 +232,86 @@ public class CampaignLifetimeNativePathTests : IDisposable
                 value => Assert.IsType<NetworkDestroyInstance<Army>>(value));
             Assert.True(finalObjectiveResolvable);
             Assert.Equal(1, dispersed);
+        });
+    }
+
+    [Theory]
+    [InlineData(SessionMode.ListenAuthority)]
+    [InlineData(SessionMode.RemoteReplica)]
+    public void ConfirmedArmyRemovalReceiveUsesOriginalReplicaCleanupWithoutDisperseOrRebroadcast(SessionMode mode)
+    {
+        OnGameThread(() =>
+        {
+            var army = SetupArmy();
+            var party = army.LeaderParty;
+            army._parties.Add(party);
+            Assert.True(objects.AddExisting("party", party, 161));
+            ModInformation.SessionMode = mode;
+            var lease = new AuthorityLease("room", "other-writer", "other", 2);
+            var observer = new Mock<ICampaignAuthorityContext>();
+            observer.Setup(value => value.TryGetCurrentLease(out lease)).Returns(true);
+            observer.Setup(value => value.TryGetLocalAuthorityLease(out lease)).Returns(false);
+            var builder = new ContainerBuilder();
+            builder.RegisterInstance(observer.Object).As<ICampaignAuthorityContext>();
+            builder.RegisterInstance(Mock.Of<ISyncPolicy>(value => value.AllowOriginal() == false)).As<ISyncPolicy>();
+            using var receiving = builder.Build();
+            ContainerProvider.SetContainer(receiving);
+            try
+            {
+                using var broker = new MessageBroker();
+                var network = new Mock<INetwork>();
+                network.Setup(value => value.SendAll(It.IsAny<IMessage>())).Callback<IMessage>(sent.Add);
+                using var armyMessages = new ArmyHandler(broker, network.Object, objects);
+                Assert.True(ArmyHandler.HasConfirmedCampaignSession());
+                broker.Publish(null, new NetworkRemovePartyInArmy("Army_native", "party", null));
+                Assert.Null(party.Army);
+                Assert.DoesNotContain(party, army.Parties);
+                Assert.True(objects.Contains(army));
+                Assert.Same(party, army.AiBehaviorObject);
+                Assert.Equal(0, dispersed);
+                Assert.Equal(0, moved);
+                Assert.Empty(sent);
+            }
+            finally { ContainerProvider.SetContainer(container); }
+        });
+    }
+
+    [Theory]
+    [InlineData(SessionMode.ListenAuthority, "unknown", true)]
+    [InlineData(SessionMode.DedicatedAuthority, "unknown", true)]
+    [InlineData(SessionMode.RemoteReplica, "unknown", false)]
+    [InlineData(SessionMode.ListenAuthority, "observer", false)]
+    [InlineData(SessionMode.RemoteReplica, "frozen", false)]
+    [InlineData(SessionMode.ListenAuthority, "paused", false)]
+    public void UnknownBootstrapUsesOriginalDestroyAndKnownNonWritersCannotDisperse(SessionMode mode, string state, bool runs)
+    {
+        OnGameThread(() =>
+        {
+            var army = SetupArmy();
+            ModInformation.SessionMode = mode;
+            var lease = state == "unknown" ? default : state == "paused" ?
+                new AuthorityLease("room", "paused", "", 3, true) : new AuthorityLease("room", "writer", "other", 2);
+            var context = new Mock<ICampaignAuthorityContext>();
+            context.Setup(value => value.TryGetCurrentLease(out lease)).Returns(state != "unknown");
+            context.Setup(value => value.TryGetLocalAuthorityLease(out lease)).Returns(false);
+            var service = new CampaignLifetimeCompletion(objects, MessageBroker.Instance, context.Object);
+            var builder = new ContainerBuilder();
+            builder.RegisterInstance(context.Object).As<ICampaignAuthorityContext>();
+            builder.RegisterInstance(service);
+            builder.RegisterInstance(Mock.Of<ISyncPolicy>(value => value.AllowOriginal() == false)).As<ISyncPolicy>();
+            using var session = builder.Build();
+            ContainerProvider.SetContainer(session);
+            try
+            {
+                Adapter();
+                army.DisperseInternal();
+                Assert.Equal(runs ? 1 : 0, dispersed);
+                Assert.Equal(!runs, objects.Contains(army));
+                Assert.Equal(runs ? 1 : 0, sent.OfType<NetworkDestroyInstance<Army>>().Count());
+                Assert.Equal(runs, army._tickEvent.isEventDeleted);
+                Assert.True(service.IsComplete);
+            }
+            finally { ContainerProvider.SetContainer(container); }
         });
     }
 

@@ -38,6 +38,7 @@ internal static class ArmyDisperseCompletionPatch
     {
         __state = null;
         if (CallOriginalPolicy.IsOriginalAllowed()) return true;
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
         if (!ContainerProvider.TryResolve<CampaignLifetimeCompletion>(out var completion))
             throw new InvalidOperationException("Army completion adapter is not registered");
         __state = completion.EnterArmy(__instance);

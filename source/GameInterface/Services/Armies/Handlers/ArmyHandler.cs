@@ -5,6 +5,7 @@ using Common.Network;
 using Common.Util;
 using GameInterface.Services.Armies.Messages;
 using GameInterface.Services.Armies.Patches;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.ObjectManager;
 using Serilog;
 using System;
@@ -92,16 +93,17 @@ public class ArmyHandler : IHandler
             if (objectManager.TryGetObjectWithLogging(obj.MobilePartyId, out MobileParty mobileParty) == false) return;
             if (objectManager.TryGetObjectWithLogging<Army>(obj.ArmyId, out var army) == false) return;
 
-            ArmyPatches.AddMobilePartyInArmy(mobileParty, army);
-
-            if (obj.AddPartyToMergedPartiesBool && mobileParty.AttachedTo != army.LeaderParty) 
+            bool confirmedSession = HasConfirmedCampaignSession();
+            using (confirmedSession || ModInformation.IsClient ? new AllowedThread() : null)
             {
-                using (new AllowedThread())
+                ArmyPatches.AddMobilePartyInArmy(mobileParty, army);
+
+                if (obj.AddPartyToMergedPartiesBool && mobileParty.AttachedTo != army.LeaderParty)
                 {
-                    army.AddPartyToMergedParties(mobileParty);
+                    using (new AllowedThread()) army.AddPartyToMergedParties(mobileParty);
                 }
             }
-            if (ModInformation.IsServer)
+            if (ModInformation.IsServer && !confirmedSession)
             {
                 network.SendAll(new NetworkAddMobilePartyInArmy(obj.ArmyId, obj.MobilePartyId, obj.AddPartyToMergedPartiesBool));
             }
@@ -137,16 +139,21 @@ public class ArmyHandler : IHandler
                 objectManager.TryGetObjectWithLogging(data.ClientMobilePartyId, out clientMobileParty);
             }
             // Keep the receive allowance on the thread that performs the mutation.
-            using (ModInformation.IsClient ? new AllowedThread() : null)
+            bool confirmedSession = HasConfirmedCampaignSession();
+            using (confirmedSession || ModInformation.IsClient ? new AllowedThread() : null)
             {
                 ArmyPatches.RemoveMobilePartyInArmyImmediate(mobileParty, army, clientMobileParty);
             }
-            if (ModInformation.IsServer)
+            if (ModInformation.IsServer && !confirmedSession)
             {
                 network.SendAll(new NetworkRemovePartyInArmy(data.ArmyId, data.MobilePartyId, data.ClientMobilePartyId));
             }
         });
     }
+
+    internal static bool HasConfirmedCampaignSession() =>
+        ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var context) &&
+        context.TryGetCurrentLease(out var lease) && lease.IsValid;
 
     private void HandleArmyAiBehaviorObjectChanged(MessagePayload<ArmyAiBehaviorObjectChanged> payload)
     {

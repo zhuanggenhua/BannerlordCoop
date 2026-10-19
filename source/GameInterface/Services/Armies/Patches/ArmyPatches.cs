@@ -4,6 +4,7 @@ using Common.Messaging;
 using Common.Util;
 using GameInterface.Policies;
 using GameInterface.Services.Armies.Messages;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.MobileParties.Extensions;
 using GameInterface.Utils;
 using HarmonyLib;
@@ -40,7 +41,7 @@ public class ArmyPatches
     {
         if (CallOriginalPolicy.IsOriginalAllowed()) return true;
 
-        if (ModInformation.IsClient) return false;
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
         var message = new MobilePartyInArmyAdded(__instance, mobileParty, false);
         MessageBroker.Instance.Publish(mobileParty, message);
 
@@ -53,7 +54,7 @@ public class ArmyPatches
     {
         if (CallOriginalPolicy.IsOriginalAllowed()) return true;
 
-        if (ModInformation.IsClient)
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation())
         {
             return false;
         }
@@ -89,7 +90,7 @@ public class ArmyPatches
     public static bool ArmySetKingdomPrefix(Army __instance, Kingdom value)
     {
         if (CallOriginalPolicy.IsOriginalAllowed()) return true;
-        if (ModInformation.IsClient) return false;
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
         var message = new SetArmyKingdom(__instance, value);
         MessageBroker.Instance.Publish(__instance, message);
         return true;
@@ -212,7 +213,7 @@ public class ArmyPatches
             mobileParty._army = army;
             army._parties.Add(mobileParty);
             mobileParty.Ai.RethinkAtNextHourlyTick = true;
-            if (ModInformation.IsServer)
+            if (CanRunAuthoritativeSideEffects())
             {
                 CampaignEventDispatcher.Instance.OnPartyJoinedArmy(mobileParty);
             }
@@ -235,14 +236,14 @@ public class ArmyPatches
         army.LeaderParty.UpdateVersionNo();
         mobileParty.Ai.SetInitiative(1f, 1f, 24f);
         army._parties.Remove(mobileParty);
-        if (ModInformation.IsServer)
+        if (CanRunAuthoritativeSideEffects())
         {
             CampaignEventDispatcher.Instance.OnPartyRemovedFromArmy(mobileParty);
         }
         CampaignEventDispatcher.Instance.OnArmyOverlaySetDirty();
         mobileParty.AttachedTo = null;
         bool condition = false;
-        if (ModInformation.IsServer) // only let the server destroy, autoregistry will then sync destruction to the client
+        if (CanRunAuthoritativeSideEffects()) // Only the writer's original mutation creates world side effects.
         {
             if (army.LeaderParty == mobileParty && !army._armyIsDispersing)
             {
@@ -323,6 +324,9 @@ public class ArmyPatches
             army._aiBehaviorObject = mapPoint;
         }
     }
+
+    internal static bool CanRunAuthoritativeSideEffects() =>
+        !CallOriginalPolicy.IsOriginalAllowed() && CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
 }
 [HarmonyPatch]
 internal class ArmyMainPartyComparisonPatch

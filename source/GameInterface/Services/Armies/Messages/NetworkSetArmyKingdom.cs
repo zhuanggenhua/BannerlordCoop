@@ -7,7 +7,7 @@ namespace GameInterface.Services.Armies.Messages;
 /// Command to add or remove kingdom from army
 /// </summary>
 [ProtoContract(SkipConstructor = true)]
-public readonly struct NetworkSetArmyKingdom : ICommand
+public readonly struct NetworkSetArmyKingdom : ICommand, ICampaignAuthorityScopedMessage
 {
     [ProtoMember(1)]
     public readonly string ArmyId;

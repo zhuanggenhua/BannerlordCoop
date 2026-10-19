@@ -7,7 +7,7 @@ namespace GameInterface.Services.Armies.Messages;
 /// Command to remove a MobileParty from an Army
 /// </summary>
 [ProtoContract(SkipConstructor = true)]
-public readonly struct NetworkRemovePartyInArmy : ICommand
+public readonly struct NetworkRemovePartyInArmy : ICommand, ICampaignAuthorityScopedMessage
 {
     [ProtoMember(1)]
     public readonly string ArmyId;

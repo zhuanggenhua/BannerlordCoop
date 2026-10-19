@@ -7,7 +7,7 @@ namespace GameInterface.Services.Armies.Messages;
 /// Command to add a to set AiBehaviorObject on army
 /// </summary>
 [ProtoContract(SkipConstructor = true)]
-public readonly struct NetworkSetArmyAiBehaviorObject : ICommand
+public readonly struct NetworkSetArmyAiBehaviorObject : ICommand, ICampaignAuthorityScopedMessage
 {
     [ProtoMember(1)]
     public readonly string ArmyId;

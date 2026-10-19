@@ -7,7 +7,7 @@ namespace GameInterface.Services.Armies.Messages;
 /// Command to add a MobileParty to an Army
 /// </summary>
 [ProtoContract(SkipConstructor = true)]
-public readonly struct NetworkAddMobilePartyInArmy : ICommand
+public readonly struct NetworkAddMobilePartyInArmy : ICommand, ICampaignAuthorityScopedMessage
 {
     [ProtoMember(1)]
     public readonly string ArmyId;

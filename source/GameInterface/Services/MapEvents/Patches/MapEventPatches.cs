@@ -10,6 +10,7 @@ using GameInterface.Services.MapEvents.Messages;
 using GameInterface.Services.MapEvents.Messages.Leave;
 using GameInterface.Services.MapEvents.Messages.Start;
 using GameInterface.Services.MapEvents.Participation;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Missions;
 using GameInterface.Services.MobileParties.Extensions;
 using GameInterface.Services.ObjectManager;
@@ -136,13 +137,13 @@ internal class MapEventPatches
         if (__instance.IsFinalized)
             return false;
 
-        if (ModInformation.IsServer)
+        if (CampaignSimulationAuthorityPolicy.CanRunWorldSimulation())
             MessageBroker.Instance.Publish(__instance, new MapEventContributionFlushRequested(__instance));
 
         if (CallOriginalPolicy.IsOriginalAllowed())
             return true;
 
-        if (ModInformation.IsServer)
+        if (CampaignSimulationAuthorityPolicy.CanRunWorldSimulation())
         {
             __state = !__instance.IsFinalized;
             return true;
@@ -431,7 +432,7 @@ internal class MapEventPatches
     [HarmonyPrefix]
     private static bool Prefix_CommitCalculatedMapEventResults(MapEvent __instance)
     {
-        if (ModInformation.IsClient)
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation())
             return CallOriginalPolicy.IsOriginalAllowed();
 
         int removedPartyCount;
@@ -487,7 +488,7 @@ internal class MapEventPatches
     private static bool PrefixUpdate(MapEvent __instance)
     {
         // Clients never tick a map event locally; the server is authoritative for battle resolution.
-        if (ModInformation.IsClient)
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation())
             return false;
 
         bool hasPlayerParty = __instance.InvolvedParties.Any(
