@@ -76,6 +76,11 @@ deduplication is used. Native error lines, failed RealTick, duplicate IDs and AI
 batch errors fail acceptance. A failed scenario remains failed after cleanup.
 Each stage records two BMP receipts and their SHA256; screenshot pixel sanity
 does not assert semantic correctness. A reviewer must inspect the actual images.
+Successful MCP commands and advancing engine/Mission clocks establish control and
+simulation liveness only. This direct-IP scenario does not measure fresh game P2P
+messages during the all-away interval; that requirement remains NOT_OBSERVED until
+separate transport or Mission message evidence is captured. It must not be inferred
+from stable lease fields or registered-player counts.
 
 `stop_run` runs in `finally`; both process trees must be confirmed exited before
 the outer installation lock can be released. Archive or cleanup failure is part

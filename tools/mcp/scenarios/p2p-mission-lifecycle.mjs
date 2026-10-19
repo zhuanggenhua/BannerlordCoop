@@ -312,7 +312,10 @@ export async function run(config) {
                 assertEngineProgress(first[index], second[index]);
                 assertMissionProgress(before.states[index], after.states[index]); await native(INSTANCES[index], true);
             }
-            return { entry, before, after, first, second, networkAlive: 'Both game-thread commands and native frame receipts completed' };
+            return { entry, before, after, first, second,
+                mcpControlAlive: 'Both game-thread commands and native frame receipts completed',
+                p2pNetworkAcceptance: 'NOT_OBSERVED',
+                networkLimit: 'MCP control and engine frames do not prove game P2P message exchange during all-away pause' };
         });
         await feature('B-return-resumes-A-stays-in-Mission', async () => {
             await leave('client1'); const before = await awaitWriter(1); await setTime('Play_1x');
