@@ -8,6 +8,9 @@ using GameInterface.Services.PartyVisuals.Extensions;
 using GameInterface.Services.PartyVisuals.Messages;
 using SandBox.View.Map.Managers;
 using SandBox.View.Map.Visuals;
+using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using TaleWorlds.CampaignSystem.Party;
 
@@ -115,6 +118,18 @@ public class PartyVisualLifetimeHandler : IHandler
         if (objectManager.TryGetId(partyVisual, out var existingId) &&
             existingId != partyVisualId)
         {
+            if (partyVisualHandle == 0) return false;
+            var type = partyVisual.GetType();
+            var prefix = type.Name + "_";
+            var counters = new Dictionary<string, int>(StringComparer.Ordinal);
+            if (partyVisualId != null && partyVisualId.StartsWith(prefix, StringComparison.Ordinal) &&
+                int.TryParse(partyVisualId.Substring(prefix.Length), NumberStyles.None,
+                    CultureInfo.InvariantCulture, out var ordinal) && ordinal > 0)
+                counters[type.AssemblyQualifiedName] = ordinal;
+
+            // The native visual keeps its binding, but its ignored authority identity is still allocated.
+            objectManager.TryApplyAllocationCheckpoint(new RegistryAllocationCheckpoint(
+                partyVisualHandle == uint.MaxValue ? 0 : partyVisualHandle + 1, counters));
             return false;
         }
 
