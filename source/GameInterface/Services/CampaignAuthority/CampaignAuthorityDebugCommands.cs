@@ -54,6 +54,7 @@ public static class CampaignAuthorityDebugCommands
             mainHero = Hero.MainHero?.StringId,
             mainParty = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty?.StringId,
             gameState = GameStateManager.Current?.ActiveState?.GetType().Name,
+            mission = CaptureMissionState(Mission.Current),
             mapInputEnabled = SandBox.View.Map.MapScreen.Instance?.MapCameraView?.ProcessCameraInput,
             mainNavigation = TaleWorlds.CampaignSystem.Party.MobileParty.MainParty == null ? null : new
             {
@@ -86,6 +87,15 @@ public static class CampaignAuthorityDebugCommands
                 }).ToArray(),
             },
         }));
+
+        internal static object CaptureMissionState(Mission mission) => mission == null ? null : new
+        {
+            time = mission.CurrentTime,
+            ended = mission.MissionEnded,
+            ending = mission.IsMissionEnding,
+            scene = mission.SceneName,
+            mode = mission.Mode.ToString(),
+        };
     }
 
     public sealed class WorldStateCommand : ICoopCommand

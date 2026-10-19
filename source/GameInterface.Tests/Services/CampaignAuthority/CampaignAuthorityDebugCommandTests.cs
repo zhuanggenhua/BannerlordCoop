@@ -14,6 +14,15 @@ namespace GameInterface.Tests.Services.CampaignAuthority;
 
 public class CampaignAuthorityDebugCommandTests
 {
+    [Fact]
+    public void StateMissionEvidenceSerializesNullWhenNoNativeMissionExists()
+    {
+        var evidence = CampaignAuthorityDebugCommands.StateCommand.CaptureMissionState(null);
+        Assert.Null(evidence);
+        var json = JObject.FromObject(new { mission = evidence });
+        Assert.Equal(JTokenType.Null, json["mission"].Type);
+    }
+
     [Theory]
     [InlineData("", null, "invalid_argument")]
     [InlineData("other", null, "invalid_argument")]
