@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
 import { assertAllAway, assertEngineProgress, assertMissionProgress, assertNativeState, assertTransportProgress,
-    assertNoWorldProgress, assertSingleWriterProgress, nextEntryPhase } from './p2p-mission-lifecycle.mjs';
+    assertNoWorldProgress, assertSingleWriterProgress, assertFreeMapActor, assertMapActor, assertTimeModes,
+    nextEntryPhase, parseNativePartyState, prepareFreeMapActor } from './p2p-mission-lifecycle.mjs';
+import { OnceActions } from './p2p-prisoner-sale.mjs';
 
 const initial = ['A', 'B'].map(controller => ({ controller, mainHero: 'hero-' + controller, mainParty: 'party-' + controller }));
 const clone = value => structuredClone(value);
@@ -16,6 +18,76 @@ const world = () => ({ campaign: 'world', partyIdentityHash: 'id', rosterCountsH
     volunteerHash: 'volunteers', heroGoldHash: 'gold', nextHandle: 100, ticks: 10, unregisteredParties: 0 });
 const snapshot = () => ({ states: states(), worlds: [world(), world()], players: [[{ gold: 4 }], [{ gold: 4 }]],
     cycles: [{ instance: 'a', rows: [] }, { instance: 'b', rows: [] }] });
+
+function freeMapObservation() {
+    const actor = initial[1], party = { controllerId: actor.controller, localControllerId: actor.controller,
+        mainHeroId: actor.mainHero, mainPartyId: actor.mainParty, partyStringId: actor.mainParty,
+        heroStringId: actor.mainHero, partyId: 'MobileParty_' + actor.mainParty, mapEvent: 'none',
+        settlementId: null, active: true };
+    return { instance: 'client1', localParty: party, partyReplicas: [clone(party), clone(party)],
+        nativeParty: parseNativePartyState('party=party-B mapEvent=none siegeAssault=False side=None besiegerCamp=none army=none settlement=none heroHitPoints=100 playerSiege=False encounter=False'),
+        status: { missionActive: false, activeState: 'TaleWorlds.CampaignSystem.GameState.MapState', activeMenu: null },
+        timeModes: [{ instance: 'server', mode: 'Pause' }, { instance: 'client1', mode: 'Pause' }] };
+}
+
+test('native party parser requires actual local encounter evidence and rejects malformed receipts', () => {
+    assert.equal(freeMapObservation().nativeParty.encounter, false);
+    for (const text of ['party=party-B', 'party=party-B party=other',
+        'party=party-B mapEvent=none settlement=none playerSiege=False besiegerCamp=none encounter=unknown'])
+        assert.throws(() => parseNativePartyState(text));
+});
+
+test('MapState with a town or local encounter is not a free campaign player', () => {
+    const good = freeMapObservation(); assertFreeMapActor(good, initial[1]);
+    for (const change of [r => r.localParty.settlementId = 'town_ES1',
+        r => r.partyReplicas[0].settlementId = 'town_ES1', r => r.nativeParty.settlement = 'town_ES1',
+        r => r.nativeParty.encounter = true, r => r.status.activeMenu = 'town',
+        r => r.nativeParty.mapEvent = 'battle', r => r.partyReplicas[0].mapEvent = 'battle',
+        r => r.status.missionActive = true, r => r.instance = 'server',
+        r => r.localParty.localControllerId = 'A', r => r.nativeParty.party = 'party-A',
+        r => delete r.localParty.partyId, r => delete r.localParty.settlementId]) {
+        const bad = clone(good); change(bad); assert.throws(() => assertFreeMapActor(bad, initial[1]));
+    }
+});
+
+test('a valid native settlement observation permits one original exit and waits for real free-map replicas', async () => {
+    const occupied = freeMapObservation(); occupied.localParty.settlementId = 'town_ES1';
+    occupied.nativeParty.settlement = 'town_ES1'; occupied.nativeParty.encounter = true; occupied.status.activeMenu = 'town';
+    occupied.partyReplicas.forEach(row => row.settlementId = 'town_ES1');
+    assertMapActor(occupied, initial[1]);
+    let reads = 0, leaves = 0;
+    const proof = await prepareFreeMapActor({ actor: initial[1], key: 'initial-exit', once: new OnceActions(),
+        read: async () => reads++ === 0 ? occupied : freeMapObservation(),
+        leaveSettlement: async () => { leaves++; return 'Requested native settlement leave'; },
+        poll: async (_label, read) => read() });
+    assert.equal(leaves, 1); assert.equal(reads, 2); assert.equal(proof.before.nativeParty.encounter, true);
+    assertFreeMapActor(proof.after, initial[1]);
+});
+
+test('already free B does not receive an unnecessary settlement exit', async () => {
+    let leaves = 0;
+    const proof = await prepareFreeMapActor({ actor: initial[1], key: 'already-free', once: new OnceActions(),
+        read: async () => freeMapObservation(), leaveSettlement: async () => { leaves++; }, poll: async (_label, read) => read() });
+    assert.equal(leaves, 0); assert.equal(proof.leaveResult, null);
+});
+
+test('uncertain or duplicate settlement exits are never retried to manufacture readiness', async () => {
+    const occupied = freeMapObservation(); occupied.localParty.settlementId = 'town_ES1';
+    const once = new OnceActions(); let leaves = 0;
+    const config = { actor: initial[1], key: 'one-exit', once, read: async () => occupied,
+        leaveSettlement: async () => { leaves++; throw new Error('uncertain native result'); }, poll: async () => assert.fail('no poll after uncertain mutation') };
+    await assert.rejects(prepareFreeMapActor(config), /uncertain native result/);
+    await assert.rejects(prepareFreeMapActor(config), /already dispatched/);
+    assert.equal(leaves, 1);
+});
+
+test('running-time check needs actual matching receipts and cannot accept an occupancy pause', () => {
+    const modes = freeMapObservation().timeModes; assertTimeModes(modes);
+    assert.throws(() => assertTimeModes(modes, true), /do not force Play/);
+    assert.throws(() => assertTimeModes([{ instance: 'server', mode: 'Play_1x' }, { instance: 'client1', mode: 'Pause' }]), /did not converge/);
+    assert.throws(() => assertTimeModes([{ instance: 'server' }, { instance: 'client1' }]), /actual time-mode/);
+    assertTimeModes(modes.map(row => ({ ...row, mode: 'Play_1x' })), true);
+});
 
 test('location open is a separate phase only after the exact encounter-established result', () => {
     assert.equal(nextEntryPhase("Started a local encounter with 'town_ES1'."), 'open-location');

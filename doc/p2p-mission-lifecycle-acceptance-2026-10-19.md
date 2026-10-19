@@ -4,6 +4,47 @@ Status: **NOT_RUN on the new integrated version**. This worker prepares a repeat
 scenario; Node tests and a compiled diagnostic command do not accept native gameplay.
 The coordinator owns deployment, the physical-installation lock and the two game processes.
 
+## Mission01 free-map precondition repair
+
+Run `dbd822a87de940f9928ba5bb6cfcbd05`, source
+`53e169d7338a8c3d6c4fc320634132de2c03833a`, remains **FAIL**. Joining passed;
+A's actual Mission advanced, B received valid active epoch 5 and its world Tick
+counter advanced, but world hours stayed fixed. Host PID 16588 log lines 151-153
+identify the cause: after the requested Play_1x, the existing occupancy owner set
+Pause because both A and B were in `town_ES1`. B's MapState was still a settlement
+menu, not a free player on the world map. The new harness had omitted the original
+Mission Run02 preparation that made B leave its loaded settlement.
+
+The QA repair preserves `PlayerOccupancyPauseHandler`, automatic pause ownership,
+world Tick and all authority/checkpoint code. It reuses one original
+`coop.debug.siege.leave_settlement` operation for B after joining and again after
+B returns from its Mission, only when B's actual party is inside a settlement.
+Already-free B receives no leave request. An uncertain result fails immediately;
+the same mutation key cannot be dispatched again.
+
+Read-only convergence requires native MapState/no Mission/no active menu, B's
+local `coop.debug.siege.player_state` reporting `encounter=False`, no settlement,
+MapEvent or siege, and both player replicas reporting no settlement/MapEvent and
+the unchanged registered B identity. The native encounter receipt must come from
+B: A's remote-party `encounter=False` cannot prove B closed its local encounter.
+Each preparation and progress window also records actual `get_time_mode` receipts
+from both processes. B's return stage no longer issues Play_1x to overwrite a pause;
+the original occupancy owner must restore the previous selected speed after B leaves.
+
+QA snapshot pauses remain explicit measurement controls. The A-entry/final-return
+windows select Play_1x only after a fresh B free-map check, then require matching
+running modes before and after measuring unchanged original Tick/time assertions.
+An unexpected occupancy pause fails; waiting longer or forcing Play again cannot
+convert it into a pass. All-away still checks the exact stopped world independently
+of the selected speed and records that speed rather than inferring it from a lease.
+
+This does not change the product rule that all players intentionally inside
+settlements can pause with AutoPause enabled. The original Mission01 raw messages,
+logs and screenshots remain immutable; the repaired scenario requires a new native
+attempt. Node negative tests cover occupied MapState, active local encounter,
+MapEvent/Mission, wrong local identity, missing receipts, one-shot/uncertain leave,
+already-free players and selected Pause despite a valid world writer.
+
 ## Reused implementation and bounded changes
 
 The original location command opens Danustica (`town_ES1`) through

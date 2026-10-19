@@ -25,6 +25,9 @@ Two real native processes: A Mission / B map writer; both Mission / paused world
 B returns / B resumes; A returns / A preferred writer. Real MapState and stable
 BMP frame receipts are mandatory. Each mutation is dispatched once; an explicit
 Started encounter response permits one separate location-open request.
+B leaves its existing settlement once before A enters Mission and again after B
+returns. Read-only native encounter/party/time receipts establish a free map player;
+an occupied MapState alone is not a running-world precondition.
 With clientProxyPort, the existing UDP proxy forwards without faults and measures
 bidirectional traffic during all-away pause. Direct mode leaves that NOT_OBSERVED.
 No deployment, forced time advance, Mission core rewrite, battle-result or
@@ -46,6 +49,67 @@ export function assertNativeState(status, mission) {
     assert.equal(status.missionActive, mission);
     assert.equal(status.activeState, mission ? MISSION_STATE : MAP_STATE,
         'Mission pointer alone does not establish active native lifecycle state');
+}
+
+export function parseNativePartyState(text) {
+    const entries = [...text.matchAll(/(\w+)=([^\s]+)/g)].map(match => [match[1], match[2]]);
+    assert.equal(new Set(entries.map(row => row[0])).size, entries.length, 'Duplicate native party-state field');
+    const value = Object.fromEntries(entries);
+    for (const key of ['party', 'mapEvent', 'settlement', 'encounter', 'playerSiege', 'besiegerCamp'])
+        assert.ok(Object.hasOwn(value, key), 'Missing native party-state field: ' + key);
+    for (const key of ['encounter', 'playerSiege']) {
+        assert.ok(value[key] === 'True' || value[key] === 'False', 'Invalid native boolean: ' + key);
+        value[key] = value[key] === 'True';
+    }
+    return value;
+}
+
+export function assertMapActor(observation, actor) {
+    assert.equal(observation.instance, 'client1', 'B encounter receipt must come from its local process');
+    assertNativeState(observation.status, false);
+    assert.equal(observation.localParty.controllerId, actor.controller);
+    assert.equal(observation.localParty.localControllerId, actor.controller, 'Remote encounter=false cannot prove local encounter closure');
+    assert.equal(observation.localParty.mainHeroId, actor.mainHero);
+    assert.equal(observation.localParty.mainPartyId, actor.mainParty);
+    assert.equal(observation.localParty.partyStringId, actor.mainParty);
+    assert.ok(typeof observation.localParty.partyId === 'string' && observation.localParty.partyId.length > 0, 'Missing registered local party id');
+    assert.ok(Object.hasOwn(observation.localParty, 'settlementId'), 'Missing actual settlement receipt');
+    assert.equal(observation.nativeParty.party, actor.mainParty);
+    assert.equal(observation.nativeParty.mapEvent, 'none', 'Local player is still in a MapEvent');
+    assert.equal(observation.nativeParty.playerSiege, false);
+    assert.equal(observation.nativeParty.besiegerCamp, 'none');
+    assert.equal(observation.partyReplicas.length, 2);
+    for (const party of observation.partyReplicas) {
+        assert.equal(party.controllerId, actor.controller); assert.equal(party.partyId, observation.localParty.partyId);
+        assert.equal(party.heroStringId, actor.mainHero); assert.equal(party.partyStringId, actor.mainParty);
+        assert.equal(party.active, true); assert.equal(party.mapEvent, 'none');
+    }
+}
+
+export function assertFreeMapActor(observation, actor) {
+    assertMapActor(observation, actor);
+    assert.equal(observation.nativeParty.encounter, false, 'Local encounter has not closed');
+    assert.equal(observation.nativeParty.settlement, 'none', 'Native player remains occupied in a settlement');
+    assert.equal(observation.status.activeMenu, null, 'Native settlement/menu context remains active');
+    for (const party of [observation.localParty, ...observation.partyReplicas])
+        assert.equal(party.settlementId, null, 'Player replica still has a settlement');
+}
+
+export function assertTimeModes(modes, running = false) {
+    assert.equal(modes.length, 2); assert.deepEqual(modes.map(row => row.instance), INSTANCES);
+    for (const row of modes) assert.ok(['Pause', 'Play_1x', 'Play_2x'].includes(row.mode), 'Missing actual time-mode receipt');
+    assert.equal(modes[0].mode, modes[1].mode, 'Selected shared time mode did not converge');
+    if (running) assert.equal(modes[0].mode, 'Play_1x', 'Expected running time mode; do not force Play over an occupancy pause');
+}
+
+export async function prepareFreeMapActor({ read, leaveSettlement, poll, once, key, actor }) {
+    const before = await read(); assertMapActor(before, actor);
+    let leaveResult = null;
+    if (before.localParty.settlementId !== null) leaveResult = await once.run(key, leaveSettlement);
+    const after = await poll('confirmed B free map ' + key, async () => {
+        const current = await read(); assertFreeMapActor(current, actor); assertTimeModes(current.timeModes); return current;
+    });
+    return { before, leaveResult, after };
 }
 
 export function assertEngineProgress(before, after) {
@@ -249,6 +313,24 @@ export async function run(config) {
     async function setTime(mode) {
         await command('server', 'coop.debug.set_time_mode', [mode, 'force-live-test'], true);
     }
+    async function timeModes() {
+        return Promise.all(INSTANCES.map(async instance => ({ instance,
+            mode: await command(instance, 'coop.debug.get_time_mode') })));
+    }
+    async function runningModes(label) {
+        return poll(label, async () => { const modes = await timeModes(); assertTimeModes(modes, true); return modes; });
+    }
+    async function readBMapActor() {
+        const localParty = jsonOutput(await command('client1', 'coop.debug.players.party_state', [initial[1].controller]));
+        const nativeParty = parseNativePartyState(await command('client1', 'coop.debug.siege.player_state', [localParty.partyId]));
+        return { instance: 'client1', status: (await native('client1', false)).status, localParty, nativeParty,
+            partyReplicas: await Promise.all(INSTANCES.map(instance => command(instance, 'coop.debug.players.party_state',
+                [initial[1].controller]).then(jsonOutput))), timeModes: await timeModes() };
+    }
+    async function freeBMapActor(key) {
+        return prepareFreeMapActor({ actor: initial[1], read: readBMapActor, poll, once, key,
+            leaveSettlement: () => command('client1', 'coop.debug.siege.leave_settlement', [], true) });
+    }
     async function consistentSnapshot(label) {
         await setTime('Pause'); const receipt = await snapshot(label);
         const index = receipt.states.findIndex(value => value.localAuthority); assert.ok(index >= 0);
@@ -326,18 +408,23 @@ export async function run(config) {
         assertProcessEvidence(osProcesses, processPids); summary.osProcesses = osProcesses;
         await feature('join-two-native-actors', async () => {
             await awaitWriter(0); const receipt = await consistentSnapshot('initial world');
+            const freeMap = await freeBMapActor('B-initial-settlement-exit');
             const locations = await command('server', 'coop.debug.location.list');
-            assert.ok([...locations.matchAll(/Id: '([^']+)'/g)].some(match => match[1] === LOCATION)); return receipt;
+            assert.ok([...locations.matchAll(/Id: '([^']+)'/g)].some(match => match[1] === LOCATION)); return { ...receipt, freeMap };
         });
         await feature('A-Mission-B-automatic-map-writer', async () => {
+            const freeMap = await readBMapActor(); assertFreeMapActor(freeMap, initial[1]);
             await setTime('Play_1x'); const entry = await enter('server');
             const before = await awaitWriter(1); await native('client1', false);
+            const modesBefore = await runningModes('running modes after A enters Mission');
             await delay(5000); const after = await bothStates(); assertSingleWriterProgress(before, after, 1, initial);
-            const world = await consistentSnapshot('B writer critical world'); return { entry, before, after, world };
+            const modesAfter = await timeModes(); assertTimeModes(modesAfter, true);
+            const world = await consistentSnapshot('B writer critical world'); return { freeMap, entry, before, after, modesBefore, modesAfter, world };
         });
         await feature('both-Missions-exact-world-pause-native-frames-continue', async () => {
             await setTime('Play_1x'); const entry = await enter('client1');
             const before = await snapshot('all-away committed paused lease', true);
+            const modesBefore = await timeModes(); assertTimeModes(modesBefore);
             const udpBefore = proxy ? { utc: new Date().toISOString(), stats: structuredClone(proxy.stats) } : null;
             const first = await Promise.all(INSTANCES.map(instance => screenshot(instance, 'all-away-before')));
             await delay(5000); const after = await snapshot('all-away unchanged world', true);
@@ -348,23 +435,31 @@ export async function run(config) {
                 assertMissionProgress(before.states[index], after.states[index]); await native(INSTANCES[index], true);
             }
             const udpAfter = proxy ? { utc: new Date().toISOString(), stats: structuredClone(proxy.stats) } : null;
+            const modesAfter = await timeModes(); assertTimeModes(modesAfter);
             const transport = proxy ? { ...assertTransportProgress(udpBefore.stats, udpAfter.stats), before: udpBefore, after: udpAfter }
                 : { acceptance: 'NOT_OBSERVED', scope: 'MCP and native frame receipts do not prove game P2P message exchange' };
             summary.transportAcceptance = transport.acceptance;
-            return { entry, before, after, first, second,
+            return { entry, before, after, modesBefore, modesAfter, first, second,
                 mcpControlAlive: 'Both game-thread commands and native frame receipts completed',
                 p2pNetworkAcceptance: transport.acceptance, transport };
         });
         await feature('B-return-resumes-A-stays-in-Mission', async () => {
-            await leave('client1'); const before = await awaitWriter(1); await setTime('Play_1x');
+            await leave('client1'); await awaitWriter(1);
+            const freeMap = await freeBMapActor('B-returned-settlement-exit');
+            const modesBefore = await runningModes('automatic selected-speed restore after B leaves settlement');
+            const before = await awaitWriter(1);
             await delay(5000); const after = await bothStates(); assertSingleWriterProgress(before, after, 1, initial);
-            await native('server', true); return { before, after, world: await consistentSnapshot('B resumed world') };
+            const modesAfter = await timeModes(); assertTimeModes(modesAfter, true);
+            await native('server', true); return { freeMap, modesBefore, modesAfter, before, after, world: await consistentSnapshot('B resumed world') };
         });
         await feature('A-return-host-preference-final-A-B-A', async () => {
+            const freeMap = await readBMapActor(); assertFreeMapActor(freeMap, initial[1]);
             await setTime('Play_1x'); await leave('server'); const before = await awaitWriter(0);
+            const modesBefore = await runningModes('running modes after A returns');
             await delay(5000); const after = await bothStates(); assertSingleWriterProgress(before, after, 0, initial);
+            const modesAfter = await timeModes(); assertTimeModes(modesAfter, true);
             for (const instance of INSTANCES) await native(instance, false);
-            return { before, after, world: await consistentSnapshot('final A world') };
+            return { freeMap, modesBefore, modesAfter, before, after, world: await consistentSnapshot('final A world') };
         });
     } catch (error) {
         summary.failed = { message: error.message, stack: error.stack }; process.exitCode = 1;
