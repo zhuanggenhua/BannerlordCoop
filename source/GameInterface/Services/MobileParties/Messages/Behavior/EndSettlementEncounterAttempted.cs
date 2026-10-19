@@ -9,9 +9,11 @@ namespace GameInterface.Services.MobileParties.Messages.Behavior;
 public readonly struct EndSettlementEncounterAttempted : IEvent
 {
     public readonly MobileParty Party;
+    public readonly AuthorityLease ObservedLease;
 
-    public EndSettlementEncounterAttempted(MobileParty party)
+    public EndSettlementEncounterAttempted(MobileParty party, AuthorityLease observedLease = default)
     {
         Party = party;
+        ObservedLease = observedLease;
     }
 }

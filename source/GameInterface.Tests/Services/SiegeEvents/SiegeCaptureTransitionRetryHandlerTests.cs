@@ -1,4 +1,5 @@
-﻿using Common.Messaging;
+﻿using Common;
+using Common.Messaging;
 using Common.Util;
 using GameInterface.Services.PlayerCaptivityService.Messages;
 using GameInterface.Services.SiegeEvents.Handlers;
@@ -18,12 +19,14 @@ namespace GameInterface.Tests.Services.SiegeEvents;
 [Collection(nameof(CampaignCurrentCollection))]
 public sealed class SiegeCaptureTransitionRetryHandlerTests : IDisposable
 {
+    private readonly SessionMode priorMode = ModInformation.SessionMode;
     private readonly GameStateManager gameStateManager;
     private readonly MapState mapState;
     private readonly MapState inactiveMapState;
 
     public SiegeCaptureTransitionRetryHandlerTests()
     {
+        ModInformation.SessionMode = SessionMode.RemoteReplica;
         GameBootStrap.Initialize();
         gameStateManager = Game.Current.GameStateManager;
         mapState = gameStateManager.CreateState<MapState>();
@@ -34,8 +37,15 @@ public sealed class SiegeCaptureTransitionRetryHandlerTests : IDisposable
 
     public void Dispose()
     {
-        gameStateManager._gameStates.Remove(inactiveMapState);
-        gameStateManager._gameStates.Remove(mapState);
+        try
+        {
+            gameStateManager._gameStates.Remove(inactiveMapState);
+            gameStateManager._gameStates.Remove(mapState);
+        }
+        finally
+        {
+            ModInformation.SessionMode = priorMode;
+        }
     }
 
     [Fact]

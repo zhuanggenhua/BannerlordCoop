@@ -1325,14 +1325,14 @@ public class SiegeDebugCommand
 
         public string Description => "Leaves settlement for co-op debugging.";
 
-        public CoopCommandSide Side => CoopCommandSide.Client;
+        public CoopCommandSide Side => CoopCommandSide.Both;
 
         public IExpectedArgs[] ExpectedArgs { get; } = System.Array.Empty<IExpectedArgs>();
 
         public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
         {
 
-            if (ModInformation.IsServer)
+            if (ModInformation.IsDedicatedAuthority)
             {
                 return Failed("This command can only be used by a client");
             }

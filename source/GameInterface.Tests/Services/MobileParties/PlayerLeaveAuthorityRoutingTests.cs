@@ -24,7 +24,7 @@ public sealed class PlayerLeaveAuthorityRoutingTests
     [Theory]
     [InlineData("a", "a", true, false, false, true, 0)]
     [InlineData("b", "b", false, false, false, true, 0)]
-    [InlineData("a", "b", true, false, false, false, 0)]
+    [InlineData("a", "b", true, false, false, false, 1)]
     [InlineData("b", "a", false, false, false, false, 1)]
     [InlineData("a", "a", true, false, true, false, 0)]
     [InlineData("b", "b", false, false, true, false, 0)]

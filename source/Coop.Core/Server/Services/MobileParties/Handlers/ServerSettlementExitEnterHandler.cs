@@ -1,4 +1,5 @@
 ﻿using Common;
+using GameInterface.Services.CampaignAuthority;
 using Common.Logging;
 using Common.Messaging;
 using Common.Network;
@@ -32,6 +33,8 @@ public class ServerSettlementExitEnterHandler : IHandler
     private readonly ISettlementInterface settlementInterface;
     private readonly IKingdomCreationSettlementTracker settlementTracker;
     private readonly ISettlementEncounterDistanceValidator distanceValidator;
+    private readonly ICampaignAuthorityContext authorityContext;
+    private readonly ISessionIdentity sessionIdentity;
     private readonly ILogger Logger = LogManager.GetLogger<ServerSettlementExitEnterHandler>();
 
     public ServerSettlementExitEnterHandler(
@@ -41,7 +44,9 @@ public class ServerSettlementExitEnterHandler : IHandler
         IPlayerManager playerManager,
         ISettlementInterface settlementInterface,
         IKingdomCreationSettlementTracker settlementTracker,
-        ISettlementEncounterDistanceValidator distanceValidator)
+        ISettlementEncounterDistanceValidator distanceValidator,
+        ICampaignAuthorityContext authorityContext = null,
+        ISessionIdentity sessionIdentity = null)
     {
         this.messageBroker = messageBroker;
         this.network = network;
@@ -50,6 +55,8 @@ public class ServerSettlementExitEnterHandler : IHandler
         this.settlementInterface = settlementInterface;
         this.settlementTracker = settlementTracker;
         this.distanceValidator = distanceValidator;
+        this.authorityContext = authorityContext;
+        this.sessionIdentity = sessionIdentity;
         messageBroker.Subscribe<NetworkRequestStartSettlementEncounter>(Handle);
         messageBroker.Subscribe<NetworkRequestEndSettlementEncounter>(Handle);
 
@@ -174,6 +181,8 @@ public class ServerSettlementExitEnterHandler : IHandler
 
     private void Handle(MessagePayload<NetworkRequestEndSettlementEncounter> obj)
     {
+        if (authorityContext?.IsAuthorityKnown == true &&
+            !string.IsNullOrWhiteSpace(sessionIdentity?.RoomHostControllerId)) return;
         var payload = obj.What;
         var peer = (NetPeer)obj.Who;
 
@@ -295,6 +304,13 @@ public class ServerSettlementExitEnterHandler : IHandler
 
     private void Handle(MessagePayload<PartyLeaveSettlementAttempted> obj)
     {
+        if (authorityContext?.IsAuthorityKnown == true &&
+            !string.IsNullOrWhiteSpace(sessionIdentity?.RoomHostControllerId))
+        {
+            if (authorityContext.TryGetLocalAuthorityLease(out _))
+                settlementInterface.OnPartyLeftSettlement(obj.What.MobileParty);
+            return;
+        }
         var payload = obj.What;
 
         if (!objectManager.TryGetIdWithLogging(payload.MobileParty, out var mobilePartyId)) return;

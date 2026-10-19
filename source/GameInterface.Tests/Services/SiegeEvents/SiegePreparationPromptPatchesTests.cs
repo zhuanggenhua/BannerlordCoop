@@ -11,6 +11,7 @@ using Xunit;
 
 namespace GameInterface.Tests.Services.SiegeEvents;
 
+[Collection(ModInformationRoleCollection.Name)]
 public class SiegePreparationPromptPatchesTests
 {
     [Theory]

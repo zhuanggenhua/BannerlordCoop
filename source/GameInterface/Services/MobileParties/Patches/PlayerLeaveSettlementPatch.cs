@@ -37,14 +37,15 @@ internal class PlayerLeaveSettlementPatch
 
     internal static bool RequestLeave()
     {
+        AuthorityLease observedLease = default;
         if (ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authority) && authority.IsAuthorityKnown)
         {
             if (!authority.TryGetCurrentLease(out var lease) || !lease.IsValid || lease.IsPaused) return false;
             if (authority.TryGetLocalAuthorityLease(out var localLease) && localLease == lease) return true;
 
             // A frozen owner must not turn its native action into an observer request.
-            if (ModInformation.IsListenAuthority ||
-                !ContainerProvider.TryResolve<IControllerIdProvider>(out var controller) ||
+            observedLease = lease;
+            if (!ContainerProvider.TryResolve<IControllerIdProvider>(out var controller) ||
                 string.IsNullOrWhiteSpace(controller.ControllerId) ||
                 string.Equals(controller.ControllerId, lease.AuthorityControllerId, StringComparison.Ordinal))
                 return false;
@@ -53,7 +54,7 @@ internal class PlayerLeaveSettlementPatch
 
         var party = MobileParty.MainParty;
 
-        var message = new EndSettlementEncounterAttempted(party);
+        var message = new EndSettlementEncounterAttempted(party, observedLease);
 
         MessageBroker.Instance.Publish(party, message);
 

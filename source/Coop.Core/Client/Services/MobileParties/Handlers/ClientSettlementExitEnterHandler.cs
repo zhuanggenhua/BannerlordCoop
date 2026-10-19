@@ -1,4 +1,5 @@
 ﻿using Common;
+using GameInterface.Services.CampaignAuthority;
 using Common.Messaging;
 using Common.Network;
 using Common.Util;
@@ -33,6 +34,8 @@ public class ClientSettlementExitEnterHandler : IHandler
     private readonly IObjectManager objectManager;
     private readonly ISettlementInterface settlementInterface;
     private readonly IHideoutResultEncounter hideoutResultEncounter;
+    private readonly ICampaignAuthorityContext authorityContext;
+    private readonly ISessionIdentity sessionIdentity;
     // Local attempts and all response transitions run on the game thread.
     private PendingStart pendingStart;
     private uint pendingLeavePartyId;
@@ -43,13 +46,17 @@ public class ClientSettlementExitEnterHandler : IHandler
         INetwork network,
         IObjectManager objectManager,
         ISettlementInterface settlementInterface,
-        IHideoutResultEncounter hideoutResultEncounter)
+        IHideoutResultEncounter hideoutResultEncounter,
+        ICampaignAuthorityContext authorityContext = null,
+        ISessionIdentity sessionIdentity = null)
     {
         this.messageBroker = messageBroker;
         this.network = network;
         this.objectManager = objectManager;
         this.settlementInterface = settlementInterface;
         this.hideoutResultEncounter = hideoutResultEncounter;
+        this.authorityContext = authorityContext;
+        this.sessionIdentity = sessionIdentity;
         messageBroker.Subscribe<StartSettlementEncounterAttempted>(Handle);
         messageBroker.Subscribe<EndSettlementEncounterAttempted>(Handle);
         messageBroker.Subscribe<NetworkSettlementEncounterLeaveResult>(Handle);
@@ -111,6 +118,8 @@ public class ClientSettlementExitEnterHandler : IHandler
 
     private void Handle(MessagePayload<EndSettlementEncounterAttempted> obj)
     {
+        if (authorityContext?.IsAuthorityKnown == true &&
+            !string.IsNullOrWhiteSpace(sessionIdentity?.RoomHostControllerId)) return;
         var payload = obj.What;
 
         if (!objectManager.TryGetHandleWithLogging(payload.Party, out var partyId)) return;
