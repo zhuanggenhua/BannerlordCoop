@@ -203,38 +203,71 @@ internal static class CampaignCycleDispatchPatches
 [HarmonyPatch]
 internal static class CampaignTickerEvidencePatches
 {
-    [ThreadStatic] private static TickerBatch current;
-    private static IEnumerable<MethodBase> TargetMethods()
+    [ThreadStatic] private static TickerGroup current;
+    internal static IEnumerable<MethodBase> TargetMethods()
     {
-        foreach (var type in new[] { typeof(MobileParty), typeof(Settlement), typeof(Town), typeof(Hero), typeof(Clan) })
-            yield return AccessTools.Method(typeof(CampaignPeriodicEventManager.PeriodicTicker<>).MakeGenericType(type), "PeriodicTickSome");
+        foreach (string name in new[] { "MobilePartyHourlyTick", "PeriodicHourlyTick", "PeriodicDailyTick", "PeriodicQuarterDailyTick", "TickPartialHourlyAi" })
+            yield return AccessTools.Method(typeof(CampaignPeriodicEventManager), name);
+    }
+
+    internal static (string Name, string Callback)[] Bindings(string method)
+    {
+        switch (method)
+        {
+            case "MobilePartyHourlyTick": return new[] { ("_mobilePartyHourlyTicker", "MobileParty.HourlyTick") };
+            case "PeriodicHourlyTick": return new[] { ("_hourlyTickMobilePartyTicker", "CampaignEventDispatcher.HourlyTickParty"),
+                ("_hourlyTickSettlementTicker", "CampaignEventDispatcher.HourlyTickSettlement"), ("_hourlyTickClanTicker", "CampaignEventDispatcher.HourlyTickClan") };
+            case "PeriodicDailyTick": return new[] { ("_dailyTickPartyTicker", "CampaignEventDispatcher.DailyTickParty"),
+                ("_mobilePartyDailyTicker", "MobileParty.DailyTick"), ("_dailyTickTownTicker", "CampaignEventDispatcher.DailyTickTown"),
+                ("_dailyTickSettlementTicker", "CampaignEventDispatcher.DailyTickSettlement"), ("_dailyTickHeroTicker", "CampaignEventDispatcher.DailyTickHero"),
+                ("_dailyTickClanTicker", "CampaignEventDispatcher.DailyTickClan") };
+            case "PeriodicQuarterDailyTick": return new[] { ("_quarterDailyPartyTicker", "CampaignEventDispatcher.QuarterDailyPartyTick") };
+            case "TickPartialHourlyAi": return new[] { ("_caravanMobilePartyPartialHourlyAiEventTicker", "CampaignEventDispatcher.TickPartialHourlyAi"),
+                ("_garrisonMobilePartyPartialHourlyAiEventTicker", "CampaignEventDispatcher.TickPartialHourlyAi"),
+                ("_militiaMobilePartyPartialHourlyAiEventTicker", "CampaignEventDispatcher.TickPartialHourlyAi"),
+                ("_villagerMobilePartyPartialHourlyAiEventTicker", "CampaignEventDispatcher.TickPartialHourlyAi"),
+                ("_customMobilePartyPartialHourlyAiEventTicker", "CampaignEventDispatcher.TickPartialHourlyAi"),
+                ("_patrolPartyPartialHourlyAiEventTicker", "CampaignEventDispatcher.TickPartialHourlyAi"),
+                ("_banditMobilePartyPartialHourlyAiEventTicker", "CampaignEventDispatcher.TickPartialHourlyAi"),
+                ("_lordMobilePartyPartialHourlyAiEventTicker", "CampaignEventDispatcher.TickPartialHourlyAi"),
+                ("_partiesWithoutPartyComponentsPartialHourlyAiEventTicker", "CampaignEventDispatcher.TickPartialHourlyAi") };
+            default: throw new ArgumentException("Unknown native ticker group", nameof(method));
+        }
     }
 
     [HarmonyPrefix]
-    private static void Prefix(object __instance, double timeUnitsElapsed, out TickerBatch __state)
+    private static void Prefix(CampaignPeriodicEventManager __instance, MethodBase __originalMethod, out TickerGroup __state)
     {
         __state = null;
         var campaign = Campaign.Current;
-        if (campaign?._campaignPeriodicEventManager == null) return;
-        var field = typeof(CampaignPeriodicEventManager).GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
-            .FirstOrDefault(value => ReferenceEquals(value.GetValue(campaign._campaignPeriodicEventManager), __instance));
-        if (field == null) return;
+        if (!ReferenceEquals(campaign?._campaignPeriodicEventManager, __instance)) return;
         ContainerProvider.TryResolve<IControllerIdProvider>(out var controller);
         ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authority);
         AuthorityLease lease = default;
         bool known = authority?.TryGetCurrentLease(out lease) == true;
-        __state = new TickerBatch { Parent = current, Instance = __instance, Collector = CampaignCycleDispatchPatches.For(campaign),
-            Audit = new CampaignTickerAudit { Ticker = field.Name,
+        __state = new TickerGroup { Parent = current };
+        string method = __originalMethod.Name;
+        double elapsed = method == "PeriodicDailyTick" || method == "PeriodicQuarterDailyTick"
+            ? CampaignTime.DeltaTime.ToDays : CampaignTime.DeltaTime.ToHours;
+        if (method == "PeriodicQuarterDailyTick") elapsed *= 4;
+        if (method == "TickPartialHourlyAi") elapsed *= 0.99;
+        foreach (var binding in Bindings(method))
+        {
+            var batch = new TickerBatch { Collector = CampaignCycleDispatchPatches.For(campaign),
+                Audit = new CampaignTickerAudit { Ticker = binding.Name,
                 Node = controller?.ControllerId, AuthorityId = lease.AuthorityId, RoomId = lease.RoomId,
                 Epoch = lease.Epoch, LeaseKnown = known, LocalWriter = authority?.IsLocalCampaignAuthority == true } };
-        try
-        {
-            var ticker = Traverse.Create(__instance);
-            __state.Ids = ((System.Collections.IEnumerable)ticker.Field("_list").GetValue()).Cast<MBObjectBase>().Select(value => value.StringId).ToArray();
-            __state.Expected = Expected(__state.Ids, ticker.Property<int>("Index").Value, ticker.Property<double>("TickDebt").Value,
-                timeUnitsElapsed, out __state.EndIndex, out __state.EndDebt);
+            try
+            {
+                batch.Instance = AccessTools.Field(typeof(CampaignPeriodicEventManager), binding.Name).GetValue(__instance);
+                var ticker = Traverse.Create(batch.Instance);
+                batch.Ids = ((System.Collections.IEnumerable)ticker.Field("_list").GetValue()).Cast<MBObjectBase>().Select(value => value.StringId).ToArray();
+                batch.Expected = Expected(batch.Ids, ticker.Property<int>("Index").Value, ticker.Property<double>("TickDebt").Value,
+                    elapsed, out batch.EndIndex, out batch.EndDebt).Select(id => binding.Callback + "|" + id).ToArray();
+            }
+            catch (Exception error) { batch.DiagnosticError = error.ToString(); }
+            __state.Batches.Add(batch);
         }
-        catch (Exception error) { __state.DiagnosticError = error.ToString(); }
         current = __state;
     }
 
@@ -252,39 +285,78 @@ internal static class CampaignTickerEvidencePatches
         endIndex = index; endDebt = debt; return expected.ToArray();
     }
 
-    internal static void Completed(object entity)
-    { if (current != null && entity is MBObjectBase value) current.Completed.Add(value.StringId); }
+    internal static void Completed(string callback, object entity)
+    { if (current != null && entity is MBObjectBase value) current.Completed.Add(callback + "|" + value.StringId); }
+
+    internal static void Partition(TickerGroup group)
+    {
+        int offset = 0;
+        for (int index = 0; index < group.Batches.Count; index++)
+        {
+            var batch = group.Batches[index];
+            batch.Completed.Clear();
+            int count = index == group.Batches.Count - 1 ? group.Completed.Count - offset : batch.Expected.Length;
+            batch.Completed.AddRange(group.Completed.Skip(offset).Take(Math.Max(0, count)));
+            offset += batch.Completed.Count;
+        }
+    }
 
     [HarmonyFinalizer]
-    private static Exception Finalizer(Exception __exception, TickerBatch __state)
+    private static Exception Finalizer(Exception __exception, bool __runOriginal, TickerGroup __state)
     {
         if (__state == null) return __exception;
         current = __state.Parent;
+        if (!__runOriginal && __exception == null)
+        {
+            foreach (var batch in __state.Batches)
+            {
+                batch.Collector.Simulation("CampaignTicker." + batch.Audit.Ticker + ".skipped");
+                bool stillWriter = batch.Audit.LocalWriter;
+                if (batch.Audit.LeaseKnown && ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var context))
+                    stillWriter &= context.TryGetLocalAuthorityLease(out var lease) && lease.RoomId == batch.Audit.RoomId &&
+                        lease.AuthorityId == batch.Audit.AuthorityId && lease.Epoch == batch.Audit.Epoch;
+                if (stillWriter) batch.Collector.Simulation("CampaignTicker.writerSkipped.failed");
+            }
+            return __exception;
+        }
+        Partition(__state);
+        foreach (var batch in __state.Batches) FinishBatch(__exception, batch);
+        return __exception;
+    }
+
+    internal static Exception FinishBatch(Exception originalException, TickerBatch batch)
+    {
         bool matches = false;
-        if (__exception == null && __state.DiagnosticError == null)
+        if (originalException == null && batch.DiagnosticError == null)
         {
             try
             {
-                var ticker = Traverse.Create(__state.Instance);
+                var ticker = Traverse.Create(batch.Instance);
                 var ids = ((System.Collections.IEnumerable)ticker.Field("_list").GetValue()).Cast<MBObjectBase>().Select(value => value.StringId).ToArray();
-                matches = __state.Expected.SequenceEqual(__state.Completed) && __state.Ids.SequenceEqual(ids) &&
-                    ticker.Property<int>("Index").Value == __state.EndIndex && ticker.Property<double>("TickDebt").Value == __state.EndDebt;
+                matches = batch.Expected.SequenceEqual(batch.Completed) && batch.Ids.SequenceEqual(ids) &&
+                    ticker.Property<int>("Index").Value == batch.EndIndex && ticker.Property<double>("TickDebt").Value == batch.EndDebt;
             }
-            catch (Exception error) { __state.DiagnosticError = error.ToString(); }
+            catch (Exception error) { batch.DiagnosticError = error.ToString(); }
         }
-        var audit = __state.Audit;
-        audit.Expected = __state.Expected.Length; audit.Completed = __state.Completed.Count;
-        audit.ExpectedHash = CampaignCycleDiagnostics.Hash(string.Join("|", __state.Expected));
-        audit.CompletedHash = CampaignCycleDiagnostics.Hash(string.Join("|", __state.Completed));
+        var audit = batch.Audit;
+        audit.Expected = batch.Expected.Length; audit.Completed = batch.Completed.Count;
+        audit.ExpectedHash = CampaignCycleDiagnostics.Hash(string.Join("|", batch.Expected));
+        audit.CompletedHash = CampaignCycleDiagnostics.Hash(string.Join("|", batch.Completed));
         audit.Mismatches = matches ? 0 : 1;
-        if (!matches) audit.FirstFailure = $"expected={string.Join(",", __state.Expected.Take(12))}; completed={string.Join(",", __state.Completed.Take(12))}; originalException={__exception}; diagnosticError={__state.DiagnosticError}";
-        __state.Collector.Audit(audit);
-        return __exception;
+        if (!matches) audit.FirstFailure = $"expected={string.Join(",", batch.Expected.Take(12))}; completed={string.Join(",", batch.Completed.Take(12))}; originalException={originalException}; diagnosticError={batch.DiagnosticError}";
+        batch.Collector.Audit(audit);
+        return originalException;
+    }
+
+    internal sealed class TickerGroup
+    {
+        public TickerGroup Parent;
+        public readonly List<TickerBatch> Batches = new();
+        public readonly List<string> Completed = new();
     }
 
     internal sealed class TickerBatch
     {
-        public TickerBatch Parent;
         public object Instance;
         public CampaignCycleDiagnostics Collector;
         public string DiagnosticError;
@@ -306,8 +378,8 @@ internal static class CampaignTickerCallbackEvidencePatches
             yield return AccessTools.Method(typeof(CampaignEventDispatcher), name);
     }
     [HarmonyPostfix]
-    private static void Postfix(object[] __args, bool __runOriginal)
-    { if (__runOriginal) CampaignTickerEvidencePatches.Completed(__args[0]); }
+    private static void Postfix(object[] __args, MethodBase __originalMethod, bool __runOriginal)
+    { if (__runOriginal) CampaignTickerEvidencePatches.Completed(__originalMethod.DeclaringType.Name + "." + __originalMethod.Name, __args[0]); }
 }
 
 [HarmonyPatch]
@@ -319,8 +391,8 @@ internal static class CampaignMobilePartyCallbackEvidencePatches
         yield return AccessTools.Method(typeof(MobileParty), "DailyTick");
     }
     [HarmonyPostfix]
-    private static void Postfix(MobileParty __instance, bool __runOriginal)
-    { if (__runOriginal) CampaignTickerEvidencePatches.Completed(__instance); }
+    private static void Postfix(MobileParty __instance, MethodBase __originalMethod, bool __runOriginal)
+    { if (__runOriginal) CampaignTickerEvidencePatches.Completed("MobileParty." + __originalMethod.Name, __instance); }
 }
 
 [HarmonyPatch]
