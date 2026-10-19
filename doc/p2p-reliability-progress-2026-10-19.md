@@ -49,6 +49,12 @@ Active13 限定三轮压力证据： [结构化摘要](../artifacts/p2p-authorit
 
 暂停检查点加入协议、真实售俘测试工具及上述新增回归修复分别由三个gpt-6-luna/xhigh子代理在独立工作树进行；当前均未验收完成。
 
+## 官方文档与本机版本核对
+
+用户提供的 [TaleWorlds Modding Documentation](https://moddocs.bannerlord.com/) 已纳入参考。该站链接到独立的 [API 版本索引](https://apidoc.bannerlord.com/)，本次已确认存在与本机游戏版本相符的 [1.4.8 文档](https://apidoc.bannerlord.com/v/1.4.8/)。优先入口为 [Campaign](https://apidoc.bannerlord.com/v/1.4.8/class_tale_worlds_1_1_campaign_system_1_1_campaign.html)、[CampaignBehaviorBase](https://apidoc.bannerlord.com/v/1.4.8/class_tale_worlds_1_1_campaign_system_1_1_campaign_behavior_base.html) 和 [MBCampaignEvent](https://apidoc.bannerlord.com/v/1.4.8/class_tale_worlds_1_1_campaign_system_1_1_m_b_campaign_event.html)。
+
+官方 API 可交叉核对 WaitAsyncTasks、OnMissionIsStarting、OnStateChanged、RegisterEvents、SyncData 等公开接口；函数的内部调用顺序、线程边界、暂停时行为，以及本项目 Epoch/最终检查点协议，仍用本机引擎实现、源码测试和双进程日志验证。文档中的接口存在性不作为权威迁移已验收的证据。第三方 Harmony 的闭合泛型补丁问题另按实际库源码与最小复现排查。
+
 ## 编排约束
 
 按用户新指示，子代理使用 `gpt-6-luna`、`xhigh`，最多三个。总控保留任务拆分、独立审查、集成、自动回归及独占实机验收职责；子代理不部署、不启动游戏。
