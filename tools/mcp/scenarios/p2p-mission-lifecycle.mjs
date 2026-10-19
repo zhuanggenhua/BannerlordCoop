@@ -6,15 +6,16 @@ import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { assertActors, assertPlayers, assertProcessEvidence, assertProcessLogCompleteness, assertWorld, assertWriter,
-    epoch, field, jsonOutput, logDiagnostics, paused, writer } from './p2p-udp-reliability.mjs';
+    epoch, field, jsonOutput, logDiagnostics, paused, proxyProfile } from './p2p-udp-reliability.mjs';
 import { allocationCheckpoint, assertAllocationCheckpointFloor, assertNoPollingMutation,
     assertSaleRegistrations, assertStopped, createReadDeadlineScope, OnceActions,
     options, pollReadOnly } from './p2p-prisoner-sale.mjs';
 import { collectNativeLog } from './native-log-archive.mjs';
+import { UdpFaultProxy } from './udp-fault-proxy.mjs';
 
 export { options };
 export const HELP = `Usage: node tools/mcp/scenarios/p2p-mission-lifecycle.mjs
-  --repo <coordinator checkout> --server <CoopMcpServer.exe> --config <direct profiles.json>
+  --repo <coordinator checkout> --server <CoopMcpServer.exe> --config <profiles.json>
   --sdk-root <node_modules> --record <new evidence.jsonl>
   [--profile local] [--save P1B_DirectIP_Recruit]
 
@@ -24,6 +25,8 @@ Two real native processes: A Mission / B map writer; both Mission / paused world
 B returns / B resumes; A returns / A preferred writer. Real MapState and stable
 BMP frame receipts are mandatory. Each mutation is dispatched once; an explicit
 Started encounter response permits one separate location-open request.
+With clientProxyPort, the existing UDP proxy forwards without faults and measures
+bidirectional traffic during all-away pause. Direct mode leaves that NOT_OBSERVED.
 No deployment, forced time advance, Mission core rewrite, battle-result or
 natural-day acceptance. Import and --help are offline.`;
 
@@ -70,6 +73,25 @@ export function assertMissionProgress(before, after) {
     assert.ok(after.mission.time > before.mission.time, 'Mission logical time did not advance');
 }
 
+export function assertTransportProgress(before, after) {
+    const deltas = {};
+    for (const value of [before, after]) {
+        for (const key of ['dropped', 'delayed', 'reordered', 'heldTotal', 'heldCurrentCount', 'heldOverflow', 'errorCount'])
+            assert.equal(value[key], 0, 'Transparent Mission network observation encountered a fault: ' + key);
+        assert.deepEqual(value.errors, []);
+    }
+    for (const kind of ['received', 'sent']) {
+        deltas[kind] = {};
+        for (const direction of ['toHost', 'toClient']) {
+            const from = before[kind]?.[direction], to = after[kind]?.[direction];
+            assert.ok(Number.isSafeInteger(from) && from >= 0 && Number.isSafeInteger(to));
+            assert.ok(to > from, `Game UDP did not progress: ${kind}/${direction}`);
+            deltas[kind][direction] = to - from;
+        }
+    }
+    return { acceptance: 'PASS', scope: 'Bidirectional game UDP transport liveness only; no battle-route or payload correctness claim', deltas };
+}
+
 export function assertAllAway(states, initial) {
     assertActors(states, initial);
     for (const state of states) {
@@ -113,8 +135,11 @@ export async function run(config) {
     assert.ok((await stat(join(config.repo, '.git'))).isDirectory(), 'Use coordinator main checkout');
     const git = args => execFileSync('git', args, { cwd: config.repo, encoding: 'utf8', windowsHide: true }).trim();
     assert.equal(await realpath(config.repo), await realpath(git(['rev-parse', '--show-toplevel'])));
-    const profile = JSON.parse(await readFile(config.config, 'utf8')).profiles?.[config.profile];
-    assert.ok(profile?.listenAuthority && !profile.clientProxyPort, 'Direct-IP ListenAuthority profile required');
+    const profiles = JSON.parse(await readFile(config.config, 'utf8')), profile = profiles.profiles?.[config.profile];
+    assert.ok(profile?.listenAuthority, 'ListenAuthority profile required');
+    assert.ok(profile.serverPlatformId && profile.clientPlatformIds?.[0]);
+    assert.notEqual(profile.serverPlatformId, profile.clientPlatformIds[0]);
+    const proxyOptions = profile.clientProxyPort == null ? null : proxyProfile(profiles, config.profile);
     const sdk = join(config['sdk-root'], '@modelcontextprotocol/sdk/dist/esm/client');
     const [{ Client }, { StdioClientTransport }] = await Promise.all([
         import(pathToFileURL(join(sdk, 'index.js')).href), import(pathToFileURL(join(sdk, 'stdio.js')).href),
@@ -124,10 +149,16 @@ export async function run(config) {
     const summaryPath = config.record + '.summary.json';
     const summary = { scenario: 'p2p-mission-lifecycle', codeHead: git(['rev-parse', 'HEAD']), config,
         startedUtc: new Date().toISOString(), features: [], screenshots: [], logs: {}, runId: null,
-        cleanupConfirmed: false, passed: false, network: 'Direct IP; no injected packet faults',
+        cleanupConfirmed: false, passed: false,
+        transportAcceptance: 'NOT_OBSERVED',
+        network: proxyOptions ? 'Direct IP through original transparent loopback UDP proxy; no injected packet faults' : 'Direct IP; transport liveness NOT_OBSERVED',
         scope: 'Native tavern Mission coordination and all-away pause/resume, not battle results or natural-day acceptance' };
     await writeFile(summaryPath, JSON.stringify(summary, null, 2), { flag: 'wx' });
-    const save = () => writeFile(summaryPath, JSON.stringify(summary, null, 2) + '\n');
+    const proxy = proxyOptions ? new UdpFaultProxy({ listenPort: proxyOptions.port }) : null;
+    const save = () => {
+        if (proxy) summary.udp = structuredClone(proxy.stats);
+        return writeFile(summaryPath, JSON.stringify(summary, null, 2) + '\n');
+    };
     const emit = entry => appendFile(config.record, JSON.stringify({ utc: new Date().toISOString(), ...entry }) + '\n');
     const client = new Client({ name: 'codex-p2p-mission-lifecycle', version: '1.0.0' });
     const transport = new StdioClientTransport({ command: config.server, args: ['--config', config.config],
@@ -270,6 +301,7 @@ export async function run(config) {
         return poll('actual MapState after Mission exit', () => native(instance, false), 60000);
     }
     try {
+        if (proxy) { await proxy.start(); summary.proxy = { listenPort: proxy.port, targetPort: proxy.targetPort }; }
         await client.connect(transport);
         const started = await call('start_run', { profile: config.profile, client_count: 0, save_name: config.save }, true);
         assert.ok(runId); assert.equal(started.error, null); await waitReady('server', 'readyForCampaignTests');
@@ -304,6 +336,7 @@ export async function run(config) {
         await feature('both-Missions-exact-world-pause-native-frames-continue', async () => {
             await setTime('Play_1x'); const entry = await enter('client1');
             const before = await snapshot('all-away committed paused lease', true);
+            const udpBefore = proxy ? { utc: new Date().toISOString(), stats: structuredClone(proxy.stats) } : null;
             const first = await Promise.all(INSTANCES.map(instance => screenshot(instance, 'all-away-before')));
             await delay(5000); const after = await snapshot('all-away unchanged world', true);
             assertNoWorldProgress(before, after, initial);
@@ -312,10 +345,13 @@ export async function run(config) {
                 assertEngineProgress(first[index], second[index]);
                 assertMissionProgress(before.states[index], after.states[index]); await native(INSTANCES[index], true);
             }
+            const udpAfter = proxy ? { utc: new Date().toISOString(), stats: structuredClone(proxy.stats) } : null;
+            const transport = proxy ? { ...assertTransportProgress(udpBefore.stats, udpAfter.stats), before: udpBefore, after: udpAfter }
+                : { acceptance: 'NOT_OBSERVED', scope: 'MCP and native frame receipts do not prove game P2P message exchange' };
+            summary.transportAcceptance = transport.acceptance;
             return { entry, before, after, first, second,
                 mcpControlAlive: 'Both game-thread commands and native frame receipts completed',
-                p2pNetworkAcceptance: 'NOT_OBSERVED',
-                networkLimit: 'MCP control and engine frames do not prove game P2P message exchange during all-away pause' };
+                p2pNetworkAcceptance: transport.acceptance, transport };
         });
         await feature('B-return-resumes-A-stays-in-Mission', async () => {
             await leave('client1'); const before = await awaitWriter(1); await setTime('Play_1x');
@@ -349,9 +385,11 @@ export async function run(config) {
             catch (error) { summary.logVerificationError = error.stack; process.exitCode = 1; }
         }
         try { await client.close(); } catch (error) { summary.closeError = error.stack; process.exitCode = 1; }
+        if (proxy) try { await proxy.close(); }
+        catch (error) { summary.proxyCloseError = error.stack; process.exitCode = 1; }
         summary.completedUtc = new Date().toISOString();
         summary.passed = !summary.failed && !summary.cleanupError && !summary.logVerificationError &&
-            !summary.closeError && summary.cleanupConfirmed && summary.features.length === 5;
+            !summary.closeError && !summary.proxyCloseError && summary.cleanupConfirmed && summary.features.length === 5;
         await save(); if (!summary.passed) process.exitCode = 1;
         console.log(JSON.stringify({ scenario: summary.scenario, runId, passed: summary.passed, summaryPath }));
     }

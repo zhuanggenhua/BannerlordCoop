@@ -42,7 +42,11 @@ The mandatory four-point change review is:
 ## Scenario and exact evidence
 
 Run `tools/mcp/scenarios/p2p-mission-lifecycle.mjs --help` for coordinator arguments.
-Use a new `--record` path for each attempt and a direct-IP ListenAuthority profile.
+Use a new `--record` path for each attempt and a ListenAuthority profile.
+For transport liveness use the existing `profiles-reliability-proxy.json` whose
+`clientProxyPort` sends game UDP through the original `UdpFaultProxy`, with no fault
+policy set. It forwards to the original port 4200. A direct profile is still allowed
+but explicitly leaves transport acceptance NOT_OBSERVED.
 Run the entire scenario under `tools/coordination/with-game-lock.mjs`; no worker
 deploys or launches the game. The scenario has five independently recorded stages:
 
@@ -77,10 +81,14 @@ batch errors fail acceptance. A failed scenario remains failed after cleanup.
 Each stage records two BMP receipts and their SHA256; screenshot pixel sanity
 does not assert semantic correctness. A reviewer must inspect the actual images.
 Successful MCP commands and advancing engine/Mission clocks establish control and
-simulation liveness only. This direct-IP scenario does not measure fresh game P2P
-messages during the all-away interval; that requirement remains NOT_OBSERVED until
-separate transport or Mission message evidence is captured. It must not be inferred
-from stable lease fields or registered-player counts.
+simulation liveness only. In transparent-proxy mode the all-away observation also
+retains UTC-stamped before/after UDP statistics: received and successfully sent
+datagrams must increase in both directions, with zero drop, delay, reorder, hold,
+overflow or socket errors. This proves game transport activity while the world is
+paused; it does not prove every battle message route or payload is correct. Direct
+mode keeps that sub-item NOT_OBSERVED; stable lease fields and registered-player
+counts cannot substitute for fresh transport evidence. The scenario does not alter
+LiteNetLib, its packets, the proxy implementation or Mission synchronization.
 
 `stop_run` runs in `finally`; both process trees must be confirmed exited before
 the outer installation lock can be released. Archive or cleanup failure is part

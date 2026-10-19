@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { assertAllAway, assertEngineProgress, assertMissionProgress, assertNativeState,
+import { assertAllAway, assertEngineProgress, assertMissionProgress, assertNativeState, assertTransportProgress,
     assertNoWorldProgress, assertSingleWriterProgress, nextEntryPhase } from './p2p-mission-lifecycle.mjs';
 
 const initial = ['A', 'B'].map(controller => ({ controller, mainHero: 'hero-' + controller, mainParty: 'party-' + controller }));
@@ -48,6 +48,31 @@ test('rendered frames alone cannot prove Mission logical simulation continues', 
     assert.throws(() => assertMissionProgress(before, { ...after, mission: null }), /Missing native/);
     const ended = clone(after); ended.mission.ended = true;
     assert.throws(() => assertMissionProgress(before, ended));
+});
+
+const udpStats = () => ({ received: { toHost: 10, toClient: 20 }, sent: { toHost: 10, toClient: 20 },
+    dropped: 0, delayed: 0, reordered: 0, heldTotal: 0, heldCurrentCount: 0, heldOverflow: 0, errorCount: 0, errors: [] });
+test('all-away game transport needs real received and sent progress in both directions', () => {
+    const before = udpStats(), after = udpStats();
+    for (const kind of ['received', 'sent']) for (const direction of ['toHost', 'toClient']) after[kind][direction] += 2;
+    assert.equal(assertTransportProgress(before, after).acceptance, 'PASS');
+    for (const kind of ['received', 'sent']) for (const direction of ['toHost', 'toClient']) {
+        const stalled = clone(after); stalled[kind][direction] = before[kind][direction];
+        assert.throws(() => assertTransportProgress(before, stalled), /UDP did not progress/);
+    }
+});
+test('zero UDP activity cannot be inferred from successful MCP calls or engine frames', () => {
+    assert.throws(() => assertTransportProgress(udpStats(), udpStats()), /UDP did not progress/);
+});
+test('any observed packet fault invalidates the transparent transport observation', () => {
+    const before = udpStats(), after = udpStats();
+    for (const kind of ['received', 'sent']) for (const direction of ['toHost', 'toClient']) after[kind][direction]++;
+    for (const key of ['dropped', 'delayed', 'reordered', 'heldTotal', 'heldCurrentCount', 'heldOverflow', 'errorCount']) {
+        const faulty = clone(after); faulty[key]++;
+        assert.throws(() => assertTransportProgress(before, faulty), /fault/);
+    }
+    const error = clone(after); error.errors.push('socket error');
+    assert.throws(() => assertTransportProgress(before, error));
 });
 
 test('all-away requires shared valid epoch, automatic availability and zero writers', () => {
