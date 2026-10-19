@@ -18,6 +18,8 @@ internal class ClanCachePatches
         // ActualClan sync and the cache message can both apply the same membership change.
         if (__instance.WarPartyComponents.Contains(warPartyComponent)) return false;
 
+        if (CallOriginalPolicy.IsOriginalAllowed()) return true;
+
         if (ModInformation.IsClient) return CallOriginalPolicy.IsOriginalAllowed();
 
         var message = new WarPartyAdded(__instance, warPartyComponent);
@@ -31,6 +33,8 @@ internal class ClanCachePatches
     {
         if (!__instance.WarPartyComponents.Contains(warPartyComponent)) return false;
 
+        if (CallOriginalPolicy.IsOriginalAllowed()) return true;
+
         if (ModInformation.IsClient) return CallOriginalPolicy.IsOriginalAllowed();
 
         var message = new WarPartyRemoved(__instance, warPartyComponent);
@@ -42,6 +46,8 @@ internal class ClanCachePatches
     [HarmonyPrefix]
     public static bool OnSupporterNotableAddedPrefix(ref Clan __instance, Hero hero)
     {
+        if (CallOriginalPolicy.IsOriginalAllowed()) return true;
+
         if (ModInformation.IsClient) return CallOriginalPolicy.IsOriginalAllowed();
 
         var message = new SupporterNotableAdded(__instance, hero);
@@ -53,6 +59,8 @@ internal class ClanCachePatches
     [HarmonyPrefix]
     public static bool OnSupporterNotableRemovedPrefix(ref Clan __instance, Hero hero)
     {
+        if (CallOriginalPolicy.IsOriginalAllowed()) return true;
+
         if (ModInformation.IsClient) return CallOriginalPolicy.IsOriginalAllowed();
 
         var message = new SupporterNotableRemoved(__instance, hero);
