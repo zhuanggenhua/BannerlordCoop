@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { appendFile, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
@@ -63,13 +64,48 @@ export class OnceActions {
     }
 }
 
+export function createReadDeadlineScope() {
+    const storage = new AsyncLocalStorage();
+    const currentDeadline = () => storage.getStore()?.deadline;
+    return {
+        currentDeadline,
+        run(deadline, callback) {
+            const inheritedDeadline = currentDeadline();
+            const effectiveDeadline = inheritedDeadline === undefined ? deadline : Math.min(inheritedDeadline, deadline);
+            return storage.run({ deadline: effectiveDeadline }, callback);
+        },
+    };
+}
+
+export function assertNoPollingMutation(deadline, mutation) {
+    if (deadline !== undefined && mutation) {
+        const error = new Error('Mutations cannot run inside a polling callback');
+        error.code = 'ERR_POLLING_MUTATION';
+        throw error;
+    }
+}
+
+export async function awaitAllPreservingFirstFailure(promises) {
+    let firstFailure, hasFailure = false;
+    const guarded = Array.from(promises, promise => Promise.resolve(promise).catch(error => {
+        if (!hasFailure) { firstFailure = error; hasFailure = true; }
+        throw error;
+    }));
+    const results = await Promise.allSettled(guarded);
+    if (hasFailure) throw firstFailure;
+    return results.map(result => result.value);
+}
+
 export async function pollReadOnly(label, readAndAssert, {
     timeoutMs = 30000, intervalMs = 500, now = Date.now, sleep = delay, onPending = async () => {},
 } = {}) {
     const deadline = now() + timeoutMs; let lastError;
     do {
         try { return await readAndAssert(deadline); }
-        catch (error) { lastError = error; await onPending(error); }
+        catch (error) {
+            if (error?.code === 'ERR_POLLING_MUTATION') throw error;
+            lastError = error; await onPending(error);
+        }
         if (now() < deadline) await sleep(Math.min(intervalMs, deadline - now()));
     } while (now() < deadline);
     throw new Error(`${label} did not converge: ${lastError?.message}`, { cause: lastError });
@@ -239,7 +275,8 @@ export async function run(config) {
         config, runId: null, features: [], sales: [], screenshots: [], logs: {}, failed: null,
         cleanupConfirmed: false, passed: false,
         scope: 'Trusted writer-only Danustica preparation and real regular-NPC player-sale prefix; no player-hero ransom, captivity/Mission, natural-cycle, cold-save, or network-fault acceptance.' };
-    let runId, callId = 0, initial = null, readDeadline;
+    let runId, callId = 0, initial = null;
+    const readDeadlineScope = createReadDeadlineScope();
     const once = new OnceActions();
     const client = new Client({ name: 'codex-p2p-prisoner-sale', version: '1.0.0' });
     const transport = new StdioClientTransport({ command: config.server, args: ['--config', config.config],
@@ -249,8 +286,9 @@ export async function run(config) {
     const saveSummary = () => writeFile(summaryPath, JSON.stringify(summary, null, 2) + '\n');
 
     async function call(name, args, mutation = false) {
-        assert.ok(!(readDeadline && mutation), 'Mutations cannot run inside a polling callback');
-        const remaining = readDeadline ? readDeadline - Date.now() : 360000;
+        const readDeadline = readDeadlineScope.currentDeadline();
+        assertNoPollingMutation(readDeadline, mutation);
+        const remaining = readDeadline === undefined ? 360000 : readDeadline - Date.now();
         assert.ok(remaining > 0, 'Read-only convergence deadline expired');
         const id = ++callId; await emit({ phase: 'request', callId: id, name, args, mutation });
         let raw;
@@ -285,11 +323,12 @@ export async function run(config) {
     const bothStates = () => Promise.all(INSTANCES.map(state));
 
     async function poll(label, readAndAssert, timeout = 30000) {
+        const inheritedDeadline = readDeadlineScope.currentDeadline();
+        const remainingParentTime = inheritedDeadline === undefined ? timeout : Math.max(0, inheritedDeadline - Date.now());
         return pollReadOnly(label, async deadline => {
-            const previousDeadline = readDeadline;
-            try { readDeadline = deadline; return await readAndAssert(); }
-            finally { readDeadline = previousDeadline; }
-        }, { timeoutMs: timeout, onPending: error => emit({ phase: 'poll_pending', label, reason: error.message }) });
+            return readDeadlineScope.run(deadline, readAndAssert);
+        }, { timeoutMs: Math.min(timeout, remainingParentTime),
+            onPending: error => emit({ phase: 'poll_pending', label, reason: error.message }) });
     }
     async function awaitWriter(controller) {
         return poll('confirmed writer ' + controller, async () => {
@@ -397,6 +436,7 @@ export async function run(config) {
     async function feature(name, action) {
         const row = { name, startedUtc: new Date().toISOString(), status: 'RUNNING' };
         summary.features.push(row); await saveSummary();
+        let failure, hasFailure = false;
         try {
             row.evidence = await action(); await collectLogs();
             if (row.evidence?.kind === 'sale') {
@@ -406,13 +446,23 @@ export async function run(config) {
             for (const instance of INSTANCES) { await nativeMap(instance); await screenshot(instance, name); }
             row.status = 'PASS';
         } catch (error) {
-            row.status = 'FAIL'; row.error = error.stack;
-            try { await collectLogs(); } catch (diagnostic) { row.logError = diagnostic.stack; }
-            for (const instance of INSTANCES) { try { await screenshot(instance, name + '-failed'); } catch (diagnostic) { row.captureError = diagnostic.stack; } }
-            throw error;
+            failure = error; hasFailure = true; row.status = 'FAIL'; row.error = error.stack ?? String(error);
+            try { await collectLogs(); } catch (diagnostic) { row.logError = diagnostic.stack ?? String(diagnostic); }
+            for (const instance of INSTANCES) { try { await screenshot(instance, name + '-failed'); } catch (diagnostic) { row.captureError = diagnostic.stack ?? String(diagnostic); } }
         } finally {
-            row.completedUtc = new Date().toISOString(); await emit({ phase: 'feature_result', feature: row }); await saveSummary();
+            row.completedUtc = new Date().toISOString();
+            try { await emit({ phase: 'feature_result', feature: row }); }
+            catch (diagnostic) {
+                if (hasFailure) row.diagnosticError = diagnostic.stack ?? String(diagnostic);
+                else { failure = diagnostic; hasFailure = true; row.status = 'FAIL'; row.error = diagnostic.stack ?? String(diagnostic); }
+            }
+            try { await saveSummary(); }
+            catch (diagnostic) {
+                if (hasFailure) row.summaryError = diagnostic.stack ?? String(diagnostic);
+                else { failure = diagnostic; hasFailure = true; row.status = 'FAIL'; row.error = diagnostic.stack ?? String(diagnostic); }
+            }
         }
+        if (hasFailure) throw failure;
     }
     async function settlementReplicas(controller, requireBackstreetInstance) {
         return poll('Danustica/backstreet replicas for ' + controller, async () => {
@@ -597,7 +647,7 @@ export async function run(config) {
             const b = await ensureSettlement('client1', initial[1].controller);
             await command('server', 'coop.debug.authority.availability', ['auto'], true);
             await awaitWriter(initial[0].controller); await pause();
-            const prepared = await Promise.all(initial.map(actor => settlementReplicas(actor.controller,
+            const prepared = await awaitAllPreservingFirstFailure(initial.map(actor => settlementReplicas(actor.controller,
                 INSTANCES[initial.indexOf(actor)])));
             return { a, b, prepared, trustedWriterOnlyNativeTownPreparation: true };
         });

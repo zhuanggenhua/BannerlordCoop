@@ -3,7 +3,8 @@ import test from 'node:test';
 import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { assertPausedSnapshot, assertSaleApplications, assertSaleRegistrations, assertSaleTransition,
-    assertStopped, nextSettlementPreparationAction, options, pollReadOnly, saleApplications, OnceActions } from './p2p-prisoner-sale.mjs';
+    assertNoPollingMutation, assertStopped, awaitAllPreservingFirstFailure, createReadDeadlineScope,
+    nextSettlementPreparationAction, options, pollReadOnly, saleApplications, OnceActions } from './p2p-prisoner-sale.mjs';
 
 const clone = value => structuredClone(value);
 const ids = [
@@ -88,6 +89,83 @@ test('registration polling cannot pass while the joining actor is inactive', asy
     }, { timeoutMs: 25, intervalMs: 5, now: () => now, sleep: async milliseconds => { now += milliseconds; } });
     assert.equal(reads, 2);
     assert.deepEqual(result, ready);
+});
+
+test('concurrent read deadlines stay isolated through either completion order and leave outer writes enabled', async () => {
+    for (const order of [['A', 'B'], ['B', 'A']]) {
+        const scope = createReadDeadlineScope();
+        const baseDeadline = Date.now() + 60000;
+        const deadlines = { A: baseDeadline + 100, B: baseDeadline + 200 };
+        const releases = {}, gates = {};
+        for (const name of ['A', 'B']) gates[name] = new Promise(resolve => { releases[name] = resolve; });
+        const started = [];
+        const tasks = Object.fromEntries(['A', 'B'].map(name => [name, scope.run(deadlines[name], async () => {
+            started.push(name);
+            await gates[name];
+            return scope.currentDeadline();
+        })]));
+        await Promise.resolve();
+        assert.deepEqual(started, ['A', 'B']);
+        for (const name of order) {
+            releases[name]();
+            assert.equal(await tasks[name], deadlines[name]);
+            assert.equal(scope.currentDeadline(), undefined);
+        }
+        let writes = 0;
+        assertNoPollingMutation(scope.currentDeadline(), true);
+        writes++;
+        assert.equal(writes, 1, 'A successful concurrent poll must not leave a stale read context around writes');
+    }
+});
+
+test('nested deadlines inherit the earlier deadline and throwing callbacks restore their parent context', async () => {
+    const scope = createReadDeadlineScope();
+    const early = Date.now() + 100;
+    const late = early + 1000;
+    const failure = new Error('nested read failed');
+    await scope.run(late, async () => {
+        assert.equal(scope.currentDeadline(), late);
+        await scope.run(early, async () => { assert.equal(scope.currentDeadline(), early); });
+    });
+    await scope.run(early, async () => {
+        assert.equal(scope.currentDeadline(), early);
+        await assert.rejects(scope.run(late, async () => {
+            assert.equal(scope.currentDeadline(), early);
+            throw failure;
+        }), error => error === failure);
+        assert.equal(scope.currentDeadline(), early);
+    });
+    assert.equal(scope.currentDeadline(), undefined);
+});
+
+test('polling mutation guards abort immediately without dispatch or retry', async () => {
+    const scope = createReadDeadlineScope();
+    let reads = 0, writes = 0, pending = 0;
+    await assert.rejects(scope.run(Date.now() + 30000, () => pollReadOnly('mutation guard', async () => {
+        reads++;
+        assertNoPollingMutation(scope.currentDeadline(), true);
+        writes++;
+    }, { timeoutMs: 30000, onPending: async () => { pending++; } })), error =>
+        error.code === 'ERR_POLLING_MUTATION' && /Mutations cannot run inside a polling callback/.test(error.message));
+    assert.equal(reads, 1);
+    assert.equal(writes, 0);
+    assert.equal(pending, 0);
+    assert.equal(scope.currentDeadline(), undefined);
+});
+
+test('parallel settlement preparation waits for every poll and preserves the first actual rejection', async () => {
+    const failureB = new Error('B settlement read failed first');
+    const failureA = new Error('A settlement read failed later');
+    let rejectA, rejectB, completed = false;
+    const pendingA = new Promise((_, reject) => { rejectA = reject; });
+    const pendingB = new Promise((_, reject) => { rejectB = reject; });
+    const result = awaitAllPreservingFirstFailure([pendingA, pendingB]).then(
+        () => { completed = true; return null; }, error => { completed = true; return error; });
+    rejectB(failureB);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(completed, false, 'Preparation must wait while its other poll is still active');
+    rejectA(failureA);
+    assert.equal(await result, failureB);
 });
 
 test('an existing town menu adapts once instead of entering the tavern again', () => {
