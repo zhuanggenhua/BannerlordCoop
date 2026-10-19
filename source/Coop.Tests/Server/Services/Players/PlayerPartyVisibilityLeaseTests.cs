@@ -19,9 +19,11 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.Serialization;
+using System.Threading;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Coop.Tests.Server.Services.Players;
 
@@ -32,9 +34,11 @@ public sealed class PlayerPartyVisibilityLeaseTests : IDisposable
     private readonly Campaign? previousCampaign = Campaign.Current;
     private readonly Type sandBoxViewSubModuleType;
     private readonly object? previousSandBoxViewSubModule;
+    private readonly ITestOutputHelper output;
 
-    public PlayerPartyVisibilityLeaseTests()
+    public PlayerPartyVisibilityLeaseTests(ITestOutputHelper output)
     {
+        this.output = output;
         ModInformation.SessionMode = SessionMode.ListenAuthority;
 
         var campaign = (Campaign)FormatterServices.GetUninitializedObject(typeof(Campaign));
@@ -190,9 +194,12 @@ public sealed class PlayerPartyVisibilityLeaseTests : IDisposable
         var broker = new TestMessageBroker();
         using var handler = CreateHandler(broker, players, objects.Object, CreateAuthority("writer"));
 
+        using var queued = new IsolatedGameQueue(output);
         broker.Publish(this, new PlayerDisconnected(disconnectedPeer, default));
+        Assert.Equal(1, queued.PendingCount);
+        Assert.True(party.IsActive);
         players.SetPeer(reconnectedPeer);
-        GameThread.Run(() => { }, blocking: true);
+        queued.Drain();
 
         Assert.True(party.IsActive);
         Assert.True(party.IsVisible);
@@ -212,9 +219,13 @@ public sealed class PlayerPartyVisibilityLeaseTests : IDisposable
         var broker = new TestMessageBroker();
         using var handler = CreateHandler(broker, players, objects.Object, CreateAuthority("writer"));
 
+        using var queued = new IsolatedGameQueue(output);
         broker.Publish(this, new PlayerCampaignSynchronized(supersededPeer));
+        Assert.Equal(1, queued.PendingCount);
+        Assert.False(party.IsActive);
+        Assert.Empty(objects.Invocations);
         players.SetPeer(currentPeer);
-        GameThread.Run(() => { }, blocking: true);
+        queued.Drain();
 
         Assert.False(party.IsActive);
         Assert.False(party.IsVisible);
@@ -233,12 +244,64 @@ public sealed class PlayerPartyVisibilityLeaseTests : IDisposable
         var broker = new TestMessageBroker();
         var handler = CreateHandler(broker, players, objects.Object, CreateAuthority("writer"));
 
+        using var queued = new IsolatedGameQueue(output);
         broker.Publish(this, new PlayerCampaignSynchronized(peer));
+        Assert.Equal(1, queued.PendingCount);
+        Assert.False(party.IsActive);
+        Assert.Empty(objects.Invocations);
         handler.Dispose();
-        GameThread.Run(() => { }, blocking: true);
+        queued.Drain();
 
         Assert.False(party.IsActive);
         Assert.Empty(objects.Invocations);
+    }
+
+    private sealed class IsolatedGameQueue : IDisposable
+    {
+        private readonly Type contextType = AccessTools.Inner(typeof(GameThread), "QueueContext");
+        private readonly object queue;
+        private readonly ITestOutputHelper output;
+        private IDisposable? active;
+
+        public IsolatedGameQueue(ITestOutputHelper output)
+        {
+            Assert.False(GameThread.Instance.IsGameThread);
+            this.output = output;
+            queue = Activator.CreateInstance(contextType, nonPublic: true)!;
+            active = Activate();
+        }
+
+        public int PendingCount => (int)AccessTools.Property(contextType, "Count").GetValue(queue)!;
+
+        public void Drain()
+        {
+            Assert.Equal(1, PendingCount);
+            int callerThread = Thread.CurrentThread.ManagedThreadId, executionThread = 0;
+            bool ranOnGameThread = false;
+            active!.Dispose();
+            active = null;
+            GameThread.Run(() =>
+            {
+                using var scope = Activate();
+                executionThread = Thread.CurrentThread.ManagedThreadId;
+                ranOnGameThread = GameThread.Instance.IsGameThread;
+                GameThread.Instance.Update(TimeSpan.Zero);
+            }, blocking: true);
+            Assert.Equal(0, PendingCount);
+            Assert.True(ranOnGameThread);
+            Assert.NotEqual(callerThread, executionThread);
+            output.WriteLine($"Private queued action: pendingBefore=1, pendingAfter={PendingCount}, callerThread={callerThread}, gameLoopThread={executionThread}, ranOnGameThread={ranOnGameThread}");
+        }
+
+        private IDisposable Activate() => (IDisposable)AccessTools.Method(typeof(GameThread), "ActivateQueue")
+            .Invoke(null, new[] { queue })!;
+
+        public void Dispose()
+        {
+            AccessTools.Method(typeof(GameThread), "DiscardQueuedActions", new[] { contextType })
+                .Invoke(GameThread.Instance, new[] { queue });
+            active?.Dispose();
+        }
     }
 
     private static PlayerPartyVisibilityHandler CreateHandler(
