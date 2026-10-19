@@ -183,6 +183,8 @@ public class CoopClient : CoopNetworkBase, ICoopClient
                 return "The server password is incorrect.";
             case ConnectionRejectCode.ServerRestarting:
                 return "The server is restarting. Try again in a few minutes.";
+            case ConnectionRejectCode.CampaignCheckpointUnavailable:
+                return "The campaign authority checkpoint is unavailable. Joining is paused until the current writer completes a handoff.";
             default:
                 return "The server rejected the connection.";
         }

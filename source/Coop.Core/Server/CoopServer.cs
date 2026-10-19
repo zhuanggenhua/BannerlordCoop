@@ -38,6 +38,7 @@ public class CoopServer : CoopNetworkBase, ICoopServer
     private static readonly ILogger Logger = LogManager.GetLogger<CoopServer>();
 
     public const string ServerControllerId = "Server";
+    internal const string CampaignCheckpointUnavailableReason = "CampaignCheckpointUnavailable";
 
     public override int Priority => 0;
 
@@ -47,6 +48,7 @@ public class CoopServer : CoopNetworkBase, ICoopServer
     private readonly IConnectionMessageQueue connectionMessageQueue;
     private readonly IServerAdmissionGate admissionGate;
     private readonly IJoinPeerTerminator peerTerminator;
+    private readonly ISessionIdentity sessionIdentity;
     // Buffers per-change sends and merges them into one send per key. Drained each tick in Update.
     private readonly ISendCoalescer coalescer;
     // Lazy breaks the construction cycle: the manager depends on ITimeControlInterface, which depends
@@ -75,7 +77,8 @@ public class CoopServer : CoopNetworkBase, ICoopServer
         IReliableMessageBatcher<NetPeer> reliableMessageBatcher,
         CancellationTokenSource sessionCancellation,
         ICampaignAuthorityContext campaignAuthorityContext = null,
-        ICampaignAuthorityMessageSender authorityMessageSender = null)
+        ICampaignAuthorityMessageSender authorityMessageSender = null,
+        ISessionIdentity sessionIdentity = null)
         : base(configuration, serializer, reliableMessageBatcher, sessionCancellation, campaignAuthorityContext, authorityMessageSender)
     {
         // Dependancy assignment
@@ -85,6 +88,7 @@ public class CoopServer : CoopNetworkBase, ICoopServer
         this.connectionMessageQueue = connectionMessageQueue;
         this.admissionGate = admissionGate;
         this.peerTerminator = peerTerminator;
+        this.sessionIdentity = sessionIdentity;
         this.missionManager = missionManager;
         this.overloadedPeerManager = overloadedPeerManager;
         this.coalescer = coalescer;
@@ -140,6 +144,13 @@ public class CoopServer : CoopNetworkBase, ICoopServer
         {
             Logger.Information("Client connection rejected for {Endpoint}: the server is restarting", request.RemoteEndPoint);
             Reject(request, ConnectionRejectCode.ServerRestarting);
+            return;
+        }
+
+        if (HasRemoteCampaignWriter())
+        {
+            Logger.Information("Client connection rejected for {Endpoint}: the complete campaign authority checkpoint is unavailable", request.RemoteEndPoint);
+            Reject(request, ConnectionRejectCode.CampaignCheckpointUnavailable);
             return;
         }
 
@@ -199,12 +210,23 @@ public class CoopServer : CoopNetworkBase, ICoopServer
 
     public override void OnPeerConnected(NetPeer peer)
     {
+        if (HasRemoteCampaignWriter())
+        {
+            peerTerminator.Disconnect(peer, CampaignCheckpointUnavailableReason);
+            return;
+        }
+
         // Registered under the gate, so a shutdown closing it either drains this peer or it never joins.
         if (admissionGate.TryAdmit(() => messageBroker.Publish(this, new PlayerConnected(peer)))) return;
 
         Logger.Information("Client {Peer} disconnected before joining: the server is restarting", peer.Id);
         peerTerminator.Disconnect(peer, ServerShutdownCoordinator.DisconnectReason);
     }
+
+    private bool HasRemoteCampaignWriter() => ModInformation.IsListenAuthority &&
+        sessionIdentity != null && sessionIdentity.TryGetConfirmedLease(out var lease) && !lease.IsPaused &&
+        !string.IsNullOrWhiteSpace(sessionIdentity.RoomHostControllerId) &&
+        !string.Equals(lease.AuthorityControllerId, sessionIdentity.RoomHostControllerId, StringComparison.Ordinal);
 
     public override void OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo)
     {

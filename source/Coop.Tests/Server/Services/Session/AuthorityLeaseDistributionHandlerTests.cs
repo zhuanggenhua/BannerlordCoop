@@ -22,10 +22,34 @@ namespace Coop.Tests.Server.Services.Session;
 [Collection(ModInformationRoleCollection.Name)]
 public class AuthorityLeaseDistributionHandlerTests
 {
+    [Fact]
+    public void CommittedPausedLeaseIsSentToARejoiningCandidate()
+    {
+        var previousMode = ModInformation.SessionMode;
+        ModInformation.SessionMode = SessionMode.ListenAuthority;
+        try
+        {
+            using var broker = new TestMessageBroker();
+            var identity = new SessionIdentity();
+            var lease = new AuthorityLease("room", "committed-paused", string.Empty, 8, isPaused: true);
+            Assert.True(identity.TryApply(lease, "controller-a"));
+            var network = new Mock<INetwork>();
+            var terminator = new Mock<IJoinPeerTerminator>();
+            var controller = new ControllerIdProvider();
+            controller.SetControllerId("controller-a");
+            var peer = new TestNetwork().CreatePeer();
+            using var handler = new AuthorityLeaseDistributionHandler(broker, network.Object, identity, controller, terminator.Object);
+            broker.Publish(this, new PlayerConnected(peer));
+            network.Verify(value => value.SendImmediate(peer, It.Is<NetworkAuthorityLeaseSnapshot>(snapshot => snapshot.ToLease() == lease)), Times.Once);
+            terminator.Verify(value => value.Disconnect(It.IsAny<LiteNetLib.NetPeer>(), It.IsAny<string>()), Times.Never);
+        }
+        finally { ModInformation.SessionMode = previousMode; }
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public void InitialLeaseSurvivesTheRealPreSaveDroppingQueueWithoutRebindingTheWriter(bool alreadyMigrated)
+    public void InitialLeaseSurvivesPreSaveDroppingUnlessTheRemoteWriterCheckpointIsUnavailable(bool alreadyMigrated)
     {
         var previousMode = ModInformation.SessionMode;
         ModInformation.SessionMode = SessionMode.ListenAuthority;
@@ -48,9 +72,18 @@ public class AuthorityLeaseDistributionHandlerTests
             if (alreadyMigrated) Assert.True(identity.TryApply(expectedLease, "controller-a"));
             var controller = new ControllerIdProvider();
             controller.SetControllerId("controller-a");
-            using var handler = new AuthorityLeaseDistributionHandler(broker, network.Object, identity, controller);
+            var terminator = new Mock<IJoinPeerTerminator>();
+            using var handler = new AuthorityLeaseDistributionHandler(broker, network.Object, identity, controller, terminator.Object);
 
             broker.Publish(this, new PlayerConnected(peer));
+
+            if (alreadyMigrated)
+            {
+                Assert.Empty(delivered);
+                Assert.Equal(expectedLease, identity.CurrentLease);
+                terminator.Verify(value => value.Disconnect(peer, "CampaignCheckpointUnavailable"), Times.Once);
+                return;
+            }
 
             var snapshot = Assert.IsType<NetworkAuthorityLeaseSnapshot>(Assert.Single(delivered));
             Assert.Equal(identity.CurrentLease, snapshot.ToLease());

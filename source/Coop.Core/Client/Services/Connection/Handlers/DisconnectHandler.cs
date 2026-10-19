@@ -67,6 +67,8 @@ internal class DisconnectHandler : IHandler
                        "The server stopped this join to keep the campaign responsive. Please try again.";
             case "ServerRestarting":
                 return "The server is restarting. Try again in a few minutes.";
+            case "CampaignCheckpointUnavailable":
+                return "The campaign authority checkpoint is unavailable. Joining is paused until the current writer completes a handoff.";
         }
 
         return reason == DisconnectReason.Timeout

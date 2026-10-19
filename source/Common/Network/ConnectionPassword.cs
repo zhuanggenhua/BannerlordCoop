@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace Common.Network;
 
@@ -8,6 +8,7 @@ public enum ConnectionRejectCode : byte
     None = 0,
     IncorrectPassword = 1,
     ServerRestarting = 2,
+    CampaignCheckpointUnavailable = 3,
 }
 
 /// <summary>

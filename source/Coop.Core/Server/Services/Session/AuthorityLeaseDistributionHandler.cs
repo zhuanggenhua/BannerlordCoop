@@ -6,7 +6,9 @@ using Common.Network.Session;
 using GameInterface.Services.Entity;
 using GameInterface.Services.GameState.Messages;
 using Coop.Core.Server.Connections.Messages;
+using Coop.Core.Server.Connections;
 using Serilog;
+using System;
 
 namespace Coop.Core.Server.Services.Session;
 
@@ -19,17 +21,20 @@ public sealed class AuthorityLeaseDistributionHandler : IHandler
     private readonly INetwork network;
     private readonly ISessionIdentity sessionIdentity;
     private readonly IControllerIdProvider controllerIdProvider;
+    private readonly IJoinPeerTerminator peerTerminator;
 
     public AuthorityLeaseDistributionHandler(
         IMessageBroker messageBroker,
         INetwork network,
         ISessionIdentity sessionIdentity,
-        IControllerIdProvider controllerIdProvider)
+        IControllerIdProvider controllerIdProvider,
+        IJoinPeerTerminator peerTerminator = null)
     {
         this.messageBroker = messageBroker;
         this.network = network;
         this.sessionIdentity = sessionIdentity;
         this.controllerIdProvider = controllerIdProvider;
+        this.peerTerminator = peerTerminator;
 
         messageBroker.Subscribe<CampaignReady>(Handle_CampaignReady);
         messageBroker.Subscribe<PlayerConnected>(Handle_PlayerConnected);
@@ -50,6 +55,13 @@ public sealed class AuthorityLeaseDistributionHandler : IHandler
     {
         if (!InitializeLocalAuthorityController()) return;
         var lease = sessionIdentity.CurrentLease;
+        if (ModInformation.IsListenAuthority && !lease.IsPaused &&
+            !string.Equals(lease.AuthorityControllerId, sessionIdentity.RoomHostControllerId, StringComparison.Ordinal))
+        {
+            peerTerminator?.Disconnect(payload.What.PlayerPeer, CoopServer.CampaignCheckpointUnavailableReason);
+            Logger.Warning("Did not send active remote campaign lease epoch {Epoch} to a joining player; the complete checkpoint is unavailable", lease.Epoch);
+            return;
+        }
         // This is connection metadata required to validate the first world delta. A normal
         // send is discarded by the pre-save Dropping phase, before replay buffering begins.
         network.SendImmediate(payload.What.PlayerPeer,

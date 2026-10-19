@@ -37,6 +37,7 @@ public class DisconnectHandlerTests
     [InlineData("JoinReplayQueueLimit", "Joining the campaign stopped because its synchronization queue exceeded the safety limit.\nPlease try again.")]
     [InlineData("JoinCampaignEntryTimeout", "Joining the campaign timed out while loading the transferred save.\nThe server stopped this join to keep the campaign responsive. Please try again.")]
     [InlineData("ServerRestarting", "The server is restarting. Try again in a few minutes.")]
+    [InlineData("CampaignCheckpointUnavailable", "The campaign authority checkpoint is unavailable. Joining is paused until the current writer completes a handoff.")]
     [InlineData("UnknownReason", "You have been Disconnected")]
     [InlineData("", "You have been Disconnected")]
     public void ServerDisconnect_ReturnsToMainMenuThenExplainsJoinFailure(string serverReason, string expected)
