@@ -10,6 +10,7 @@ using System.Text;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Roster;
+using Common;
 
 namespace GameInterface.Services.CampaignAuthority;
 
@@ -20,12 +21,18 @@ public sealed class CampaignCycleDebugCommands : ICoopCommand
     public string Description => "Reads native completed hourly/daily dispatcher counts; does not invoke events or change scheduler callbacks.";
     public CoopCommandSide Side => CoopCommandSide.Both;
     public IExpectedArgs[] ExpectedArgs { get; } =
-    { new ExpectedArgs("offset", "Optional nonnegative row offset; at most 256 rows per response.", false) };
+    { new ExpectedArgs("offset", "Optional nonnegative row offset; at most 256 rows per response.", false),
+        new ExpectedArgs("section", "Optional cycles (default) or effects.", false) };
     public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
     {
         if (Campaign.Current == null) return new(false, "A campaign is required.", "campaign_missing");
         var collector = CampaignCycleDispatchPatches.For(Campaign.Current);
-        var rows = collector.Snapshot();
+        ContainerProvider.TryResolve<ICampaignSchedulerCheckpointService>(out var scheduler);
+        CampaignSchedulerCheckpoint checkpoint = null;
+        bool captured = scheduler?.TryCapture(out checkpoint) == true;
+        string section = args.Count > 1 ? args[1] : "cycles";
+        if (section != "cycles" && section != "effects") return new(false, "Unknown evidence section.", "invalid_cycle_section");
+        object[] rows = section == "cycles" ? collector.Snapshot() : collector.EffectSnapshot();
         int offset = 0;
         if (args.Count > 0 && (!int.TryParse(args[0], out offset) || offset < 0 || offset > rows.Length))
             return new(false, "Invalid cycle evidence offset.", "invalid_cycle_offset");
@@ -33,10 +40,31 @@ public sealed class CampaignCycleDebugCommands : ICoopCommand
         var output = JsonConvert.SerializeObject(new
         {
             instance = collector.InstanceId, campaign = Campaign.Current.UniqueGameId,
+            section,
             processId = System.Diagnostics.Process.GetCurrentProcess().Id,
             overflowed = collector.Overflowed, rows = page, offset, totalRows = rows.Length,
             nextOffset = offset + page.Length, hasMore = offset + page.Length < rows.Length,
-            coverage = "Completed native dispatcher calls only; no listener subscriptions, artificial ticks, or world mutations.",
+            hours = CampaignTime.Now.ToHours, ticks = CampaignTime.Now.NumTicks,
+            hourly = new { next = Campaign.Current._hourlyTickEvent.NextTriggerTime.NumTicks,
+                period = Campaign.Current._hourlyTickEvent.TriggerPeriod.NumTicks },
+            daily = new { next = Campaign.Current._dailyTickEvent.NextTriggerTime.NumTicks,
+                period = Campaign.Current._dailyTickEvent.TriggerPeriod.NumTicks },
+            tickerAudits = collector.AuditSnapshot(),
+            simulation = collector.SimulationSnapshot(),
+            scheduler = !captured ? null : new
+            {
+                checkpoint.LastGameTimeTicks, checkpoint.MinimumIntervalTicks,
+                tickers = checkpoint.Tickers.Select(value => new { value.Name, value.Index, value.TickDebt,
+                    count = value.OrderedHandles.Length,
+                    orderedIdsHash = CampaignCycleDiagnostics.Hash(string.Join(",", value.OrderedHandles)) }).ToArray(),
+            },
+            lateAiTaskPresent = Campaign.Current.CampaignLateAITickTask != null,
+            realTicks = System.Threading.Interlocked.Read(ref Time.ListenAuthorityTickEvidence.RealTicks),
+            duplicateRealTicks = System.Threading.Interlocked.Read(ref Time.ListenAuthorityTickEvidence.DuplicateRealTicks),
+            sameFrameRealTickCoverage = "NativeEngineFrameNo",
+            failedRealTicks = System.Threading.Interlocked.Read(ref Time.ListenAuthorityTickEvidence.FailedRealTicks),
+            aiTicks = System.Threading.Interlocked.Read(ref Time.ListenAuthorityTickEvidence.AiTicks),
+            coverage = "Native due slots and completed dispatcher calls; native ticker expected/completed identity sequences and cursor/debt audit; no scheduler mutations.",
         });
         return collector.Overflowed ? new(false, output, "cycle_evidence_overflow") : new(true, output);
     }

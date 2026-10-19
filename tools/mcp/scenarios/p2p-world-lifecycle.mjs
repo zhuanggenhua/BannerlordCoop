@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { collectNativeLog } from './native-log-archive.mjs';
 import { randomUUID, createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { appendFile, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
@@ -6,7 +7,7 @@ import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { assertActors, assertPlayers, assertWorld, assertWriter, assertProcessEvidence,
-    field, writer, epoch, jsonOutput, logDiagnostics } from './p2p-udp-reliability.mjs';
+    field, writer, epoch, jsonOutput, logDiagnostics, assertProcessLogCompleteness } from './p2p-udp-reliability.mjs';
 
 export const HELP = `Usage: node tools/mcp/scenarios/p2p-world-lifecycle.mjs --natural|--cold-save
   --repo <coordinator checkout> --server <CoopMcpServer.exe> --config <profiles.json>
@@ -72,17 +73,91 @@ export function assertCycles(receipts) {
             assert.equal(field(row,'localWriter'), true, 'Observer dispatched native world cycle');
             assert.equal(field(row,'node'), field(row,'writerController'), 'Cycle node was not its recorded writer');
             assert.ok(field(row,'epoch') > 0 && field(row,'roomId') && field(row,'authorityId'));
-            const kind = field(row,'kind'), party = field(row,'party'), bucket = kind === 'HourlyTick' ? field(row,'hour') : field(row,'day');
+            const kind = field(row,'kind'), party = field(row,'party'), due = field(row,'dueTicks');
             assert.ok(['HourlyTick','DailyTick','DailyTickParty'].includes(kind));
             if (kind === 'DailyTickParty') assert.ok(party, 'Party daily callback missing native StringId');
-            const key = JSON.stringify([receipt.campaign,kind,party,bucket]);
-            const count = (counts.get(key) ?? 0) + field(row,'count'); counts.set(key,count);
-            assert.equal(count,1,'Repeated native cycle across nodes/epochs: ' + key); rows.push(row);
+            assert.ok(Number.isInteger(field(row,'count')) && field(row,'count') > 0);
+            if (kind !== 'DailyTickParty') {
+                assert.ok(Number.isSafeInteger(due) && due >= 0, 'Native hourly/daily due slot unavailable');
+                const key = JSON.stringify([receipt.campaign,kind,due]);
+                const count = (counts.get(key) ?? 0) + field(row,'count'); counts.set(key,count);
+                assert.equal(count,1,'Repeated native due slot across nodes/epochs: ' + key);
+            }
+            rows.push(row);
+        }
+        assert.ok(Array.isArray(receipt.tickerAudits), 'Native ticker audit unavailable');
+        for(const audit of receipt.tickerAudits) {
+            assert.equal(field(audit,'leaseKnown'),true);assert.equal(field(audit,'localWriter'),true);
+            assert.equal(field(audit,'mismatches'),0,JSON.stringify(audit));
+            assert.equal(field(audit,'expected'),field(audit,'completed'),'Native ticker callback count mismatch');
+            assert.equal(field(audit,'expectedHash'),field(audit,'completedHash'),'Native ticker identity/order mismatch');
+        }
+        assert.equal(receipt.duplicateRealTicks,0,'Repeated Campaign.RealTick');
+        assert.equal(receipt.failedRealTicks,0,'Failed Campaign.RealTick');
+        for(const [name,count] of Object.entries(receipt.simulation ?? {}))
+            if(name.endsWith('.failed'))assert.equal(count,0,'Native simulation exception: '+name);
+        for(const effect of receipt.effects ?? []) {
+            assert.equal(field(effect,'known'),true);assert.equal(field(effect,'localWriter'),true);
+            assert.equal(field(effect,'error'),null,'Native finance exception');assert.ok(field(effect,'entity'));
         }
     }
     return { entries:rows.length, hourly:rows.filter(row => field(row,'kind')==='HourlyTick').length,
         daily:rows.filter(row => field(row,'kind')==='DailyTick').length,
         partyDaily:rows.filter(row => field(row,'kind')==='DailyTickParty').length, receipts };
+}
+export function assertCycleWindow(before, after, node) {
+    const index=before.findIndex(value=>value.node===node || value.controller===node);
+    assert.ok(index >= 0,'Writer receipt unavailable');
+    const start=before[index],end=after[index];
+    assert.equal(end.instance,start.instance);assert.ok(end.hours >= start.hours+24,'Native 24h not reached');
+    const coverage={sameFrameRealTickCoverage:end.sameFrameRealTickCoverage??'NOT_COVERED'};
+    for(const [timer,kind] of [['hourly','HourlyTick'],['daily','DailyTick']]) {
+        assert.equal(end[timer].period,start[timer].period);assert.ok(start[timer].period>0);
+        const expected=[];
+        for(let due=start[timer].next;due<end[timer].next;due+=start[timer].period)expected.push(due);
+        assert.equal(expected.at(-1)+start[timer].period,end[timer].next,'Native scheduler phase changed');
+        assert.ok(expected.length >= (timer==='hourly'?24:1),'Missing native '+timer+' cadence');
+        const actual=after.flatMap(receipt=>receipt.rows).filter(row=>field(row,'kind')===kind &&
+            field(row,'dueTicks')>=start[timer].next && field(row,'dueTicks')<end[timer].next);
+        assert.deepEqual(actual.map(row=>field(row,'dueTicks')).sort((a,b)=>a-b),expected,'Missing/repeated native due slot');
+        assert.ok(actual.every(row=>field(row,'node')===node),'Other node executed writer window');coverage[timer]=expected.length;
+    }
+    const required=['_mobilePartyHourlyTicker','_mobilePartyDailyTicker','_dailyTickPartyTicker','_hourlyTickMobilePartyTicker',
+        '_hourlyTickSettlementTicker','_hourlyTickClanTicker','_dailyTickTownTicker','_dailyTickSettlementTicker',
+        '_dailyTickHeroTicker','_dailyTickClanTicker','_quarterDailyPartyTicker',
+        ...['caravan','garrison','militia','villager','custom','bandit','lord','partiesWithoutPartyComponents','patrol']
+            .map(name=>name==='patrol'?'_patrolPartyPartialHourlyAiEventTicker':'_'+name+(name==='partiesWithoutPartyComponents'?'':'MobileParty')+'PartialHourlyAiEventTicker')];
+    coverage.tickers={};
+    for(const ticker of required) {
+        const total=(receipt,key)=>receipt.tickerAudits.filter(row=>field(row,'ticker')===ticker).reduce((sum,row)=>sum+field(row,key),0);
+        const batches=total(end,'batches')-total(start,'batches'),completed=total(end,'completed')-total(start,'completed');
+        assert.ok(batches>0,'Native ticker never scheduled: '+ticker);
+        if(!ticker.includes('PartialHourlyAi'))assert.ok(completed>0,'Native ticker completed no callbacks: '+ticker);
+        coverage.tickers[ticker]={batches,completed};
+    }
+    for(const name of ['MobilePartyAi.Tick.completed','Campaign.RealTick.completed','Campaign.Tick.completed','Campaign.LateAITickAux.completed','Campaign.WaitAsyncTasks.completed'])
+        assert.ok((end.simulation[name]??0)>(start.simulation[name]??0),'Native simulation did not complete: '+name);
+    const effects=(end.effects??[]).filter(row=>field(row,'ticks')>=start.ticks && field(row,'ticks')<=end.ticks);
+    const finances=effects.filter(row=>field(row,'kind')==='ClanFinance'),wages=effects.filter(row=>field(row,'kind')==='Wage');
+    assert.ok(finances.length>0,'Daily finance effects NOT_OBSERVED');assert.ok(wages.length>0,'Native wage application evaluations NOT_OBSERVED');
+    coverage.economy={financeEffects:finances.length,wageEvaluations:wages.length,
+        goldChanges:finances.filter(row=>field(row,'goldBefore')!==field(row,'goldAfter')).length,
+        calculatedWages:wages.reduce((sum,row)=>sum+field(row,'wage'),0),effects,
+        paymentAcceptance:'NOT_OBSERVED',paymentLimit:'Wage model evaluations and net clan gold changes do not identify the exact wage deduction causal action.'};
+    for(const receipt of after.filter(value=>value.node!==node)) {
+        const prior=before.find(value=>value.node===receipt.node);
+        for(const name of ['MobilePartyAi.Tick.completed','Campaign.Tick.completed'])
+            assert.equal(receipt.simulation[name]??0,prior.simulation[name]??0,'Observer advanced authoritative simulation: '+name);
+    }
+    return coverage;
+}
+export function assertSchedulerHandoff(previous, next) {
+    assert.ok(previous.scheduler,'Confirmed writer scheduler unavailable');
+    for(const receipt of next) {
+        assert.deepEqual(receipt.scheduler,previous.scheduler,'Handoff lost native ticker identity/order, debt or cursor');
+        assert.deepEqual(receipt.hourly,previous.hourly,'Handoff lost hourly phase');
+        assert.deepEqual(receipt.daily,previous.daily,'Handoff lost daily phase');
+    }
 }
 export function combineCyclePages(pages) {
     assert.ok(pages.length > 0); const first=pages[0], rows=[];
@@ -117,7 +192,7 @@ export async function run(config) {
         startedUtc:new Date().toISOString(),sessions:[],features:[],screenshots:[],passed:false,failed:null};
     const client = new Client({name:'codex-world-lifecycle',version:'1.0.0'});
     const transport = new StdioClientTransport({command:config.server,args:['--config',config.config],cwd:config.repo,stderr:'inherit',maxBufferSize:16*1024*1024});
-    let session, initial, callId = 0, readDeadline;
+    let session, initial, callId = 0, readDeadline, lastWriterCycles;
     const emit = entry => appendFile(config.record,JSON.stringify({utc:new Date().toISOString(),...entry})+'\n');
     const save = () => writeFile(summaryPath,JSON.stringify(summary,null,2)+'\n');
     async function call(name,args,mutation=false) {
@@ -131,7 +206,7 @@ export async function run(config) {
             session = {runId:data.runId,saveName:args.save_name,logs:Object.fromEntries(INSTANCES.map(n=>[n,{text:'',resets:0}])),cleanupConfirmed:false,stopAttempted:false};
             summary.sessions.push(session);
         }
-        await emit({phase:'response',callId:id,name,args,data,raw}); assert.ok(!raw.isError,JSON.stringify(data)); return data;
+        await emit({phase:'response',callId:id,name,args,data,raw}); assert.ok(!raw.isError,JSON.stringify(data)); return {...data,qaCallId:id};
     }
     async function command(instance,name,args=[],mutation=false) {
         const result = await call('execute_command',{run_id:session.runId,instance,name,arguments:args},mutation);
@@ -159,12 +234,15 @@ export async function run(config) {
         });
     }
     async function pause(label,npcIds) { await command('server','coop.debug.set_time_mode',['Pause','force-live-test'],true);return snapshot(label,npcIds); }
-    async function collectLogs() {
-        for(const n of INSTANCES){const log=session.logs[n];for(let page=0;page<1024;page++){
-            const response=await call('read_logs',{run_id:session.runId,instance:n,cursor:log.cursor,max_bytes:65536});const chunk=response.result??response;
-            assert.equal(typeof chunk.text,'string');assert.equal(typeof chunk.hasMore,'boolean');assert.equal(typeof chunk.reset,'boolean');assert.equal(typeof chunk.cursor,'string');
-            if(chunk.reset){log.resets++;log.text+='\n--- retained previous log; cursor reset ---\n';}log.text+=chunk.text;log.cursor=chunk.cursor;if(!chunk.hasMore)break;assert.ok(page<1023,'Log page budget exhausted');
-        }const path=config.record+'.'+session.runId+'.'+n+'.log';await writeFile(path,log.text);log.path=path;log.sha256=createHash('sha256').update(log.text).digest('hex');log.diagnostics=logDiagnostics(log.text);}
+    async function collectLogs(archived=false) {
+        const failures=[];
+        for(const n of INSTANCES){const log=session.logs[n];try{
+            await collectNativeLog(log,cursor=>call('read_logs',{run_id:session.runId,instance:n,cursor,max_bytes:65536}),
+                {archived,source:{runId:session.runId,instance:n,rawRecord:config.record}});
+            const path=config.record+'.'+session.runId+'.'+n+'.log';await writeFile(path,log.text);log.path=path;log.sha256=createHash('sha256').update(log.text).digest('hex');log.diagnostics=logDiagnostics(log.text);
+            log.completeness=assertProcessLogCompleteness(log.text,session.processes?.find(value=>value.name===n)?.identity.pid);
+        }catch(error){log.error=error.stack;failures.push(n+': '+error.message);await emit({phase:'log_evidence_error',instance:n,error:error.stack,collection:log.collections?.at(-1)});}}
+        assert.deepEqual(failures,[],'Incomplete process log evidence');
         assert.ok(INSTANCES.every(n=>{
             const value=session.logs[n].diagnostics;
             return value.errorLines.length===0&&value.realTick+value.duplicateIds+value.aiBatch===0;
@@ -201,22 +279,27 @@ export async function run(config) {
         const stopped=await call('stop_run',{run_id:session.runId},true);session.stopped=stopped;assert.equal(stopped.state,'stopped');assert.ok(stopped.instances.length>0);
         if(session.processes)assert.equal(stopped.instances.length,2);
         assert.ok(stopped.instances.every(row=>row.cleanupComplete&&!row.processAlive&&!row.processTreeAlive));session.afterStopProcesses=processes();
-        assert.equal(session.afterStopProcesses.length,0,'Bannerlord process remained after stop');session.cleanupConfirmed=true;await collectLogs();await save();
+        assert.equal(session.afterStopProcesses.length,0,'Bannerlord process remained after stop');session.cleanupConfirmed=true;await collectLogs(true);await save();
     }
     async function cycleEvidence() {
         const receipts=[];
-        for(const instance of INSTANCES){const pages=[];let offset=0;
-            for(let index=0;index<128;index++){
-                const page=jsonOutput(await command(instance,'coop.debug.authority.cycles',[String(offset)]));pages.push(page);
-                if(!page.hasMore)break;assert.ok(page.nextOffset>offset,'Cycle page did not advance');offset=page.nextOffset;
+        for(const instance of INSTANCES){const sections={};
+            for(const section of ['cycles','effects']){const pages=[];let offset=0;
+                for(let index=0;index<128;index++){
+                    const page=jsonOutput(await command(instance,'coop.debug.authority.cycles',[String(offset),section]));pages.push(page);
+                    assert.equal(page.section,section);
+                    if(!page.hasMore)break;assert.ok(page.nextOffset>offset,'Cycle page did not advance');offset=page.nextOffset;
+                }
+                sections[section]=combineCyclePages(pages);
             }
-            receipts.push(combineCyclePages(pages));
+            assert.equal(sections.effects.instance,sections.cycles.instance);
+            receipts.push({...sections.cycles,node:controllers[INSTANCES.indexOf(instance)],effects:sections.effects.rows});
         }
         return assertCycles(receipts);
     }
     async function naturalDay(instance) {
         const node=controllers[INSTANCES.indexOf(instance)],other=INSTANCES.find(n=>n!==instance);await awaitWriter(node);
-        const before={writer:await state(instance),observer:await state(other)};await command('server','coop.debug.set_time_mode',['Play_2x','force-live-test'],true);
+        const before={writer:await state(instance),observer:await state(other),snapshot:await snapshot('natural-day before state'),cycles:await cycleEvidence()};await command('server','coop.debug.set_time_mode',['Play_2x','force-live-test'],true);
         const deadline=Date.now()+config['day-timeout-seconds']*1000;let values,lastLogs=Date.now();
         do {await delay(1000);values=await both();assertWriter(values,node,initial);const current=values[INSTANCES.indexOf(instance)];
             await emit({phase:'native_day_progress',instance,hours:current.hours,worldTicks:current.worldTicks});
@@ -227,9 +310,9 @@ export async function run(config) {
         assert.ok(after.writer.hours>=before.writer.hours+24,'Natural24h deadline expired');assert.equal(epoch(after.writer),epoch(before.writer));
         assert.ok(after.writer.worldTicks>before.writer.worldTicks);assert.equal(after.observer.worldTicks,before.observer.worldTicks);
         const paused=await pause('natural-day critical equality');const cycles=await cycleEvidence();
-        assert.ok(cycles.receipts[INSTANCES.indexOf(instance)].rows.some(row=>field(row,'kind')==='DailyTick'&&field(row,'node')===node));
-        assert.ok(cycles.receipts[INSTANCES.indexOf(instance)].rows.some(row=>field(row,'kind')==='DailyTickParty'&&field(row,'node')===node));
-        return {before,after,paused,cycles};
+        const coverage=assertCycleWindow(before.cycles.receipts,cycles.receipts,node);
+        lastWriterCycles=cycles.receipts[INSTANCES.indexOf(instance)];
+        return {before,after,paused,cycles,coverage};
     }
     async function saves() {const rows=[];let offset=0;for(let page=0;page<8;page++){const r=await call('list_saves',{profile:config.profile,offset});const data=r.result??r;assert.ok(Array.isArray(data.saves));rows.push(...data.saves);assert.equal(data.truncated,false,'Save catalog truncated; cannot prove exact existing-name absence');if(data.nextOffset===offset)return rows;assert.ok(data.nextOffset>offset);offset=data.nextOffset;}throw new Error('Save catalog page budget exhausted');}
     try {
@@ -237,8 +320,8 @@ export async function run(config) {
         await feature('exact-two-process-baseline',()=>pause('baseline exact critical equality'));
         if(config.mode==='natural') {
             await feature('A-native-day',()=>naturalDay('server'));
-            await feature('A-to-B-native-day',async()=>{await command('server','coop.debug.authority.availability',['yield'],true);await awaitWriter(controllers[1]);return naturalDay('client1');});
-            await feature('B-to-A-cycle-uniqueness',async()=>{await command('server','coop.debug.authority.availability',['auto'],true);await awaitWriter(controllers[0]);return {snapshot:await pause('returned A'),cycles:await cycleEvidence()};});
+            await feature('A-to-B-native-day',async()=>{await command('server','coop.debug.authority.availability',['yield'],true);await awaitWriter(controllers[1]);const handoff=await cycleEvidence();assertSchedulerHandoff(lastWriterCycles,handoff.receipts);return naturalDay('client1');});
+            await feature('B-to-A-cycle-uniqueness',async()=>{await command('server','coop.debug.authority.availability',['auto'],true);await awaitWriter(controllers[0]);const snapshot=await pause('returned A'),cycles=await cycleEvidence();assertSchedulerHandoff(lastWriterCycles,cycles.receipts);return {snapshot,cycles};});
         } else {
             const name=freshSaveName();summary.generatedSave=name;assert.ok(!(await saves()).some(row=>row.name===name),'Generated basename already exists; no save will be overwritten');
             let baseline;
