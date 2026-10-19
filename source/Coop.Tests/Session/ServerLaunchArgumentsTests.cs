@@ -24,6 +24,7 @@ public class ServerLaunchArgumentsTests
     [InlineData("localhost", "localhost", 4200)]
     [InlineData("localhost:4300", "localhost", 4300)]
     [InlineData("127.0.0.1:4200", "127.0.0.1", 4200)]
+    [InlineData("127.0.0.1:24200", "127.0.0.1", 24200)]
     [InlineData("[::1]:4400", "::1", 4400)]
     public void AutoConnectUsesSharedAddressParserAndDefaultPort(string endpoint, string host, int port)
     {

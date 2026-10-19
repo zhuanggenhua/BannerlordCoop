@@ -115,6 +115,8 @@ namespace Coop
                 isServer = false;
             }
 
+            SetupLogging();
+
             autoConnectArgumentsValid = ServerLaunchArguments.TryParseAutoConnect(
                 args, out isAutoConnect, out autoConnectConfiguration);
 
@@ -126,8 +128,7 @@ namespace Coop
             }
             ManagedServerConfig.Password = serverPassword;
             ManagedServerConfig.Visibility = serverVisibility;
-            
-            SetupLogging();
+
             var moduleInfoProvider = new TaleWorldsModuleInfoProvider();
             StartupDiagnosticsSequence.Run(version =>
                 {
