@@ -1,5 +1,6 @@
 ﻿using Common;
 using Common.Messaging;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Heroes.Extensions;
 using GameInterface.Services.MobileParties.Extensions;
 using GameInterface.Services.UI.Notifications.Messages;
@@ -18,15 +19,16 @@ internal class GainKingdomInfluenceActionPatch
     [HarmonyPostfix]
     public static void ApplyInternalPostfix(Hero hero, MobileParty party, float gainedInfluence, GainKingdomInfluenceAction.InfluenceGainingReason detail)
     {
-        if (ModInformation.IsClient) return;
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return;
+
+        // Only publish notifications that can be shown to a player. Native NPC prisoner
+        // donations can have no Hero, so filter them before resolving notification actors.
+        bool isPlayerParty = party != null && party.IsPlayerParty();
+        bool isPlayerHero = hero != null && hero.IsPlayerHero();
+        if (!isPlayerParty && !isPlayerHero) return;
 
         int gainedInfluenceInt = MathF.Abs((int)gainedInfluence);
         var clan = GetClan(hero, party);
-
-        // Don't notify players of influence changes that don't involve players
-        if (gainedInfluenceInt == 0 
-            && (party == null || !party.IsPlayerParty())
-            && (hero == null || !hero.IsPlayerHero())) return;
 
         var message = new NotifyKingdomInfluenceChanged(hero, party, clan, gainedInfluenceInt, detail);
         MessageBroker.Instance.Publish(null, message);

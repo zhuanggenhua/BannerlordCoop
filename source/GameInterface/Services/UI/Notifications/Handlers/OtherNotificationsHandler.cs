@@ -2,6 +2,7 @@
 using Common.Logging;
 using Common.Messaging;
 using Common.Network;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Kingdoms.Interfaces;
 using GameInterface.Services.ObjectManager;
 using GameInterface.Services.UI.Notifications.Messages;
@@ -230,7 +231,10 @@ internal class OtherNotificationsHandler : IHandler
     {
         GameThread.RunSafe(() =>
         {
-            if (!objectManager.TryGetIdWithLogging(obj.What.Hero, out var heroId)) return;
+            if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return;
+
+            string heroId = null;
+            if (obj.What.Hero != null && !objectManager.TryGetIdWithLogging(obj.What.Hero, out heroId)) return;
             string mobilePartyId = null;
             if (obj.What.MobileParty != null)
             {
@@ -246,7 +250,8 @@ internal class OtherNotificationsHandler : IHandler
     {
         GameThread.RunSafe(() =>
         {
-            if (!objectManager.TryGetObjectWithLogging<Hero>(obj.What.HeroId, out var hero)) return;
+            Hero hero = null;
+            if (obj.What.HeroId != null && !objectManager.TryGetObjectWithLogging<Hero>(obj.What.HeroId, out hero)) return;
             MobileParty mobileParty = null;
             if (obj.What.MobilePartyId != null)
             {
@@ -254,22 +259,41 @@ internal class OtherNotificationsHandler : IHandler
             }
             if (!objectManager.TryGetObjectWithLogging<Clan>(obj.What.ClanId, out var clan)) return;
 
-            if ((obj.What.Detail == GainKingdomInfluenceAction.InfluenceGainingReason.DonatePrisoners && mobileParty == MobileParty.MainParty) 
-            || (obj.What.Detail == GainKingdomInfluenceAction.InfluenceGainingReason.Battle && hero == Hero.MainHero))
-            {
-                TextObject textObject = GameTexts.FindText("str_influence_gain_message", null);
-                textObject.SetTextVariable("INFLUENCE", obj.What.GainedInfluence);
-                textObject.SetTextVariable("NEW_INFLUENCE", (int)clan.Influence);
-                InformationManager.DisplayMessage(new InformationMessage(textObject.ToString()));
-            }
-            if (obj.What.Detail == GainKingdomInfluenceAction.InfluenceGainingReason.SiegeSafePassage && hero == Hero.MainHero)
+            if (!ShouldDisplayInfluenceNotification(
+                obj.What.Detail,
+                hero,
+                mobileParty,
+                Hero.MainHero,
+                MobileParty.MainParty))
+                return;
+
+            if (obj.What.Detail == GainKingdomInfluenceAction.InfluenceGainingReason.SiegeSafePassage)
             {
                 TextObject textObject2 = GameTexts.FindText("str_leave_siege_lose_influence_message", null);
                 textObject2.SetTextVariable("INFLUENCE", -obj.What.GainedInfluence);
                 InformationManager.DisplayMessage(new InformationMessage(textObject2.ToString()));
+                return;
             }
+
+            TextObject textObject = GameTexts.FindText("str_influence_gain_message", null);
+            textObject.SetTextVariable("INFLUENCE", obj.What.GainedInfluence);
+            textObject.SetTextVariable("NEW_INFLUENCE", (int)clan.Influence);
+            InformationManager.DisplayMessage(new InformationMessage(textObject.ToString()));
         });
     }
+
+    internal static bool ShouldDisplayInfluenceNotification(
+        GainKingdomInfluenceAction.InfluenceGainingReason detail,
+        Hero hero,
+        MobileParty mobileParty,
+        Hero mainHero,
+        MobileParty mainParty) =>
+        (detail == GainKingdomInfluenceAction.InfluenceGainingReason.DonatePrisoners &&
+            mobileParty != null && mobileParty == mainParty) ||
+        (detail == GainKingdomInfluenceAction.InfluenceGainingReason.Battle &&
+            hero != null && hero == mainHero) ||
+        (detail == GainKingdomInfluenceAction.InfluenceGainingReason.SiegeSafePassage &&
+            hero != null && hero == mainHero);
 
     private void Handle_NotifyRelationDecreasedByExecution(MessagePayload<NotifyRelationDecreasedByExecution> obj)
     {
