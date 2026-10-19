@@ -234,4 +234,3 @@ public sealed class ColdBootAuthorityFenceTests
         public void SaveCoopSession(string name, ICoopSession value) => Written = value;
     }
 }
-
