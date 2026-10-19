@@ -28,6 +28,7 @@ using TaleWorlds.CampaignSystem.Settlements;
 
 namespace GameInterface.Tests.Services.Villages;
 
+[Collection(ModInformationRoleCollection.Name)]
 public class RaidLootWarningFixtureTests
 {
     [Fact]

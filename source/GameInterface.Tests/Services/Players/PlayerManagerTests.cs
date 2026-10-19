@@ -18,6 +18,7 @@ using Xunit;
 
 namespace GameInterface.Tests.Services.Players;
 
+[Collection(ModInformationRoleCollection.Name)]
 public class PlayerManagerTests
 {
     private const string ControllerId = "PlayerOne";

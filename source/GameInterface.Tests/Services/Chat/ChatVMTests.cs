@@ -8,6 +8,7 @@ using Xunit;
 
 namespace GameInterface.Tests.Services.Chat;
 
+[Collection(ModInformationRoleCollection.Name)]
 public class ChatVMTests
 {
     [Fact]
