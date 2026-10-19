@@ -33,4 +33,6 @@ Candidate08 的 B 日志为空，不能从空日志推断“无异常”。该�
 
 按用户新指示，子代理使用 `gpt-6-luna`、`xhigh`，最多三个。总控保留任务拆分、独立审查、集成、自动回归及独占实机验收职责；子代理不部署、不启动游戏。
 
+配置提交 `97caec4bdefcf5703f8a7d0b4852d2c976362afa` 已通过实际命令应用到现有编排状态，随后新建任务的模型快照为 `explicit-user / gpt-6-luna / xhigh`。总控运行完整编排自检，四组测试分别 28、12、28、4 项，合计 72/72；配置值与持久化值均为 `applied`。历史任务的模型记录及实机锁没有改写。自检回执位于 Git common 目录 `codex-coordination/evidence/p2p-reliability-20261019/worker-model-policy-receipt.json`。
+
 旧 `p2p-cold-checkpoint-audit` 残留目录清理曾被自动策略拒绝，继续登记为 `cleanup_required`，不绕过拒绝，不影响已保留的成果。仅清理本轮注册、证据已保留且验收完成的独立工作树。
