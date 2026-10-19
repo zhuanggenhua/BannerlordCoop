@@ -1,5 +1,7 @@
 ﻿using Common;
 using Common.Messaging;
+using GameInterface.Policies;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.ItemRosters.Messages;
 using HarmonyLib;
 using TaleWorlds.CampaignSystem.Party;
@@ -15,7 +17,7 @@ internal class PartyBasePatch
     [HarmonyPriority(Priority.First)]
     public static void ItemRosterSetterPrefix(PartyBase __instance, ItemRoster value)
     {
-        if (ModInformation.IsClient) return;
+        if (CallOriginalPolicy.IsOriginalAllowed() || !CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return;
 
         if (value != null && !ItemRosterPatch.IsRegistered(value))
         {

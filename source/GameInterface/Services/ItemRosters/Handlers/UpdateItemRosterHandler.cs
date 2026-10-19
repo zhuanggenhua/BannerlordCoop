@@ -66,11 +66,15 @@ internal class UpdateItemRosterHandler : IHandler
                 }
 
                 var element = new EquipmentElement(item, modifier);
+                if (SettlementMarketRosterPolicy.IsLocalMarketRoster(itemRoster)) return;
+                Action<ItemRoster> apply = msg.IsAbsolute
+                    ? roster => ItemRosterPatch.SetCountOverride(roster, element, msg.Amount)
+                    : roster => ItemRosterPatch.AddToCountsOverride(roster, element, msg.Amount);
                 if (!partyScreenRosterRefresher.TryApply(
                     itemRoster,
-                    roster => ItemRosterPatch.AddToCountsOverride(roster, element, msg.Amount)))
+                    apply))
                 {
-                    ItemRosterPatch.AddToCountsOverride(itemRoster, element, msg.Amount);
+                    apply(itemRoster);
                 }
             }
             catch (Exception e)

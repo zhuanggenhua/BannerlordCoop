@@ -41,6 +41,7 @@ namespace GameInterface.Services.ItemRosters.Handlers
                 try
                 {
                     if (!objectManager.TryGetObjectWithLogging<ItemRoster>(data.ItemRosterId, out var itemRoster)) return;
+                    if (SettlementMarketRosterPolicy.IsLocalMarketRoster(itemRoster)) return;
 
                     if (!partyScreenRosterRefresher.TryApply(itemRoster, ItemRosterPatch.ClearOverride))
                     {

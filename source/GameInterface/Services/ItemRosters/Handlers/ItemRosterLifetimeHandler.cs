@@ -49,7 +49,8 @@ namespace GameInterface.Services.ItemRosters.Handlers
         {
             GameThread.RunSafe(() =>
             {
-                var newItemRoster = ObjectHelper.SkipConstructor<ItemRoster>();
+                ItemRoster newItemRoster;
+                using (new AllowedThread()) newItemRoster = new ItemRoster();
                 var data = payload.What;
 
                 if (objectManager.AddExisting(data.RosterId, newItemRoster, data.Handle) == false)

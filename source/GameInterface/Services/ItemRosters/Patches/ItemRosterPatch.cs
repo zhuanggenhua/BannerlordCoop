@@ -3,6 +3,7 @@ using Common.Logging;
 using Common.Messaging;
 using Common.Util;
 using GameInterface.Policies;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.ItemRosters.Messages;
 using GameInterface.Services.ObjectManager;
 using GameInterface.Services.TownMarketDatas.Patches;
@@ -29,6 +30,14 @@ namespace GameInterface.Services.ItemRosters.Patches
             // Call original if we call this function
             if (CallOriginalPolicy.IsOriginalAllowed()) return true;
 
+            if (SettlementMarketRosterPolicy.IsLocalMarketRoster(__instance)) return true;
+            if (ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authority) && authority.IsAuthorityKnown)
+            {
+                if (!IsRegistered(__instance) || authority.TryGetLocalAuthorityLease(out _)) return true;
+                __result = -1;
+                return false;
+            }
+
             if (ModInformation.IsClient)
             {
                 if (IsRegistered(__instance))
@@ -49,7 +58,8 @@ namespace GameInterface.Services.ItemRosters.Patches
             // Don't publish unsucessful calls
             if (__result == -1) return;
 
-            if (ModInformation.IsClient) return;
+            if (SettlementMarketRosterPolicy.IsLocalMarketRoster(__instance)) return;
+            if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return;
             if (!IsRegistered(__instance)) return;
 
             var message = new ItemRosterUpdated(
@@ -68,10 +78,8 @@ namespace GameInterface.Services.ItemRosters.Patches
             // Skip this prefix, if called by the mod
             if (CallOriginalPolicy.IsOriginalAllowed()) return true;
 
-            if (ModInformation.IsClient)
-            {
-                return !IsRegistered(__instance);
-            }
+            if (SettlementMarketRosterPolicy.IsLocalMarketRoster(__instance)) return true;
+            if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return !IsRegistered(__instance);
 
             if (!IsRegistered(__instance)) return true;
 
@@ -101,6 +109,20 @@ namespace GameInterface.Services.ItemRosters.Patches
                     itemRoster?.Clear();
                 }
             });
+        }
+
+        public static void SetCountOverride(ItemRoster itemRoster, EquipmentElement element, int count)
+        {
+            GameThread.RunSafe(() =>
+            {
+                using (new AllowedThread())
+                using (TownMarketDataPatches.SuppressReceivedRosterUpdate())
+                {
+                    int index = itemRoster.FindIndexOfElement(element);
+                    int current = index < 0 ? 0 : itemRoster.GetElementNumber(index);
+                    itemRoster.AddToCounts(element, count - current);
+                }
+            }, context: nameof(SetCountOverride));
         }
     }
 }

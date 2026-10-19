@@ -4,7 +4,7 @@ using ProtoBuf;
 namespace GameInterface.Services.ItemRosters.Messages
 {
     [ProtoContract(SkipConstructor = true)]
-    internal class NetworkCreateItemRoster : ICommand
+    internal class NetworkCreateItemRoster : ICommand, ICampaignAuthorityScopedMessage
     {
         [ProtoMember(1)]
         public string RosterId { get; }
