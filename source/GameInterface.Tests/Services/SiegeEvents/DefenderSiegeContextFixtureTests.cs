@@ -631,7 +631,7 @@ public class DefenderSiegeContextFixtureTests
                     // Coop.Core does not expose this internal handler to GameInterface.Tests.
                     var type = Type.GetType("Coop.Core.Server.Services.Players.Handlers.PlayerPartyVisibilityHandler, Coop.Core", true);
                     visibilityHandler = (IDisposable)Activator.CreateInstance(type, broker, players.Object,
-                        Mock.Of<IConnectionCollection>(), Objects, network.Object, siege.Object);
+                        Mock.Of<IConnectionCollection>(), Objects, network.Object, siege.Object, null);
                     players.Setup(value => value.ClearPeer(It.IsAny<NetPeer>())).Callback((NetPeer peer) =>
                         Disconnected.Add(PeerOwners[peer]));
                 }
