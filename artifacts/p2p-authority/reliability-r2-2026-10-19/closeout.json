@@ -1,0 +1,31 @@
+{
+  "baseline": "78ac921691bb74838c42a90dc4edff08db726fb9",
+  "implementationHead": "7b07de4b79216efbfeab33e87e625388095b6f26",
+  "runtimeHead": "5a3bc8f4cc032171da8577411b605dff607f02fc",
+  "completeP2p": false,
+  "nativeRuns": 14,
+  "originalInputs": 277,
+  "screenshots": 127,
+  "qaArchive": "PASS_BOUNDED",
+  "naturalFull24h": "FAIL_UNACCEPTED",
+  "missionFiveStages": "PASS_BOUNDED",
+  "missionFullCriticalState": "FAIL_NPC_POSITIONS_4_OF_24",
+  "activeFaultRounds": 3,
+  "writerLoss": "SAFE_FREEZE_AND_STALE_REJOIN_REFUSAL_ONLY",
+  "committedPausedCandidateBarrier": "PASS_BOUNDED_FRESH_RECONNECT",
+  "losslessRecovery": "NOT_IMPLEMENTED",
+  "nativeDuplicateFinalProtocolPacket": "NOT_RUN",
+  "historicalFailures": {
+    "coop": 195,
+    "selectedE2e": 10,
+    "added": [],
+    "removed": []
+  },
+  "unresolvedTasks": [
+    "p2p-natural-full-cycle-r2",
+    "p2p-mission-pause-r2"
+  ],
+  "originalFailuresRetained": true,
+  "knownLostInternalAttachments": "retention-incident.json",
+  "cleanupBlockedTask": "p2p-cold-checkpoint-audit"
+}

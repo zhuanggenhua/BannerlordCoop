@@ -1,0 +1,1664 @@
+[
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\tools\\mcp\\scenarios\\native-log-archive.mjs",
+    "bytes": 3069,
+    "sha256": "547af6bf961922e8646b8b4e0d1423040f5a9762b826977ee4cb0002bd58caa3",
+    "lastWriteUtc": "2026-10-19T09:23:13.313Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\tools\\mcp\\scenarios\\p2p-udp-reliability.mjs",
+    "bytes": 44620,
+    "sha256": "a19724547aaae1d7db99aad4da49f4f337b82af8c1edc3149f03fe418d8cd4a9",
+    "lastWriteUtc": "2026-10-19T09:23:13.351Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-sale-29.jsonl",
+    "bytes": 14941122,
+    "sha256": "592a3fd491256d1f65df35261eed604b602ac72c15444ef78bbfed4bbe2d94aa",
+    "lastWriteUtc": "2026-10-19T09:26:50.412Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-sale-29.jsonl.summary.json",
+    "bytes": 981178,
+    "sha256": "affa28d07d8cd14fddf59250c84cbf5dda477818ed9903eed53945a53f080eb9",
+    "lastWriteUtc": "2026-10-19T09:26:50.448Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\server.log",
+    "bytes": 518472,
+    "sha256": "4b26767348e2198ee46aea290a034ecd3322b4baa73ee2352966cf1a6cd0a616",
+    "lastWriteUtc": "2026-10-19T09:26:41.005Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-sale-29.jsonl.server.log",
+    "bytes": 518472,
+    "sha256": "4b26767348e2198ee46aea290a034ecd3322b4baa73ee2352966cf1a6cd0a616",
+    "lastWriteUtc": "2026-10-19T09:26:50.385Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\client1.log",
+    "bytes": 94301,
+    "sha256": "8928b1ce15a61c31c032c0cd808797a7f99bbb3a2da3f959ee8fad836e44cbd1",
+    "lastWriteUtc": "2026-10-19T09:26:48.411Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-sale-29.jsonl.client1.log",
+    "bytes": 94301,
+    "sha256": "8928b1ce15a61c31c032c0cd808797a7f99bbb3a2da3f959ee8fad836e44cbd1",
+    "lastWriteUtc": "2026-10-19T09:26:50.413Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\server-268ff5381fac4f38bf53c05c4b6fa3cd.bmp",
+    "bytes": 11059254,
+    "sha256": "bc40bb4b6066f6ce94d0995c26a52b54c47c5382aa1e9ba8debdfa7748c670bb",
+    "lastWriteUtc": "2026-10-19T09:25:57.856Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\client1-952f2aba0e1849dc9dd41ca911d580b5.bmp",
+    "bytes": 11059254,
+    "sha256": "a3d9d636295ff56568a7c8e071f9db35edbb44a5f851e69af244daea45d7bab7",
+    "lastWriteUtc": "2026-10-19T09:25:58.780Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\server-d64832118f114d4cb21cdb1299def081.bmp",
+    "bytes": 11059254,
+    "sha256": "5a55fc40087a94212885d5d957301f57a2a9a9ecd2f86bc3b606987ee7049782",
+    "lastWriteUtc": "2026-10-19T09:26:06.463Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\client1-d63d96ab8bdd4a919ea4915bb020ce65.bmp",
+    "bytes": 11059254,
+    "sha256": "7b4f9db405f815b389ab6fbcde494f5c211bb12c56e07ce4a57b76edc3f3f48a",
+    "lastWriteUtc": "2026-10-19T09:26:07.312Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\server-692391c72bd7478bb0ec32e71f0c2298.bmp",
+    "bytes": 11059254,
+    "sha256": "32e9339ce84829b95a42470fc4fb204bec5f63db3ade544e2e5a6bce247276bc",
+    "lastWriteUtc": "2026-10-19T09:26:12.869Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\client1-45d222d75ccd4c92bdaae4ef80469c7c.bmp",
+    "bytes": 11059254,
+    "sha256": "d0232944396638d4c55efb6e468585aa41ae871b5acef422ff43d69b46572f6d",
+    "lastWriteUtc": "2026-10-19T09:26:13.687Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\server-513368b3cb2943789c915560be309d1f.bmp",
+    "bytes": 11059254,
+    "sha256": "f0b53b5deb942bd13dd723125d6d5d396bdc1a63cb5a9073cd9aaf283bc407a8",
+    "lastWriteUtc": "2026-10-19T09:26:19.319Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\client1-a41604c68e5c4c7ca24e698d508abbc1.bmp",
+    "bytes": 11059254,
+    "sha256": "de4066cc822d226ba7278f801652533064ed7ca5854ad8a87d90b64052a813de",
+    "lastWriteUtc": "2026-10-19T09:26:20.175Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\server-f6969fa15db744389524c19358dc8a56.bmp",
+    "bytes": 11059254,
+    "sha256": "0e1d402ffe2503a580f7069557807b887ac03b5cff52ede664c104d70c11364f",
+    "lastWriteUtc": "2026-10-19T09:26:24.017Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\client1-c30eae641dbf44a8a15f4263f835a1a1.bmp",
+    "bytes": 11059254,
+    "sha256": "09706faff32679b483f06ba58960623ba86615234237ed3ba8319aee020d2371",
+    "lastWriteUtc": "2026-10-19T09:26:24.878Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\server-bdac34500fb3484493bbc662d692d7d9.bmp",
+    "bytes": 11059254,
+    "sha256": "35a118b0d6bcda81eb934650443cffa979de6d8abe99790ed9efd761827ab739",
+    "lastWriteUtc": "2026-10-19T09:26:31.402Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\client1-53c96440addf4be1ab25794c3cd3c5da.bmp",
+    "bytes": 11059254,
+    "sha256": "a190fd29c64d6067d731b5f2ce25c6f5f8dfd9a365cf249330cc15b4b4a1bb73",
+    "lastWriteUtc": "2026-10-19T09:26:32.311Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\server-e4498f8cdfa54e3c8a7779951f3cd043.bmp",
+    "bytes": 11059254,
+    "sha256": "76955404c5783f5193339f0c8e58291aed6ffc669ad7bc24d5a722b2377033b7",
+    "lastWriteUtc": "2026-10-19T09:26:38.738Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\client1-f66a7a8cfd2247b9ba08e4ec39a7679e.bmp",
+    "bytes": 11059254,
+    "sha256": "aa6e5a26e366023eddf947bbfb7bdbff8c3bf9531dba369493fff230d37746cc",
+    "lastWriteUtc": "2026-10-19T09:26:39.584Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\server-71456c40674a48528359badd3f5ff180.bmp",
+    "bytes": 11059254,
+    "sha256": "00bccfb81d4480a34f7a4fb8b22873791acff660caf2c482949a37eb72349ff1",
+    "lastWriteUtc": "2026-10-19T09:26:42.774Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\client1-54c6a291c7b94857a7f1a8da399548b4.bmp",
+    "bytes": 11059254,
+    "sha256": "ccdc10287f3f3e77b5563cb9d0327e26833359921b5ecfb47c959b40f99bd568",
+    "lastWriteUtc": "2026-10-19T09:26:43.630Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\server-706b1aba39494fc9919c87cf1f7363a3.bmp",
+    "bytes": 11059254,
+    "sha256": "e2a6bc1722d6d02b6b4a6fdf7c37d1fdb2a271562a47877f213e10798eb0e9ed",
+    "lastWriteUtc": "2026-10-19T09:26:45.699Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\7ae90550efe545df9b981701146f7712\\client1-536f309820b5465f9fcc978c56333b9e.bmp",
+    "bytes": 11059254,
+    "sha256": "f9cfe7bd43738ef75a1a69979cf94bc940f8a0b21aca34d4daa7d25b0cd1a842",
+    "lastWriteUtc": "2026-10-19T09:26:46.777Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-sale-29.jsonl.processes.json",
+    "bytes": 944,
+    "sha256": "a7f7be5fca5c705920bd6d824900658541a04b11d32298b6c8eead6977959191",
+    "lastWriteUtc": "2026-10-19T09:25:57.410Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-natural-r2-01.jsonl",
+    "bytes": 81891,
+    "sha256": "8bd5a415b3bde8ea84f6b4666fd530324c9a43e3af0f4f90c4172c1963373c77",
+    "lastWriteUtc": "2026-10-19T10:02:30.487Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-natural-r2-01.jsonl.summary.json",
+    "bytes": 27249,
+    "sha256": "7351817b930e8bef215d0cec8c87bc96ad23f69ef6beacd2986105269e9abf6b",
+    "lastWriteUtc": "2026-10-19T10:02:30.513Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\52ed16a2137f4a99a78af8b2608114d1\\server.log",
+    "bytes": 5025,
+    "sha256": "c2d3e2cc0dac71ba4a36a39610a975c3e8246c66d7f833fb611a10e79ab1407e",
+    "lastWriteUtc": "2026-10-19T10:02:19.904Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-natural-r2-01.jsonl.52ed16a2137f4a99a78af8b2608114d1.server.log",
+    "bytes": 5025,
+    "sha256": "c2d3e2cc0dac71ba4a36a39610a975c3e8246c66d7f833fb611a10e79ab1407e",
+    "lastWriteUtc": "2026-10-19T10:02:30.485Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\52ed16a2137f4a99a78af8b2608114d1\\server-a322bd86803c4d56a0b17b611c7d8476.bmp",
+    "bytes": 11059254,
+    "sha256": "fb826257ad81aed6ceec2451cdf17a81b61b8a919ee3d035a5b68ee396a0bd9b",
+    "lastWriteUtc": "2026-10-19T10:02:28.033Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-natural-r2-02.jsonl",
+    "bytes": 21289409,
+    "sha256": "cdda91a4b304fc092ea654c37db84a6557d21cfa4cf33ce9ba33f4d33e4a44ca",
+    "lastWriteUtc": "2026-10-19T10:23:28.064Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-natural-r2-02.jsonl.summary.json",
+    "bytes": 3460926,
+    "sha256": "956b2f607f35a6e55339131e7a49d86bd330371e90007316e7ab7679886ffdb3",
+    "lastWriteUtc": "2026-10-19T10:23:28.158Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\78ebd66dcfaa4165b7378640be1380cf\\server.log",
+    "bytes": 2764674,
+    "sha256": "c7aa9eba1e654ebb7910b3a4e50bfdeb2eaa04af6ad9f6133beb89c5f8fda451",
+    "lastWriteUtc": "2026-10-19T10:23:23.936Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-natural-r2-02.jsonl.78ebd66dcfaa4165b7378640be1380cf.server.log",
+    "bytes": 2764674,
+    "sha256": "c7aa9eba1e654ebb7910b3a4e50bfdeb2eaa04af6ad9f6133beb89c5f8fda451",
+    "lastWriteUtc": "2026-10-19T10:23:28.011Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\78ebd66dcfaa4165b7378640be1380cf\\client1.log",
+    "bytes": 297155,
+    "sha256": "0512a045ba96b6432ebf6cc8082a603d219e5dd4754065996d9464662298510e",
+    "lastWriteUtc": "2026-10-19T10:23:25.041Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-natural-r2-02.jsonl.78ebd66dcfaa4165b7378640be1380cf.client1.log",
+    "bytes": 297155,
+    "sha256": "0512a045ba96b6432ebf6cc8082a603d219e5dd4754065996d9464662298510e",
+    "lastWriteUtc": "2026-10-19T10:23:28.068Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\78ebd66dcfaa4165b7378640be1380cf\\server-0d152db4eb0b41bc86af9d9d6dbc85c1.bmp",
+    "bytes": 11059254,
+    "sha256": "4aae500eca7679cf3b0ec721c43dd2c0032f31fa5b2094a2e62350cf087d1d52",
+    "lastWriteUtc": "2026-10-19T10:23:00.608Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\78ebd66dcfaa4165b7378640be1380cf\\client1-4757ede226234460a44db725577c1f1c.bmp",
+    "bytes": 11059254,
+    "sha256": "a2e789d7545d383233721274a76d991d263e69a09547ffe3bbc540051b7b73a0",
+    "lastWriteUtc": "2026-10-19T10:23:01.557Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\78ebd66dcfaa4165b7378640be1380cf\\server-c5c052fc61734f77b0681f42394391a9.bmp",
+    "bytes": 11059254,
+    "sha256": "3c83abecf41b22e1d3afe1e1278f526dae1507949539d1e4072babbe41908807",
+    "lastWriteUtc": "2026-10-19T10:23:22.533Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\78ebd66dcfaa4165b7378640be1380cf\\client1-e1b8388d1dea411f85959e299ac041fc.bmp",
+    "bytes": 11059254,
+    "sha256": "32745505a78e0c4796a04bab1fb4705c774cda5dcb59c746560494bad17b0ef5",
+    "lastWriteUtc": "2026-10-19T10:23:23.349Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-01.jsonl",
+    "bytes": 1891036,
+    "sha256": "6bb620864a206e57e77486d7b9dad7f84edccdbcd5806a14f2c3111231da397d",
+    "lastWriteUtc": "2026-10-19T10:27:14.544Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-01.jsonl.summary.json",
+    "bytes": 110543,
+    "sha256": "5650ece97c73ffb458cf67cc1b1e8634fb33bcaba6c4c1562286423f1ef3b9fb",
+    "lastWriteUtc": "2026-10-19T10:27:14.574Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\dbd822a87de940f9928ba5bb6cfcbd05\\server.log",
+    "bytes": 31862,
+    "sha256": "498dbd1e41c9ad6036824642a2a9e00c186b53f54d4519d30a3c7289d5137baa",
+    "lastWriteUtc": "2026-10-19T10:27:11.951Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-01.jsonl.server.log",
+    "bytes": 31862,
+    "sha256": "498dbd1e41c9ad6036824642a2a9e00c186b53f54d4519d30a3c7289d5137baa",
+    "lastWriteUtc": "2026-10-19T10:27:14.534Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\dbd822a87de940f9928ba5bb6cfcbd05\\client1.log",
+    "bytes": 26106,
+    "sha256": "5d01e57e7727c2454a2ca24af10c84f6af5b05b12b1b5324e4a2efb67b994c9a",
+    "lastWriteUtc": "2026-10-19T10:26:58.081Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-01.jsonl.client1.log",
+    "bytes": 26106,
+    "sha256": "5d01e57e7727c2454a2ca24af10c84f6af5b05b12b1b5324e4a2efb67b994c9a",
+    "lastWriteUtc": "2026-10-19T10:27:14.546Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\dbd822a87de940f9928ba5bb6cfcbd05\\server-5fe124dbde394a7f86a1bd04b2a2af6f.bmp",
+    "bytes": 11059254,
+    "sha256": "9cf94059ef676f4a2e424462b3438f06279422f1d8b720b1a5c823e7bc8dacff",
+    "lastWriteUtc": "2026-10-19T10:26:52.660Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\dbd822a87de940f9928ba5bb6cfcbd05\\client1-d32fcc3087f44ed892e0afb79489c9c9.bmp",
+    "bytes": 11059254,
+    "sha256": "5054c7f9ba9de93dbbb5d4f94af4f5686d0408c70d5e6be0b925de0be3cd03ea",
+    "lastWriteUtc": "2026-10-19T10:26:53.597Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\dbd822a87de940f9928ba5bb6cfcbd05\\server-5781707b1a0d40a0b98151e68bfef4f8.bmp",
+    "bytes": 11059254,
+    "sha256": "a97da611ddb422a9d81eb0ad568948cdb1f764d1cda6adfb0baeb28e0115a38f",
+    "lastWriteUtc": "2026-10-19T10:26:58.747Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\dbd822a87de940f9928ba5bb6cfcbd05\\server-7e6c99739ff4477cbaf675f3aa8cb3d8.bmp",
+    "bytes": 11059254,
+    "sha256": "a97da611ddb422a9d81eb0ad568948cdb1f764d1cda6adfb0baeb28e0115a38f",
+    "lastWriteUtc": "2026-10-19T10:27:03.844Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\dbd822a87de940f9928ba5bb6cfcbd05\\server-6505dcc51ec74963ab20c246bd555f52.bmp",
+    "bytes": 11059254,
+    "sha256": "87bbcb9e9fae4179606315c40212a19a0cb972ffb220c882472ba9f2e0c83eb0",
+    "lastWriteUtc": "2026-10-19T10:27:10.012Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\dbd822a87de940f9928ba5bb6cfcbd05\\client1-935a468b170a4aedbf653bce7249d028.bmp",
+    "bytes": 11059254,
+    "sha256": "ce6b58e5ecdd7c06b908129fe4b4dc0f159306d758efa100169b71baac8a888b",
+    "lastWriteUtc": "2026-10-19T10:27:10.842Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-sale-30.jsonl",
+    "bytes": 16193670,
+    "sha256": "f8d205fe6e4b4c36468131749ce145f246d25b234c2198c24ff21942de0f7cc2",
+    "lastWriteUtc": "2026-10-19T10:31:45.813Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-sale-30.jsonl.summary.json",
+    "bytes": 990816,
+    "sha256": "d021d0bcb1ee3931341467098a98f594d5897df85b2b324a8a6ff83234a30f43",
+    "lastWriteUtc": "2026-10-19T10:31:45.852Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\server.log",
+    "bytes": 696327,
+    "sha256": "309511dac634c74727819d10eca4c7966fe00a52f30ca2be695c41a43ab801ed",
+    "lastWriteUtc": "2026-10-19T10:31:41.208Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-sale-30.jsonl.server.log",
+    "bytes": 696327,
+    "sha256": "309511dac634c74727819d10eca4c7966fe00a52f30ca2be695c41a43ab801ed",
+    "lastWriteUtc": "2026-10-19T10:31:45.793Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\client1.log",
+    "bytes": 110766,
+    "sha256": "2c3466b5c667b63905054a82ffab1a2f7526db29951b23becbb6ec9072e609e2",
+    "lastWriteUtc": "2026-10-19T10:31:43.824Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-sale-30.jsonl.client1.log",
+    "bytes": 110766,
+    "sha256": "2c3466b5c667b63905054a82ffab1a2f7526db29951b23becbb6ec9072e609e2",
+    "lastWriteUtc": "2026-10-19T10:31:45.815Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\server-4f54cd1470804d6a9d50fc5b0b67c19a.bmp",
+    "bytes": 11059254,
+    "sha256": "4f5ccd8044d2249e7b906f6421f901a2c9c186cc91286e43bb6d1cf14c9ef231",
+    "lastWriteUtc": "2026-10-19T10:30:51.082Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\client1-889590f691524e21affa553f49d26693.bmp",
+    "bytes": 11059254,
+    "sha256": "80fa7b5dc08dfaceffdd5b3ec7048b660462977bbe0e592d8f6e43ab5af2a904",
+    "lastWriteUtc": "2026-10-19T10:30:51.958Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\server-ecdcb1d391df4812bfa1e4695fa730a6.bmp",
+    "bytes": 11059254,
+    "sha256": "e16d401074f06bdabce4fb86ffaf04e853bd95f573ac87402ed5524cdbd6b3ac",
+    "lastWriteUtc": "2026-10-19T10:30:59.634Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\client1-5857b7a8db6b4f7abb4944e803f55873.bmp",
+    "bytes": 11059254,
+    "sha256": "320597980ada54993b5230eba295d175461ea8c7f6a8e49028a510828dfd8e08",
+    "lastWriteUtc": "2026-10-19T10:31:00.401Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\server-f0dca385113e4e249f1e040fc3381ef6.bmp",
+    "bytes": 11059254,
+    "sha256": "5b8e487e434b0783f8ba8fa195b3783d1719a4de39ef26483b0ca17ce81348cb",
+    "lastWriteUtc": "2026-10-19T10:31:06.743Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\client1-8a40e6c097ae4209a398e0650c7f22b5.bmp",
+    "bytes": 11059254,
+    "sha256": "3aa99794cd691e93ee1a5a434af2cc83966275710ebe2907b4a29ac4643be2ba",
+    "lastWriteUtc": "2026-10-19T10:31:07.639Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\server-25a4673003634a2a80a9468d1949942f.bmp",
+    "bytes": 11059254,
+    "sha256": "171f3fbc7d42580a84e38a235cb570dcead87e2c66ce76e9a73dc9968d2589c9",
+    "lastWriteUtc": "2026-10-19T10:31:13.740Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\client1-6a740a126a82430d95f1d0335be7ac5b.bmp",
+    "bytes": 11059254,
+    "sha256": "730f337288e6fcee42756c2e8cdfd040b0ffdcc0627966a91df6c07b797a521d",
+    "lastWriteUtc": "2026-10-19T10:31:14.607Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\server-40988bc82861473393be0b36361ccbfd.bmp",
+    "bytes": 11059254,
+    "sha256": "b4f2ef057ded752c6ebce3ae4ff090b32bb0bc07988678136983f4077e83da82",
+    "lastWriteUtc": "2026-10-19T10:31:18.743Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\client1-1f92352c0f754dcabc3115f23da8e7a5.bmp",
+    "bytes": 11059254,
+    "sha256": "8ee7608b57ff300e1e0354e453ff184ad94d9b0979397bc9a4457fee95e28ba4",
+    "lastWriteUtc": "2026-10-19T10:31:19.564Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\server-5638c6f2a8b74a7b9538162251b0103f.bmp",
+    "bytes": 11059254,
+    "sha256": "138f78a9cb39185ccc329363549414491f29c7d4f5b6408316f732ad1c6b1199",
+    "lastWriteUtc": "2026-10-19T10:31:26.481Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\client1-b84194c463514d19a92bbdde8daeaf50.bmp",
+    "bytes": 11059254,
+    "sha256": "9ed473fa9496d420917aa709dcd394fe87e15f2dbbed1870bbd49fa3a5b617c7",
+    "lastWriteUtc": "2026-10-19T10:31:27.365Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\server-620b0f61eb374a91a51eb42a76464bcd.bmp",
+    "bytes": 11059254,
+    "sha256": "0dcad0be4b0aa1d9dc21e28cd3c47439abde4466091ef34fccd9a37fa704e138",
+    "lastWriteUtc": "2026-10-19T10:31:33.728Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\client1-b53994d79a784e46a98018f8fc6410a8.bmp",
+    "bytes": 11059254,
+    "sha256": "659b79957459c2137e51e17aaa5dc8a0ad75e81859f1fc4d1207b193485f71f0",
+    "lastWriteUtc": "2026-10-19T10:31:34.618Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\server-89221f28bd36425591a896add28092d3.bmp",
+    "bytes": 11059254,
+    "sha256": "70cf1cc5121c088df7a1073a516dfa512c0cac1ae12175e26d97bceed299ed5e",
+    "lastWriteUtc": "2026-10-19T10:31:37.993Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\client1-fd5ca7fd4e0d4a789530b972e8694e17.bmp",
+    "bytes": 11059254,
+    "sha256": "992ccdd1543c2ae5d9e7345e0e3578bd4faf0d662b9ad62827d29df6b1114534",
+    "lastWriteUtc": "2026-10-19T10:31:38.973Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\server-278575a0074d4136b98891f998850a4b.bmp",
+    "bytes": 11059254,
+    "sha256": "270636042cb5fdecfe2ae19190473b781703f365fe63b4f7081cef286c0a25fd",
+    "lastWriteUtc": "2026-10-19T10:31:41.199Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\567e8e3cef3442c3a75a605ac8289a8b\\client1-99fd6f96217848659b2b24029895cbb4.bmp",
+    "bytes": 11059254,
+    "sha256": "59e069304b22173f593e6ad1c8f09bf4ae7c51c76ba5aacc11e7956923e9f788",
+    "lastWriteUtc": "2026-10-19T10:31:42.179Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-sale-30.jsonl.processes.json",
+    "bytes": 944,
+    "sha256": "2f3467267899b6107b0c88adb5dc782b03ec78c685c50aefba33031df042fef8",
+    "lastWriteUtc": "2026-10-19T10:30:50.670Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-udp-active-22.jsonl",
+    "bytes": 15281916,
+    "sha256": "1fa4f6a3a0cca884cd51d168eb9f4506f3c4839bdbb6288e5776bf6ed4f30634",
+    "lastWriteUtc": "2026-10-19T10:35:25.405Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-udp-active-22.jsonl.summary.json",
+    "bytes": 1564126,
+    "sha256": "de718c6b94b4fd3018a7b96a962104debec47d416c0231600d205d0345a8c2b5",
+    "lastWriteUtc": "2026-10-19T10:35:25.450Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\39233815b5634a0eb06aaecf4cc7dea9\\server.log",
+    "bytes": 990726,
+    "sha256": "9d801f18df686682ef24c912a87a2457c9581f5f43c557c2b42ef53809a04323",
+    "lastWriteUtc": "2026-10-19T10:35:19.173Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-udp-active-22.jsonl.server.log",
+    "bytes": 990726,
+    "sha256": "9d801f18df686682ef24c912a87a2457c9581f5f43c557c2b42ef53809a04323",
+    "lastWriteUtc": "2026-10-19T10:35:25.377Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\39233815b5634a0eb06aaecf4cc7dea9\\client1.log",
+    "bytes": 140484,
+    "sha256": "c0a492188c556aecad98614fd6b32b3c8e8e2727c0f208032a356ea782de285d",
+    "lastWriteUtc": "2026-10-19T10:35:18.825Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-udp-active-22.jsonl.client1.log",
+    "bytes": 140484,
+    "sha256": "c0a492188c556aecad98614fd6b32b3c8e8e2727c0f208032a356ea782de285d",
+    "lastWriteUtc": "2026-10-19T10:35:25.408Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\39233815b5634a0eb06aaecf4cc7dea9\\server-c6576793570744a687774245b6f271cd.bmp",
+    "bytes": 11059254,
+    "sha256": "211382965a7aca375cfeeaa26db9a3ad7c30193ae52dcd10149ec47c94597a5f",
+    "lastWriteUtc": "2026-10-19T10:34:19.638Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\39233815b5634a0eb06aaecf4cc7dea9\\client1-8ad7b55c565b4eb2a77585c1c9233e7b.bmp",
+    "bytes": 11059254,
+    "sha256": "1f16ba285ae670190296db2ce558bc2f1f080f2507d9126ca8a49ccbc0bcf227",
+    "lastWriteUtc": "2026-10-19T10:34:20.586Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\39233815b5634a0eb06aaecf4cc7dea9\\server-bd4d14c4effa4eae8eeeda73d3f53729.bmp",
+    "bytes": 11059254,
+    "sha256": "74f29dd6ac3884c31851dd7681ee00beafa591dd4fae8a36834c99cb34d97635",
+    "lastWriteUtc": "2026-10-19T10:34:50.539Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\39233815b5634a0eb06aaecf4cc7dea9\\client1-2bc13227e3a94fc28867d1ec5afa2aac.bmp",
+    "bytes": 11059254,
+    "sha256": "499d5d3c20f71569ac96e855dff1a2d79fac879049ffd521c5166a3aefd40718",
+    "lastWriteUtc": "2026-10-19T10:34:51.353Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\39233815b5634a0eb06aaecf4cc7dea9\\server-299b7ae923a14cec93e1eb7a5c198c96.bmp",
+    "bytes": 11059254,
+    "sha256": "de0c4f06599e5f7db1bd05607033b416682f60cc00f088ee79d7c33fb7d689f0",
+    "lastWriteUtc": "2026-10-19T10:35:20.651Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\39233815b5634a0eb06aaecf4cc7dea9\\client1-f22bac4f729e461da1b37edcb589fef5.bmp",
+    "bytes": 11059254,
+    "sha256": "527f3ae19c1258287e168b24bca975e7c782ec7c4ff83deb22da50192ef878d3",
+    "lastWriteUtc": "2026-10-19T10:35:21.641Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-02.jsonl",
+    "bytes": 5985453,
+    "sha256": "ac22022a2c712c646260a42fdffb1925b8be137edd39595afeb6522e941b0a93",
+    "lastWriteUtc": "2026-10-19T10:50:14.448Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-02.jsonl.summary.json",
+    "bytes": 1066722,
+    "sha256": "d56be26697c593cb3ccb3558757fb831bd7d7f769f2b50579ee805d795b1385e",
+    "lastWriteUtc": "2026-10-19T10:50:14.489Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\be22677a12a6473f8fad6c1ac60bb2bf\\server.log",
+    "bytes": 60416,
+    "sha256": "ad2ce5302b9bdc98f0b2be627c252507e7fdb0e230e2f25b31cbe6467cf07843",
+    "lastWriteUtc": "2026-10-19T10:50:12.453Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-02.jsonl.server.log",
+    "bytes": 60416,
+    "sha256": "ad2ce5302b9bdc98f0b2be627c252507e7fdb0e230e2f25b31cbe6467cf07843",
+    "lastWriteUtc": "2026-10-19T10:50:14.433Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\be22677a12a6473f8fad6c1ac60bb2bf\\client1.log",
+    "bytes": 64088,
+    "sha256": "0f876261381a0e6395805d36e1d4c26bf7eedc5f9b10f42d2d02bce8ac34bfb8",
+    "lastWriteUtc": "2026-10-19T10:50:12.296Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-02.jsonl.client1.log",
+    "bytes": 64088,
+    "sha256": "0f876261381a0e6395805d36e1d4c26bf7eedc5f9b10f42d2d02bce8ac34bfb8",
+    "lastWriteUtc": "2026-10-19T10:50:14.450Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\be22677a12a6473f8fad6c1ac60bb2bf\\server-11938e1f3d6f4b3db35facac2e6aea9a.bmp",
+    "bytes": 11059254,
+    "sha256": "2d0b54e2958171ec229f3617ea0ad00ab4b1845bed515f1bef8af32b48f82c8a",
+    "lastWriteUtc": "2026-10-19T10:49:24.968Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\be22677a12a6473f8fad6c1ac60bb2bf\\client1-61bc80feacbf4aaf8593270fadee5f88.bmp",
+    "bytes": 11059254,
+    "sha256": "36dc1e5d02323bfc19c0854cb5a3fa169421dae88e491ec819d88a4ad65c49f1",
+    "lastWriteUtc": "2026-10-19T10:49:25.894Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\be22677a12a6473f8fad6c1ac60bb2bf\\server-02a38dd267114c09a05768425f34ffd3.bmp",
+    "bytes": 11059254,
+    "sha256": "a97da611ddb422a9d81eb0ad568948cdb1f764d1cda6adfb0baeb28e0115a38f",
+    "lastWriteUtc": "2026-10-19T10:49:31.549Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\be22677a12a6473f8fad6c1ac60bb2bf\\server-762da6d90df342b5a2119e75153f12fa.bmp",
+    "bytes": 11059254,
+    "sha256": "5edf31b34a0a6bb6ac2991603dabc45a8b35bb5c2d09f549bc99d9fc0ba911ec",
+    "lastWriteUtc": "2026-10-19T10:49:33.873Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\be22677a12a6473f8fad6c1ac60bb2bf\\server-a3f973b02b9c4ba88ea4e2681dd2a564.bmp",
+    "bytes": 11059254,
+    "sha256": "6b7f702f12f349d1ad8a1ce186129ad53877bfdff992cad680b8b0cc254c4f2c",
+    "lastWriteUtc": "2026-10-19T10:49:41.268Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\be22677a12a6473f8fad6c1ac60bb2bf\\client1-b727bb87b37d48b69e0d48de4e4044f6.bmp",
+    "bytes": 11059254,
+    "sha256": "e1b8fb428874d97d31b1624db18a461d3db6154b8799f099e883ac5247ac4326",
+    "lastWriteUtc": "2026-10-19T10:49:42.423Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\be22677a12a6473f8fad6c1ac60bb2bf\\client1-d9717e2d6db141dc90736e766383fe5c.bmp",
+    "bytes": 11059254,
+    "sha256": "eff7309f56c7c7e17d0b882f58ff1a46cae42ebfbae0a8eb856fdd5415f8d34b",
+    "lastWriteUtc": "2026-10-19T10:49:44.839Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\be22677a12a6473f8fad6c1ac60bb2bf\\client1-879228e58b7448088b60732b2cd3ba6a.bmp",
+    "bytes": 11059254,
+    "sha256": "eff7309f56c7c7e17d0b882f58ff1a46cae42ebfbae0a8eb856fdd5415f8d34b",
+    "lastWriteUtc": "2026-10-19T10:49:46.557Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\be22677a12a6473f8fad6c1ac60bb2bf\\client1-0336af58db924c41906dac307e5b17d0.bmp",
+    "bytes": 11059254,
+    "sha256": "9c710d8d567d4ddaaa5086c16a39c6fe19d14814c6f694d9815d8bf12c904e23",
+    "lastWriteUtc": "2026-10-19T10:49:49.270Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\be22677a12a6473f8fad6c1ac60bb2bf\\server-118c7ce5751c419aa31d2d8adb3aebf3.bmp",
+    "bytes": 11059254,
+    "sha256": "28700aeb7203f27feecaef543e48112f08f94faeb1d323d4be2985946f9c7abd",
+    "lastWriteUtc": "2026-10-19T10:49:49.305Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\be22677a12a6473f8fad6c1ac60bb2bf\\client1-7e3f0052e7094a6d835513d8abeacdea.bmp",
+    "bytes": 11059254,
+    "sha256": "9972fed1c4bc9068535391dba3cdfcc5433b5872fc202fde92ce4d06025143d5",
+    "lastWriteUtc": "2026-10-19T10:49:55.960Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\be22677a12a6473f8fad6c1ac60bb2bf\\server-5463de9ea1fb4590849682ab1f2762ba.bmp",
+    "bytes": 11059254,
+    "sha256": "497051c58c2a16aaf6d2a451697bd004a18b4afc4bc58619d94dab58d37f1e56",
+    "lastWriteUtc": "2026-10-19T10:49:55.955Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\be22677a12a6473f8fad6c1ac60bb2bf\\server-3d92976e1daf4141a38057d82955786f.bmp",
+    "bytes": 11059254,
+    "sha256": "d53be29e67a98bc08ec6abd9de2fad5a8cb0c79a4fbd971ee725e7bc3899b67f",
+    "lastWriteUtc": "2026-10-19T10:49:58.501Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\be22677a12a6473f8fad6c1ac60bb2bf\\client1-da23699ab2a84563805f6f6d4fab8e31.bmp",
+    "bytes": 11059254,
+    "sha256": "1820b30b211fea1b6feaceafbc72331134faf07dc171ef0896b3388679a19b00",
+    "lastWriteUtc": "2026-10-19T10:49:59.259Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\be22677a12a6473f8fad6c1ac60bb2bf\\server-1f80b785cb994493acde438427b99e5b.bmp",
+    "bytes": 11059254,
+    "sha256": "5b86f80ec215196b2c4bec2f6da28337d483e6ecff40cc27ce1a4f2311a3cb1a",
+    "lastWriteUtc": "2026-10-19T10:50:09.782Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\be22677a12a6473f8fad6c1ac60bb2bf\\client1-51e56bd2b4314eb583d56e630102e67d.bmp",
+    "bytes": 11059254,
+    "sha256": "55e8d858dc5e08dba998abab3da03f04121b653019b9423af87543d60c6138f0",
+    "lastWriteUtc": "2026-10-19T10:50:10.694Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-natural-r2-03.jsonl",
+    "bytes": 93950347,
+    "sha256": "402bb65dc39577a3c7bbbf570a43c129d71c95e73200864edeff872425d6991f",
+    "lastWriteUtc": "2026-10-19T10:58:28.764Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-natural-r2-03.jsonl.summary.json",
+    "bytes": 15762233,
+    "sha256": "926c63074ef47f4c29535ceb4ac071d8e4cc7392f376afa42c73ea9cb3ae5f83",
+    "lastWriteUtc": "2026-10-19T10:58:29.142Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\70d3abaf977c486ab86daa27a21c0234\\server.log",
+    "bytes": 8562366,
+    "sha256": "417d265b6c0b69a6ad9f5dd5e57387c777125072391c711b2d2d07acfead1018",
+    "lastWriteUtc": "2026-10-19T10:58:23.383Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-natural-r2-03.jsonl.70d3abaf977c486ab86daa27a21c0234.server.log",
+    "bytes": 8562366,
+    "sha256": "417d265b6c0b69a6ad9f5dd5e57387c777125072391c711b2d2d07acfead1018",
+    "lastWriteUtc": "2026-10-19T10:58:28.117Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\70d3abaf977c486ab86daa27a21c0234\\client1.log",
+    "bytes": 6012091,
+    "sha256": "9d8bdd11a09c73ed6e73c94155a79ff88544f47d2552f9f8e215f722e29b3811",
+    "lastWriteUtc": "2026-10-19T10:58:24.772Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-natural-r2-03.jsonl.70d3abaf977c486ab86daa27a21c0234.client1.log",
+    "bytes": 6012091,
+    "sha256": "9d8bdd11a09c73ed6e73c94155a79ff88544f47d2552f9f8e215f722e29b3811",
+    "lastWriteUtc": "2026-10-19T10:58:28.833Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\70d3abaf977c486ab86daa27a21c0234\\server-1d431b3bfe9e4ddc90c4432ec0347a89.bmp",
+    "bytes": 11059254,
+    "sha256": "e1e67ac655c7556095e96a83f561e2222c76b3c6e3852eff1157dd4af4f8ed32",
+    "lastWriteUtc": "2026-10-19T10:57:58.753Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\70d3abaf977c486ab86daa27a21c0234\\client1-49db14f60bd04411bb2995fe7e6320b0.bmp",
+    "bytes": 11059254,
+    "sha256": "77774d5aa7f5fc62b874c1e9cbb6310609f5ab67f015313394df5011e52195af",
+    "lastWriteUtc": "2026-10-19T10:57:59.651Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\70d3abaf977c486ab86daa27a21c0234\\server-6fa4ea46369643d78be897683120fd2b.bmp",
+    "bytes": 11059254,
+    "sha256": "f31fcb5126cb94276ee5789a00b9ffac0d6aaa9f5faefb11ce22f3ded687a8a4",
+    "lastWriteUtc": "2026-10-19T10:58:22.069Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\70d3abaf977c486ab86daa27a21c0234\\client1-a7262d4ad8b84dcaa688a05759bde8c7.bmp",
+    "bytes": 11059254,
+    "sha256": "0b052ee803918e96212f7768f57bd41ff75c621861bc4297614e88bca1fbcfb0",
+    "lastWriteUtc": "2026-10-19T10:58:22.891Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-natural-r2-04.jsonl",
+    "bytes": 93333538,
+    "sha256": "d60060885bef3190e3688416c57656c36d73e631571651ce55395bbbec0ab2fe",
+    "lastWriteUtc": "2026-10-19T11:35:56.944Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-natural-r2-04.jsonl.summary.json",
+    "bytes": 15668185,
+    "sha256": "eecf16bf60aa6382eaea5892760dadffb6c9679b70cd3be867b6fa4ee6a03984",
+    "lastWriteUtc": "2026-10-19T11:35:57.325Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\03bdf970a5ad49b28ce27a8f243e63ba\\server.log",
+    "bytes": 8484654,
+    "sha256": "5565edf375eb35d228cf0f593a7e1aef8a9726b9570bfc3c3767e52ca69eaeff",
+    "lastWriteUtc": "2026-10-19T11:35:51.770Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-natural-r2-04.jsonl.03bdf970a5ad49b28ce27a8f243e63ba.server.log",
+    "bytes": 8484654,
+    "sha256": "5565edf375eb35d228cf0f593a7e1aef8a9726b9570bfc3c3767e52ca69eaeff",
+    "lastWriteUtc": "2026-10-19T11:35:56.035Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\03bdf970a5ad49b28ce27a8f243e63ba\\client1.log",
+    "bytes": 6003656,
+    "sha256": "bd83a7e6212a4f2c4da2b202f0dc50d614a0c89e6e49aa5a121c4853b2bfa167",
+    "lastWriteUtc": "2026-10-19T11:35:52.478Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-natural-r2-04.jsonl.03bdf970a5ad49b28ce27a8f243e63ba.client1.log",
+    "bytes": 6003656,
+    "sha256": "bd83a7e6212a4f2c4da2b202f0dc50d614a0c89e6e49aa5a121c4853b2bfa167",
+    "lastWriteUtc": "2026-10-19T11:35:57.016Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\03bdf970a5ad49b28ce27a8f243e63ba\\server-1247d471a7874c7c94e0e1dd59789bdb.bmp",
+    "bytes": 11059254,
+    "sha256": "85ff301c305be77031b23bcc5cde47932d5136e89efe5a2ccd94bda668caefc0",
+    "lastWriteUtc": "2026-10-19T11:35:26.543Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\03bdf970a5ad49b28ce27a8f243e63ba\\client1-807ee6f14d184297b27b6b34467cc8fe.bmp",
+    "bytes": 11059254,
+    "sha256": "e35232a93243c078e8c95e8ef2183fe344b7b4ca390b767277cd99721168ba82",
+    "lastWriteUtc": "2026-10-19T11:35:27.452Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\03bdf970a5ad49b28ce27a8f243e63ba\\server-40bb902b5c3d4215a8d748a20217bf5c.bmp",
+    "bytes": 11059254,
+    "sha256": "489542cdf8eac589f2f9741a157352c67bd62a8c08e59d69a21dc184653e88f3",
+    "lastWriteUtc": "2026-10-19T11:35:49.840Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\03bdf970a5ad49b28ce27a8f243e63ba\\client1-a3733c87f13442e090677ed76b1280d8.bmp",
+    "bytes": 11059254,
+    "sha256": "5c80e862bd89635dfccdf57f13aee4d41a4e910a9dee4cc430f13623a7d2857f",
+    "lastWriteUtc": "2026-10-19T11:35:50.672Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-03.jsonl",
+    "bytes": 76097036,
+    "sha256": "f7450cc85fbed892eda69dca3d0f0943737ae63029144870cfd2ce3e414e2971",
+    "lastWriteUtc": "2026-10-19T11:38:57.210Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-03.jsonl.summary.json",
+    "bytes": 1531180,
+    "sha256": "a44a4fd1452d9dfdd66f9d1b3131a12589483bd09c5b1aa89c4b917345b8a488",
+    "lastWriteUtc": "2026-10-19T11:38:57.343Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\51dbbee4b70e4b37b488cf0897d8b85e\\server.log",
+    "bytes": 5651553,
+    "sha256": "842b6b98be8f4de6a2d0fe746ecaa245414a50cd2e77505aa1f88258a2940ddb",
+    "lastWriteUtc": "2026-10-19T11:38:54.048Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-03.jsonl.server.log",
+    "bytes": 5651553,
+    "sha256": "842b6b98be8f4de6a2d0fe746ecaa245414a50cd2e77505aa1f88258a2940ddb",
+    "lastWriteUtc": "2026-10-19T11:38:56.636Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\51dbbee4b70e4b37b488cf0897d8b85e\\client1.log",
+    "bytes": 5659015,
+    "sha256": "535963b58631366cb0f21ffcdb6d001f238351a52b0e61d8ba95c84980a8ccec",
+    "lastWriteUtc": "2026-10-19T11:38:53.981Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-03.jsonl.client1.log",
+    "bytes": 5659015,
+    "sha256": "535963b58631366cb0f21ffcdb6d001f238351a52b0e61d8ba95c84980a8ccec",
+    "lastWriteUtc": "2026-10-19T11:38:57.276Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\51dbbee4b70e4b37b488cf0897d8b85e\\server-01d06813fb19492b89fedf21e168da25.bmp",
+    "bytes": 11059254,
+    "sha256": "75d8ac35013d3c44a76a5ac2fcded7edf0f1af296389d938396af7f2d00c15fe",
+    "lastWriteUtc": "2026-10-19T11:38:09.137Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\51dbbee4b70e4b37b488cf0897d8b85e\\client1-e6abbe266f3e4dc4867d1566639e8860.bmp",
+    "bytes": 11059254,
+    "sha256": "a8b76f3a0a4487715b74ddd85b56db6bd7d3f7b6c2a0a50051fe186281380bb6",
+    "lastWriteUtc": "2026-10-19T11:38:10.038Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\51dbbee4b70e4b37b488cf0897d8b85e\\server-a6552bb141f640d084a328c674db9906.bmp",
+    "bytes": 11059254,
+    "sha256": "a97da611ddb422a9d81eb0ad568948cdb1f764d1cda6adfb0baeb28e0115a38f",
+    "lastWriteUtc": "2026-10-19T11:38:14.344Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\51dbbee4b70e4b37b488cf0897d8b85e\\server-e11b6287d8ea4892870daec0fcdea198.bmp",
+    "bytes": 11059254,
+    "sha256": "a97da611ddb422a9d81eb0ad568948cdb1f764d1cda6adfb0baeb28e0115a38f",
+    "lastWriteUtc": "2026-10-19T11:38:15.278Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\51dbbee4b70e4b37b488cf0897d8b85e\\server-549633acbdf341bfaf7ab06beec5d94a.bmp",
+    "bytes": 11059254,
+    "sha256": "5332870b25810e65787a87b7c8af284c4a78bccd91e4b08927b24bb78ed20ec1",
+    "lastWriteUtc": "2026-10-19T11:38:22.881Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\51dbbee4b70e4b37b488cf0897d8b85e\\client1-cc0c2da606f143868ba55cc1f7cb12ec.bmp",
+    "bytes": 11059254,
+    "sha256": "9567efce6215bf154cd93ff4365899cb5d00c37cd38eb308f282687b622bd881",
+    "lastWriteUtc": "2026-10-19T11:38:23.686Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\51dbbee4b70e4b37b488cf0897d8b85e\\client1-d98be25dd6cc4170b8290dca0e5b9412.bmp",
+    "bytes": 11059254,
+    "sha256": "eff7309f56c7c7e17d0b882f58ff1a46cae42ebfbae0a8eb856fdd5415f8d34b",
+    "lastWriteUtc": "2026-10-19T11:38:25.960Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\51dbbee4b70e4b37b488cf0897d8b85e\\client1-27707444e4a1434aa75ee51449e4aa74.bmp",
+    "bytes": 11059254,
+    "sha256": "eff7309f56c7c7e17d0b882f58ff1a46cae42ebfbae0a8eb856fdd5415f8d34b",
+    "lastWriteUtc": "2026-10-19T11:38:27.871Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\51dbbee4b70e4b37b488cf0897d8b85e\\client1-a1e1e5ee329941bcafe19bbd58f223f3.bmp",
+    "bytes": 11059254,
+    "sha256": "9707b55e6ce784842ad66c45c5e3c6fddf1a4c6c369290b921b84ccf9221c779",
+    "lastWriteUtc": "2026-10-19T11:38:30.098Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\51dbbee4b70e4b37b488cf0897d8b85e\\server-9edb98cbdbcb496bae95acb2a53688e2.bmp",
+    "bytes": 11059254,
+    "sha256": "6d19c3ec5d92a9d3cd6798473c0a959c1f6133772c9fca240f44d6eddbe42b73",
+    "lastWriteUtc": "2026-10-19T11:38:30.100Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\51dbbee4b70e4b37b488cf0897d8b85e\\client1-c606a101d8b743d1a5ee87cdd93816b6.bmp",
+    "bytes": 11059254,
+    "sha256": "fd37152a125a72d1580c9ff275f34ead2b2f3c94eb49f5724b58da2a4e07228c",
+    "lastWriteUtc": "2026-10-19T11:38:36.776Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\51dbbee4b70e4b37b488cf0897d8b85e\\server-5df12d80033f41118c013f7b7b9f007c.bmp",
+    "bytes": 11059254,
+    "sha256": "d63fe3e9c71b7682fb514df8e9ba057933cf6ff85dac01967abd1ba4c9b7cc96",
+    "lastWriteUtc": "2026-10-19T11:38:36.798Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\51dbbee4b70e4b37b488cf0897d8b85e\\server-f07d9cee46124e86978e8420d8edaa19.bmp",
+    "bytes": 11059254,
+    "sha256": "cde9b62ba17211b2e3fcf29a7f22fa009cc6e8770a1c4654c036fc0047e543b8",
+    "lastWriteUtc": "2026-10-19T11:38:39.592Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\51dbbee4b70e4b37b488cf0897d8b85e\\client1-0085ec7b0fea4951af542d83d4549ff7.bmp",
+    "bytes": 11059254,
+    "sha256": "483fbdc85eedead659f22d41d6cbd4ca312639b2ae9a0f9bb7da44acf96bb761",
+    "lastWriteUtc": "2026-10-19T11:38:40.354Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\51dbbee4b70e4b37b488cf0897d8b85e\\server-70ddde31205b44d888b6bda2c82febad.bmp",
+    "bytes": 11059254,
+    "sha256": "b6103c60c01f67e22031bb93e77b561d29c9680ef8381da34e6c0e0ddc33405d",
+    "lastWriteUtc": "2026-10-19T11:38:51.135Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\51dbbee4b70e4b37b488cf0897d8b85e\\client1-fac812023312490d9f79d6720d6032a0.bmp",
+    "bytes": 11059254,
+    "sha256": "7791ac6ff1c057f2e74756840f0ecdb10018858d81b248773a4f33b6f4922f04",
+    "lastWriteUtc": "2026-10-19T11:38:52.122Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-04.jsonl",
+    "bytes": 70965585,
+    "sha256": "c6406ac2f6249a3b5437c902ad448bf409ebbee9255861a050a48b08e20741ee",
+    "lastWriteUtc": "2026-10-19T14:18:32.451Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-04.jsonl.summary.json",
+    "bytes": 537297,
+    "sha256": "a00fd04c5f6b5a91fba3ad3d2a2588fc84cbb9e5fd14100b316c8db06ffa170b",
+    "lastWriteUtc": "2026-10-19T14:18:32.657Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\01bd758941544f34a31834d758d4cc75\\server.log",
+    "bytes": 5641814,
+    "sha256": "2f5790c4ef5dcad3c54d23a91752ffbf10cd5bde9788de6f7e88df948d5a4460",
+    "lastWriteUtc": "2026-10-19T14:18:29.295Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-04.jsonl.server.log",
+    "bytes": 5641814,
+    "sha256": "2f5790c4ef5dcad3c54d23a91752ffbf10cd5bde9788de6f7e88df948d5a4460",
+    "lastWriteUtc": "2026-10-19T14:18:30.987Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\01bd758941544f34a31834d758d4cc75\\client1.log",
+    "bytes": 5622494,
+    "sha256": "7097a1ceb284a6ce3ef63a4dfa803e613c1bf4a4ab7459c6231e71dc25cb3ee6",
+    "lastWriteUtc": "2026-10-19T14:18:27.016Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-04.jsonl.client1.log",
+    "bytes": 5622494,
+    "sha256": "7097a1ceb284a6ce3ef63a4dfa803e613c1bf4a4ab7459c6231e71dc25cb3ee6",
+    "lastWriteUtc": "2026-10-19T14:18:32.565Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\01bd758941544f34a31834d758d4cc75\\server-d196f73530aa4aa99cd268c6d4c6ea6c.bmp",
+    "bytes": 11059254,
+    "sha256": "683b6ced28a1cdd873f5d938276ee1dc395d5474c8a1bbd6e397bfdeea60961b",
+    "lastWriteUtc": "2026-10-19T14:17:58.432Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\01bd758941544f34a31834d758d4cc75\\client1-f02498bf1953466996037656e8cb4838.bmp",
+    "bytes": 11059254,
+    "sha256": "b6524fca2dacaf6a9fd96f3bdd3a86e444ce6e01d790a98803c6f5033cc51bf0",
+    "lastWriteUtc": "2026-10-19T14:18:14.036Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-05.jsonl",
+    "bytes": 81023340,
+    "sha256": "741be21d3b0514b33fe07f3239c09ac9b43c5b6cf47128cfb9dc9f9d5353f68e",
+    "lastWriteUtc": "2026-10-19T14:39:27.518Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-05.jsonl.summary.json",
+    "bytes": 1912480,
+    "sha256": "54301b4310fb91ba140fb4956249c4898786b73fceb83e8b2c4c75bb14b6111e",
+    "lastWriteUtc": "2026-10-19T14:39:27.674Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\server.log",
+    "bytes": 6093577,
+    "sha256": "f91921123ebf574d122a9698e9eab97d6d17e401ac6af1b28b9479c9cd291544",
+    "lastWriteUtc": "2026-10-19T14:39:18.488Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-05.jsonl.server.log",
+    "bytes": 6093577,
+    "sha256": "f91921123ebf574d122a9698e9eab97d6d17e401ac6af1b28b9479c9cd291544",
+    "lastWriteUtc": "2026-10-19T14:39:26.865Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\client1.log",
+    "bytes": 5724379,
+    "sha256": "edec07615b879b1fa5a54eb8b0055d6f69f47cbd9670a3a0210b9ee953f7adf2",
+    "lastWriteUtc": "2026-10-19T14:39:24.127Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-mission-r2-05.jsonl.client1.log",
+    "bytes": 5724379,
+    "sha256": "edec07615b879b1fa5a54eb8b0055d6f69f47cbd9670a3a0210b9ee953f7adf2",
+    "lastWriteUtc": "2026-10-19T14:39:27.589Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\server-a50af414493846ed87df2f78f0b702c5.bmp",
+    "bytes": 11059254,
+    "sha256": "f42735fae1adbb0f4fad3889de55d4538718cda41f39fac33535f7fe38c387c6",
+    "lastWriteUtc": "2026-10-19T14:38:22.207Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\client1-25b5f7f986de482fbfaa71426c4c6552.bmp",
+    "bytes": 11059254,
+    "sha256": "34e62ffd943763b2ca9b5858a494023a907c3dc13684c3a744440ab5e1d74d29",
+    "lastWriteUtc": "2026-10-19T14:38:23.129Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\server-3f22b173e2a144eaa508bcf3c0552799.bmp",
+    "bytes": 11059254,
+    "sha256": "a97da611ddb422a9d81eb0ad568948cdb1f764d1cda6adfb0baeb28e0115a38f",
+    "lastWriteUtc": "2026-10-19T14:38:26.661Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\server-0f8b53e175c542f7aa42f35b8e732733.bmp",
+    "bytes": 11059254,
+    "sha256": "a97da611ddb422a9d81eb0ad568948cdb1f764d1cda6adfb0baeb28e0115a38f",
+    "lastWriteUtc": "2026-10-19T14:38:28.644Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\server-664efb007cb04b6f82ac29a435c387ab.bmp",
+    "bytes": 11059254,
+    "sha256": "a2c03f4a798b8df97126763c3f12e1e2df1b6e5098566478aae834b36a1bda93",
+    "lastWriteUtc": "2026-10-19T14:38:36.633Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\client1-3f1fb6cca0ba4d868d7c068c6591726b.bmp",
+    "bytes": 11059254,
+    "sha256": "5eb4e45165a87b8ac00439cc43b0fce3b73b43822111ef62d9cda1a8066e34cc",
+    "lastWriteUtc": "2026-10-19T14:38:37.625Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\client1-d972c45e4f5f49a88a1320dcee0d3c59.bmp",
+    "bytes": 11059254,
+    "sha256": "eff7309f56c7c7e17d0b882f58ff1a46cae42ebfbae0a8eb856fdd5415f8d34b",
+    "lastWriteUtc": "2026-10-19T14:38:40.162Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\client1-4088cb5e8c434eb6a6dea27d4bd5c218.bmp",
+    "bytes": 11059254,
+    "sha256": "eff7309f56c7c7e17d0b882f58ff1a46cae42ebfbae0a8eb856fdd5415f8d34b",
+    "lastWriteUtc": "2026-10-19T14:38:41.694Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\client1-8b3997c1060542cebdbe76170e85539b.bmp",
+    "bytes": 11059254,
+    "sha256": "f73675513d16e3fef71627d00ddf788dc4a3bfd5709de066a34dc51b232657cc",
+    "lastWriteUtc": "2026-10-19T14:38:44.003Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\server-fc6cbc2cdb154c53a9bb85a3f37209ac.bmp",
+    "bytes": 11059254,
+    "sha256": "11b77ba2bbb97cb10a23584f382cd10891b3ec1cee50f5a61a59f59d2fb20747",
+    "lastWriteUtc": "2026-10-19T14:38:44.053Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\client1-29dbe32849b74056bf0ceee869f3f767.bmp",
+    "bytes": 11059254,
+    "sha256": "8baf3d7490b2b9e063ef17466c24204588b6ae4c095c1bcae2853103b1999629",
+    "lastWriteUtc": "2026-10-19T14:38:50.908Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\server-5d123462c9044bdcb2ae536d45e0f1fd.bmp",
+    "bytes": 11059254,
+    "sha256": "f8fc9dae2278a999ffb18f2bc8db55c602382bc5b89e6d854eabdfaee52283e8",
+    "lastWriteUtc": "2026-10-19T14:38:50.904Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\server-b4cf051711444ca192c01eda7eeff01b.bmp",
+    "bytes": 11059254,
+    "sha256": "a019700a889b9393dc7ada71610088a1a7f842d5cdd4eaa8aa4589484841fc12",
+    "lastWriteUtc": "2026-10-19T14:38:53.314Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\client1-463bf4bc96b84b4f97747018a1bfec26.bmp",
+    "bytes": 11059254,
+    "sha256": "7b579c3e5b69bb8c6da480cfd1e8273b5be13aa7bdac9e847883100817db3ecc",
+    "lastWriteUtc": "2026-10-19T14:38:54.193Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\server-15522d6d8d0e4e4db0f23eba6bb1ca09.bmp",
+    "bytes": 11059254,
+    "sha256": "d057de33cc9221cbd5f4c794a586805c8f885064c0d7295137c273eaf65dce1d",
+    "lastWriteUtc": "2026-10-19T14:39:06.313Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\client1-0e17570c46884c8e8148e11e5ceb8500.bmp",
+    "bytes": 11059254,
+    "sha256": "6b29fde1f1b051940a8206baeff365d6f5ab8fc88b255b033b00b7926a00f4bc",
+    "lastWriteUtc": "2026-10-19T14:39:07.306Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\server-5f9647915efc4ca0a0ab357327fa05b3.bmp",
+    "bytes": 11059254,
+    "sha256": "3d28a68221b34dcf8b573f20eadd8c8875f0d618df4f5c57909f275f40c9059b",
+    "lastWriteUtc": "2026-10-19T14:39:21.407Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\c9715d0f5e2b4ce5add01f9b2f1b6a25\\client1-33201855b3d0439a928ce53fb30bac30.bmp",
+    "bytes": 11059254,
+    "sha256": "ab90a3f17325a54a9e429d8bab697ea237e9d83c0e326e75c0fe33b6100003e1",
+    "lastWriteUtc": "2026-10-19T14:39:22.429Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-udp-active-23.jsonl",
+    "bytes": 103714547,
+    "sha256": "2a8e857b305cc7ae2ead53bd87cb40ac0e8c7872da64b6f080e5c0f7ff24d5cd",
+    "lastWriteUtc": "2026-10-19T14:46:37.934Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-udp-active-23.jsonl.summary.json",
+    "bytes": 5399648,
+    "sha256": "fbb476e75ebf23e70bb70e4c7f1f51d1f8e2872d2c149b11628d738acbff9ee1",
+    "lastWriteUtc": "2026-10-19T14:46:38.097Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\871ce9137b304d53bdb380b4694c77e3\\server.log",
+    "bytes": 7109316,
+    "sha256": "0632b7056249e25420535fdaf6f6cd083c09350f1426c4719d49917c2db54538",
+    "lastWriteUtc": "2026-10-19T14:46:31.571Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-udp-active-23.jsonl.server.log",
+    "bytes": 7109316,
+    "sha256": "0632b7056249e25420535fdaf6f6cd083c09350f1426c4719d49917c2db54538",
+    "lastWriteUtc": "2026-10-19T14:46:37.283Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\871ce9137b304d53bdb380b4694c77e3\\client1.log",
+    "bytes": 5833009,
+    "sha256": "f2d178500ae04bc40c0b0d40d3d0af0cee22ec363b3f27c6251b2f122f752315",
+    "lastWriteUtc": "2026-10-19T14:46:31.607Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-udp-active-23.jsonl.client1.log",
+    "bytes": 5833009,
+    "sha256": "f2d178500ae04bc40c0b0d40d3d0af0cee22ec363b3f27c6251b2f122f752315",
+    "lastWriteUtc": "2026-10-19T14:46:38.004Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\871ce9137b304d53bdb380b4694c77e3\\server-0def67732d784a9686c0a478edb710ee.bmp",
+    "bytes": 11059254,
+    "sha256": "4108f5a72d5598e386b99a38d9b6a31d07a78337e84d3242e655f8d836626008",
+    "lastWriteUtc": "2026-10-19T14:43:32.379Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\871ce9137b304d53bdb380b4694c77e3\\client1-ad5eeab2e4d74d8186d93ad68480b067.bmp",
+    "bytes": 11059254,
+    "sha256": "f35ec28335f5ffbf04cc6a6f132329a07b9c99aba655eaa539619ddbcbd6a171",
+    "lastWriteUtc": "2026-10-19T14:43:33.427Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\871ce9137b304d53bdb380b4694c77e3\\server-22bc3148a40143639cdb92bcf0664eae.bmp",
+    "bytes": 11059254,
+    "sha256": "966c7dca3d42a9890d478d01008fef69d6491272e4c16cc075e8580e83a657b4",
+    "lastWriteUtc": "2026-10-19T14:44:08.385Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\871ce9137b304d53bdb380b4694c77e3\\client1-f68d6878af2643249d430a9de8adef0a.bmp",
+    "bytes": 11059254,
+    "sha256": "7b45c70f84ad2ce78f6aa781c50fca8843061db827c9efeb01bb5d1664fa25a0",
+    "lastWriteUtc": "2026-10-19T14:44:09.304Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\871ce9137b304d53bdb380b4694c77e3\\server-ec41ba6217034f299114363fe7c20e02.bmp",
+    "bytes": 11059254,
+    "sha256": "726cebddf54b6a424a8861bf9b2b6ae268c39baf5917ab584cf1af6d18da2b8a",
+    "lastWriteUtc": "2026-10-19T14:44:32.960Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\871ce9137b304d53bdb380b4694c77e3\\client1-fa56b85248d843d7875219ece9d0bb8e.bmp",
+    "bytes": 11059254,
+    "sha256": "c2eb2fcd7e5680f06b3dbefc488254726f33ad0721b636eae66ebb3744609c8a",
+    "lastWriteUtc": "2026-10-19T14:44:33.767Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\871ce9137b304d53bdb380b4694c77e3\\server-e4bf0f1b55c2425e8e998fbbfd655b8e.bmp",
+    "bytes": 11059254,
+    "sha256": "a43b1dfaef5e8f1ee2b84348a8db8aef8ee935b19ee20d7d85e6362b3fba649b",
+    "lastWriteUtc": "2026-10-19T14:45:11.314Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\871ce9137b304d53bdb380b4694c77e3\\client1-61696e55a2e04bddb5afa07f5174da40.bmp",
+    "bytes": 11059254,
+    "sha256": "6320a8fdef143216569776f8a080b9c6630cde23f3200822dc7c3396d7f2be48",
+    "lastWriteUtc": "2026-10-19T14:45:12.144Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\871ce9137b304d53bdb380b4694c77e3\\server-de14e28760fc4e89b27db40375dd21bb.bmp",
+    "bytes": 11059254,
+    "sha256": "7750892c5432f81164ef4c51fc41d34f3e88f7e76017a193bc1c1b244d8f0713",
+    "lastWriteUtc": "2026-10-19T14:46:32.216Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\871ce9137b304d53bdb380b4694c77e3\\client1-fcf302c11c654e41b21657e53af5d4d4.bmp",
+    "bytes": 11059254,
+    "sha256": "4e66f05ef8656b2e2d4d7a48cc4690f6ce591cbddd8a543240ec0383ea233202",
+    "lastWriteUtc": "2026-10-19T14:46:33.038Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-udp-candidate-24.jsonl",
+    "bytes": 117534178,
+    "sha256": "af259160e20313cb3e22154eedc2da4caa622fd511f534a0acea9aa5842c6a2e",
+    "lastWriteUtc": "2026-10-19T14:54:09.944Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-udp-candidate-24.jsonl.summary.json",
+    "bytes": 3563206,
+    "sha256": "d822d256e6c0df91f920bd667d8a102090929ce93b3a8c806663e89c3b2522bd",
+    "lastWriteUtc": "2026-10-19T14:54:10.174Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\d65f5f5fd53b4fbfb7c31132f8f4dbb2\\server.log",
+    "bytes": 5650391,
+    "sha256": "007e465575e8242507e0bd85dacc2d41eb42ad060859451ea207f2b5c6d38490",
+    "lastWriteUtc": "2026-10-19T14:54:04.358Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-udp-candidate-24.jsonl.server.log",
+    "bytes": 5650391,
+    "sha256": "007e465575e8242507e0bd85dacc2d41eb42ad060859451ea207f2b5c6d38490",
+    "lastWriteUtc": "2026-10-19T14:54:08.529Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\d65f5f5fd53b4fbfb7c31132f8f4dbb2\\client1.log",
+    "bytes": 11236275,
+    "sha256": "55f8594e6f56fa8e5e7449873edacda4e395b1fed0758a47ccfa35f4be546b9d",
+    "lastWriteUtc": "2026-10-19T14:54:03.907Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-udp-candidate-24.jsonl.client1.log",
+    "bytes": 11236275,
+    "sha256": "55f8594e6f56fa8e5e7449873edacda4e395b1fed0758a47ccfa35f4be546b9d",
+    "lastWriteUtc": "2026-10-19T14:54:10.080Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\d65f5f5fd53b4fbfb7c31132f8f4dbb2\\server-db7200cd7b3b424583a937e731aa9bc6.bmp",
+    "bytes": 11059254,
+    "sha256": "a4cb9823f19bec68c8eeb414ef73401b3c3fde648f0afa2cf3b74278f50a0e7d",
+    "lastWriteUtc": "2026-10-19T14:52:14.978Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\d65f5f5fd53b4fbfb7c31132f8f4dbb2\\client1-cc8833f7afd74d76abb19c2f1b13705d.bmp",
+    "bytes": 11059254,
+    "sha256": "32613648ae1a9d9e5b7156fe3a08792205716f555c683625fcef04c29f00a06d",
+    "lastWriteUtc": "2026-10-19T14:52:15.866Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\d65f5f5fd53b4fbfb7c31132f8f4dbb2\\server-5861435aa760449a89c1a5fcd332002b.bmp",
+    "bytes": 11059254,
+    "sha256": "6bc7d56cb2f4039a09850c7f6233e6d8d0a0c2b482ed52e51f88e7c2cfcadecc",
+    "lastWriteUtc": "2026-10-19T14:54:03.394Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\d65f5f5fd53b4fbfb7c31132f8f4dbb2\\client1-20ea56fe704c439ea3f08b69aaebfbe5.bmp",
+    "bytes": 11059254,
+    "sha256": "a35ff7efab2532747b2f13b28c87bfeb548b5986fbb714a72f43b35cc7dcb0d1",
+    "lastWriteUtc": "2026-10-19T14:54:04.403Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression19\\closing-regression.json",
+    "bytes": 1888,
+    "sha256": "8f03ad27e3557a6a73f9b327f0fd5d426ec456642006fdf8e38da391c49e49f7",
+    "lastWriteUtc": "2026-10-19T09:42:42.480Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression19\\closing-gi.log",
+    "bytes": 343068,
+    "sha256": "d3ea64100c066785cbe5c7c8e0a0c1ab5ad1037f51a91bccefcbed163838b3de",
+    "lastWriteUtc": "2026-10-19T09:42:22.074Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression19\\closing-gi\\closing-gi.trx",
+    "bytes": 4485599,
+    "sha256": "b374dbcd174aa709368864297ba0d6b547a05dd741a98d807f096d3222255200",
+    "lastWriteUtc": "2026-10-19T09:42:22.008Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression19\\closing-coop.log",
+    "bytes": 51808,
+    "sha256": "3472f29e9d2635798fccb9b35b5cee1ccfdc01586e8e3d1a8a36667a91a048f2",
+    "lastWriteUtc": "2026-10-19T09:42:42.401Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression19\\closing-coop\\closing-coop.trx",
+    "bytes": 4651297,
+    "sha256": "8d9e27b8f4227c28e4776e89ebbe0e0a7ca9eb0ec2b1123f18ea535270ccbdd7",
+    "lastWriteUtc": "2026-10-19T09:42:42.348Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression20\\closing-regression.json",
+    "bytes": 3576,
+    "sha256": "0311768d5d81dfe670ca09674e29675dcdd687512c5561d12c1f2d5401777cd8",
+    "lastWriteUtc": "2026-10-19T09:56:35.576Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression20\\closing-gi.log",
+    "bytes": 343068,
+    "sha256": "c5319cc1ff824f0c1f156093c805954be804c8d152cedae88ea60b51a357a440",
+    "lastWriteUtc": "2026-10-19T09:54:24.807Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression20\\closing-gi\\closing-gi.trx",
+    "bytes": 4485599,
+    "sha256": "45b011a16f3f2e9ac8b037bca6306b159faf4b45fae46f31be272935de303d7a",
+    "lastWriteUtc": "2026-10-19T09:54:24.741Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression20\\closing-coop.log",
+    "bytes": 51647,
+    "sha256": "18887784e54cda2306009c9a5158d5145a5d86ec2ba388198dc7bccfac0748b3",
+    "lastWriteUtc": "2026-10-19T09:54:44.038Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression20\\closing-coop\\closing-coop.trx",
+    "bytes": 4688257,
+    "sha256": "e3a31971b6c005af28e5aac07012ced4c8afd6022c71d0c879abb21dff7a446b",
+    "lastWriteUtc": "2026-10-19T09:54:43.983Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression20\\closing-common.log",
+    "bytes": 3138,
+    "sha256": "9e66ebdc4e50ff640131ca4db98a8c23c1be4c51c4924534dc7b545812d6be78",
+    "lastWriteUtc": "2026-10-19T09:54:53.686Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression20\\closing-common\\closing-common.trx",
+    "bytes": 584344,
+    "sha256": "fa6d79b53e9cc533eacb2d6ce3f39a69a9dbf3dbcaef4ec57b7f695ad8407129",
+    "lastWriteUtc": "2026-10-19T09:54:53.646Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression20\\closing-e2e.log",
+    "bytes": 389359,
+    "sha256": "3f4ce2491bef268379146eb8ab491d71fe672fe51b1a338b0a9a61cc329da057",
+    "lastWriteUtc": "2026-10-19T09:56:31.826Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression20\\closing-e2e\\closing-e2e.trx",
+    "bytes": 899267,
+    "sha256": "6f7d0b3ea4ffb17b6eade8dc5613577004555ef7403466e37b8522f5dcf66426",
+    "lastWriteUtc": "2026-10-19T09:56:31.751Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression20\\closing-mod-build.log",
+    "bytes": 81477,
+    "sha256": "9a9c3a995669833ebd2f896a5922d820efd88a9c7e1d4f1e585c5dda4cbb6da9",
+    "lastWriteUtc": "2026-10-19T09:56:35.542Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression21\\closing-regression.json",
+    "bytes": 3576,
+    "sha256": "0e529b4b7b1c9e61ef4450521e472b81d2c041a19fb371801935d1b32d4b7dca",
+    "lastWriteUtc": "2026-10-19T10:17:30.938Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression21\\closing-gi.log",
+    "bytes": 343068,
+    "sha256": "9231d2bc20c330e452659d10e2d57b50787b2328ba3aeae9234ea528410c4ff0",
+    "lastWriteUtc": "2026-10-19T10:15:18.992Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression21\\closing-gi\\closing-gi.trx",
+    "bytes": 4493156,
+    "sha256": "31daac0445696ee239bd66eff04c206b3d866a2f23f25afbacc3c3d237ae0c71",
+    "lastWriteUtc": "2026-10-19T10:15:18.927Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression21\\closing-coop.log",
+    "bytes": 51647,
+    "sha256": "4a9380936ea02a92d6268e9c57928628dfcbff477cc4285e7aa13d685a3edceb",
+    "lastWriteUtc": "2026-10-19T10:15:39.129Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression21\\closing-coop\\closing-coop.trx",
+    "bytes": 4663153,
+    "sha256": "1b0404fe465cc156df8f58e331bf49c1aa8f1ce28b802d5335e20ef923f737a6",
+    "lastWriteUtc": "2026-10-19T10:15:39.078Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression21\\closing-common.log",
+    "bytes": 3138,
+    "sha256": "85bdfc0bf3f7181d79ae113fe1c07b52047a0b5f93ea12ebc2481c2269ca4e8b",
+    "lastWriteUtc": "2026-10-19T10:15:48.785Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression21\\closing-common\\closing-common.trx",
+    "bytes": 584344,
+    "sha256": "aa3adc7fd3408092ffec239aede6a26c35f081f739d0a9f98439c87927812b84",
+    "lastWriteUtc": "2026-10-19T10:15:48.746Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression21\\closing-e2e.log",
+    "bytes": 389359,
+    "sha256": "6bd9172f775811e7be56954811418004b75627dc0ca66e23a5177e21c5f6d929",
+    "lastWriteUtc": "2026-10-19T10:17:27.338Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression21\\closing-e2e\\closing-e2e.trx",
+    "bytes": 899567,
+    "sha256": "25c47602e612c02e8d53171e998bfff2661813e14b89bbabc9f933a225fbb9ce",
+    "lastWriteUtc": "2026-10-19T10:17:27.264Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression21\\closing-mod-build.log",
+    "bytes": 81477,
+    "sha256": "6171105e3ee5fbe9dad8cb1080a7912e95351be8bf3dd0328209cff0d2145170",
+    "lastWriteUtc": "2026-10-19T10:17:30.903Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression22\\closing-regression.json",
+    "bytes": 3576,
+    "sha256": "ccef0b7fb70ac14d0cc5a9d37b77abfd8a28a4a35c7f721ef2d080e2ac45dc30",
+    "lastWriteUtc": "2026-10-19T10:55:50.656Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression22\\closing-gi.log",
+    "bytes": 343068,
+    "sha256": "c637db69eb3337604d9965b947cfeedf43a4660e827492c6e8c89504bf03d3b3",
+    "lastWriteUtc": "2026-10-19T10:53:35.367Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression22\\closing-gi\\closing-gi.trx",
+    "bytes": 4506845,
+    "sha256": "b5ef4eacc24b16ad5f4c3690c0d505fe492ce8cb5731e98bc89e91cf728d1cf5",
+    "lastWriteUtc": "2026-10-19T10:53:35.304Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression22\\closing-coop.log",
+    "bytes": 51647,
+    "sha256": "9b45ed64b6ed2317503ee395f056bdafe4c9192ba0ad980912cde6d9d2f1cb5c",
+    "lastWriteUtc": "2026-10-19T10:53:55.220Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression22\\closing-coop\\closing-coop.trx",
+    "bytes": 4658969,
+    "sha256": "8a32edaba42921e71242e7b82b4522078e8e79affb33524031ecb5de037dc6cf",
+    "lastWriteUtc": "2026-10-19T10:53:55.169Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression22\\closing-common.log",
+    "bytes": 3138,
+    "sha256": "223b5cf8b160841760d29d44b69bffd073754cb6c25a4513fbe42873f952dbd4",
+    "lastWriteUtc": "2026-10-19T10:54:04.762Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression22\\closing-common\\closing-common.trx",
+    "bytes": 584344,
+    "sha256": "3f4a8ec0f6835c4f9841bb0931762f49ad8dd74bda162ca024841c9c4fef5867",
+    "lastWriteUtc": "2026-10-19T10:54:04.722Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression22\\closing-e2e.log",
+    "bytes": 389359,
+    "sha256": "9cefd45468aa9673befdf1b31ddba9feded1f3fcf1a337e8c7d653de04be0953",
+    "lastWriteUtc": "2026-10-19T10:55:46.898Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression22\\closing-e2e\\closing-e2e.trx",
+    "bytes": 900951,
+    "sha256": "2fb402e43a6e3899dd59f900029d6a22e88afb77c7955820bbe7ff1c04e81114",
+    "lastWriteUtc": "2026-10-19T10:55:46.823Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression22\\closing-mod-build.log",
+    "bytes": 81477,
+    "sha256": "725e77eb803ee42803981891d0963a32fefd9031875950827412c8502fe139aa",
+    "lastWriteUtc": "2026-10-19T10:55:50.614Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression23\\closing-regression.json",
+    "bytes": 1915,
+    "sha256": "16963fff8fc8ccc4a3e4cb46e11c2540d44ea2d5929f65a29525ee4344fe6e28",
+    "lastWriteUtc": "2026-10-19T11:17:17.958Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression23\\closing-gi.log",
+    "bytes": 343068,
+    "sha256": "a45180494bcb34adb96a7d5695ab3d221e4d663574d4450b40bb3e887f299161",
+    "lastWriteUtc": "2026-10-19T11:16:58.374Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression23\\closing-gi\\closing-gi.trx",
+    "bytes": 4534796,
+    "sha256": "fab0f574a5acddc86bb0f52785a4819ac06384279556f12128a2809d102674f5",
+    "lastWriteUtc": "2026-10-19T11:16:58.312Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression23\\closing-coop.log",
+    "bytes": 51835,
+    "sha256": "94812d379024095cfef96e14e15f9d89ebc93bc224c826940200a2584812cf06",
+    "lastWriteUtc": "2026-10-19T11:17:17.889Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression23\\closing-coop\\closing-coop.trx",
+    "bytes": 4643605,
+    "sha256": "9714476141cd9885bd7d802e4dc5c82dbfe408843fbe05dc441aa613593c1b5b",
+    "lastWriteUtc": "2026-10-19T11:17:17.835Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression24\\closing-regression.json",
+    "bytes": 3576,
+    "sha256": "e1d21107d80178a4b09aa72ad15d114bcab1c32da3ebdf72fc5b26566a9906d6",
+    "lastWriteUtc": "2026-10-19T11:33:22.794Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression24\\closing-gi.log",
+    "bytes": 343068,
+    "sha256": "32e285825579540fa4c1e56e9f1a75ae9ecf8edbe8deb1007408b149f09b806d",
+    "lastWriteUtc": "2026-10-19T11:31:09.602Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression24\\closing-gi\\closing-gi.trx",
+    "bytes": 4534796,
+    "sha256": "b64095693c97778e4fe6a1b8bf4be1ba7e985d7235b909c5a316f1607d923059",
+    "lastWriteUtc": "2026-10-19T11:31:09.536Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression24\\closing-coop.log",
+    "bytes": 51647,
+    "sha256": "712d84d91b485722041f6a444329a417e0975b9aecfa290210e279601b5f1f72",
+    "lastWriteUtc": "2026-10-19T11:31:29.813Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression24\\closing-coop\\closing-coop.trx",
+    "bytes": 4693942,
+    "sha256": "2ccbd5b37900d9efea3c42ff2b9fb075dbc169f4b3df7c3e347d06a3eac1d905",
+    "lastWriteUtc": "2026-10-19T11:31:29.761Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression24\\closing-common.log",
+    "bytes": 3138,
+    "sha256": "b7f7eba6f58f52843af91b41aa8f24cb7cbcbf69a913e7445d427f216f7857ab",
+    "lastWriteUtc": "2026-10-19T11:31:39.703Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression24\\closing-common\\closing-common.trx",
+    "bytes": 584344,
+    "sha256": "b5fea022fd25fe26dbd71ed41442c3b5a82f12ec0771248224f360a740192d49",
+    "lastWriteUtc": "2026-10-19T11:31:39.656Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression24\\closing-e2e.log",
+    "bytes": 389359,
+    "sha256": "6dd04c9a061256e5143cc77b19dcbc878ee31e21bcf7ade2fc74ed9bffcf4176",
+    "lastWriteUtc": "2026-10-19T11:33:19.237Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression24\\closing-e2e\\closing-e2e.trx",
+    "bytes": 899874,
+    "sha256": "61b98fcbbe6be54c15b8c0e929973dc2a47625e1208e31536f50698244247848",
+    "lastWriteUtc": "2026-10-19T11:33:19.163Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression24\\closing-mod-build.log",
+    "bytes": 81477,
+    "sha256": "fd2b71a65832987e610970c64b65a3f7269dc7eba214d7072cd91e9f6dc9e4f9",
+    "lastWriteUtc": "2026-10-19T11:33:22.758Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression25\\closing-regression.json",
+    "bytes": 3576,
+    "sha256": "8457bd3e43f093308772aae142c86b91f212182d76baf33d19c45430308fdaac",
+    "lastWriteUtc": "2026-10-19T14:13:04.533Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression25\\closing-gi.log",
+    "bytes": 343916,
+    "sha256": "2acffc980bee67d618a270dcaa92d88786bc79fbf06a48f62fa21ecb9896bf9d",
+    "lastWriteUtc": "2026-10-19T14:09:00.864Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression25\\closing-gi\\closing-gi.trx",
+    "bytes": 4568275,
+    "sha256": "f0a1695f2aaef12f3c32fc5ee741de13f17debc73c2246590496300434a99c00",
+    "lastWriteUtc": "2026-10-19T14:09:00.799Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression25\\closing-coop.log",
+    "bytes": 51647,
+    "sha256": "cabc6eef33015591110afb4ca1303acc82654025d5b6857bafebc0b7e633b136",
+    "lastWriteUtc": "2026-10-19T14:09:28.103Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression25\\closing-coop\\closing-coop.trx",
+    "bytes": 4691184,
+    "sha256": "e47b003023a545c16709f80c2afdbcd1bfd45488823f26bcdf8a69ab9e5a7549",
+    "lastWriteUtc": "2026-10-19T14:09:28.028Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression25\\closing-common.log",
+    "bytes": 3138,
+    "sha256": "a3d6e6d6380e3563ae94a841cead918c43859d8e4b74aa72604eb23769f52ee7",
+    "lastWriteUtc": "2026-10-19T14:09:42.318Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression25\\closing-common\\closing-common.trx",
+    "bytes": 584344,
+    "sha256": "681b84e7a058fb2092caa017be11cb62db12c870a7cbf77e9b00035da45ec54a",
+    "lastWriteUtc": "2026-10-19T14:09:42.256Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression25\\closing-e2e.log",
+    "bytes": 389359,
+    "sha256": "7702dbf8bb600e087d75f6935d560e339001181a8f2fc886a79faac49f0ba53b",
+    "lastWriteUtc": "2026-10-19T14:12:53.094Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression25\\closing-e2e\\closing-e2e.trx",
+    "bytes": 904222,
+    "sha256": "15e693482fa976aaa62ef01e034564f5804b5466080f987e903b6cd23b5d6e22",
+    "lastWriteUtc": "2026-10-19T14:12:52.987Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression25\\closing-mod-build.log",
+    "bytes": 81477,
+    "sha256": "9d0b8ff61e4f3a49869b18ee1f3c24929ed91484cf1b68e7512d94a9d1a23f60",
+    "lastWriteUtc": "2026-10-19T14:13:04.467Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\integrated-reg24-all-node.log",
+    "bytes": 21926,
+    "sha256": "332196aa1e26eb3d69f10095572e4b69593b23ff6dbc5cc0288dc987beac86ad",
+    "lastWriteUtc": "2026-10-19T11:37:11.058Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-wave-20261018\\baseline-coop\\p2p-baseline-coop.trx",
+    "bytes": 4310878,
+    "sha256": "37129fb72f2968fc877acfcf63e6454991cec7af96f931c70710bf1620b640f0",
+    "lastWriteUtc": "2026-10-18T13:22:39.221Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-wave-20261018\\baseline-e2e\\p2p-baseline-e2e.trx",
+    "bytes": 1388864,
+    "sha256": "ce5f49376bad7c48a604fbab43dc8e88e6f9a6420b74437cf7e9385f1650889d",
+    "lastWriteUtc": "2026-10-18T13:29:05.854Z"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\metadata-final-root-108-all-node.log",
+    "bytes": 24464,
+    "sha256": "bedb17e6fba24da5e63d96fbabb140ddb3c54db0e49495180dedcffe9377c785",
+    "lastWriteUtc": "2026-10-19T14:36:07.563Z"
+  }
+]

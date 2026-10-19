@@ -1,0 +1,77 @@
+[
+  {
+    "path": "E:/code/code home/BannerlordCoop/.mcp-local/p2p-mission-r2-05.jsonl",
+    "bytes": 81023340,
+    "sha256": "741be21d3b0514b33fe07f3239c09ac9b43c5b6cf47128cfb9dc9f9d5353f68e"
+  },
+  {
+    "path": "E:/code/code home/BannerlordCoop/.mcp-local/p2p-mission-r2-05.jsonl.summary.json",
+    "bytes": 1912480,
+    "sha256": "54301b4310fb91ba140fb4956249c4898786b73fceb83e8b2c4c75bb14b6111e"
+  },
+  {
+    "path": "E:/code/code home/BannerlordCoop/.mcp-local/p2p-mission-r2-05.jsonl.server.log",
+    "bytes": 6093577,
+    "sha256": "f91921123ebf574d122a9698e9eab97d6d17e401ac6af1b28b9479c9cd291544"
+  },
+  {
+    "path": "E:/code/code home/BannerlordCoop/.mcp-local/p2p-mission-r2-05.jsonl.client1.log",
+    "bytes": 5724379,
+    "sha256": "edec07615b879b1fa5a54eb8b0055d6f69f47cbd9670a3a0210b9ee953f7adf2"
+  },
+  {
+    "path": "source/GameInterface/Services/MobileParties/Handlers/MobilePartyBehaviorHandler.cs",
+    "bytes": 11252,
+    "sha256": "cc01f5bbfe53b87ce9ae5e4977b19e7e8f0d8d6a038e7c5f4f6f557021699df8"
+  },
+  {
+    "path": "source/GameInterface/Services/MobileParties/Data/MobilePartyBehaviorSnapshot.cs",
+    "bytes": 24602,
+    "sha256": "ec03da644a4b626c84a6f0c785b3309322d3e9b045f7e6216a6bdb320254cb6b"
+  },
+  {
+    "path": "source/GameInterface/Services/CampaignAuthority/CampaignAuthorityDebugCommands.cs",
+    "bytes": 23587,
+    "sha256": "20f0059293fbb76a15d887844208c5bfdc5f4eb00d7b499361a72ce8ad8fedd8"
+  },
+  {
+    "path": "source/GameInterface/Services/CampaignAuthority/CampaignObserverFrame.cs",
+    "bytes": 1005,
+    "sha256": "572d6a6b98bb9fe08b0df027eb4fa403ce242004400a73e814b32407b989edd9"
+  },
+  {
+    "path": "source/Coop.Core/Server/Services/Session/CampaignSimulationAvailabilityServerHandler.cs",
+    "bytes": 36282,
+    "sha256": "b189d7785f3ba52ea791b80d1a5770f0442c33a27aa366e6b37577d55e7e803b"
+  },
+  {
+    "path": "source/Coop.Core/Client/Services/Session/CampaignAuthorityHandoffBarrierClientHandler.cs",
+    "bytes": 7548,
+    "sha256": "834981972196c2574aeebb5e35de4a48e94d3e695b76d8772b9452fcbf1c55c0"
+  },
+  {
+    "path": "source/Coop.Core/Client/Services/Session/CampaignAuthorityFreezeClientHandler.cs",
+    "bytes": 8775,
+    "sha256": "ebe550afd2b2316fa98cad43e86d171f19ff4190912c1b88633e4da5a4bd095b"
+  },
+  {
+    "path": "source/Coop.Core/Server/Services/Session/CampaignAuthoritySyncRelayServerHandler.cs",
+    "bytes": 6665,
+    "sha256": "6846773ef8679c1d2e5b35637e21203b4ce56b7b3a36726a11d91da1c2d15e48"
+  },
+  {
+    "path": "source/Coop.Core/Client/Services/Session/CampaignAuthoritySyncEnvelopeClientHandler.cs",
+    "bytes": 4735,
+    "sha256": "61db603b3b38e38e9f767c6ebd234c1ebe102f3623fe82e19f26cfda3a5923de"
+  },
+  {
+    "path": "tools/mcp/scenarios/p2p-udp-reliability.mjs",
+    "bytes": 44620,
+    "sha256": "a19724547aaae1d7db99aad4da49f4f337b82af8c1edc3149f03fe418d8cd4a9"
+  },
+  {
+    "path": "tools/mcp/scenarios/p2p-mission-lifecycle.mjs",
+    "bytes": 39941,
+    "sha256": "c14b17071a0d2a1e1713055b7fcdf5bd63597f522e1a36cf43e9d1bd5d2c48a8"
+  }
+]

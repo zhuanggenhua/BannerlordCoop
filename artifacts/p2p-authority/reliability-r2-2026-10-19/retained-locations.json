@@ -1,0 +1,41 @@
+{
+  "purpose": "Original sealed manifests retain original paths. Resolve removed managed worktree prefixes using these SHA-retained copies; original native roots are unchanged.",
+  "mappings": [
+    {
+      "originalWorktree": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-writer-loss-state-audit-r2",
+      "retainedRoot": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\late-worker-artifacts\\p2p-writer-loss-state-audit-r2\\final-closeout",
+      "manifest": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\late-worker-artifacts\\p2p-writer-loss-state-audit-r2\\final-closeout\\manifest.json"
+    },
+    {
+      "originalWorktree": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-reliability-evidence-index-r2",
+      "retainedRoot": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\late-worker-artifacts\\p2p-reliability-evidence-index-r2\\final-closeout",
+      "manifest": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\late-worker-artifacts\\p2p-reliability-evidence-index-r2\\final-closeout\\manifest.json"
+    },
+    {
+      "originalWorktree": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-static-winner-banner-r2",
+      "retainedRoot": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\late-worker-artifacts\\p2p-static-winner-banner-r2\\final-closeout",
+      "manifest": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\late-worker-artifacts\\p2p-static-winner-banner-r2\\final-closeout\\manifest.json"
+    },
+    {
+      "originalWorktree": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-mission-health-noop-r2",
+      "retainedRoot": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\late-worker-artifacts\\p2p-mission-health-noop-r2\\final-closeout",
+      "manifest": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\late-worker-artifacts\\p2p-mission-health-noop-r2\\final-closeout\\manifest.json"
+    },
+    {
+      "originalWorktree": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-noop-final-review-r2",
+      "retainedRoot": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\late-worker-artifacts\\p2p-noop-final-review-r2\\final-closeout",
+      "manifest": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\late-worker-artifacts\\p2p-noop-final-review-r2\\final-closeout\\manifest.json"
+    },
+    {
+      "originalWorktree": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-mission-runtime-metadata-r2",
+      "retainedRoot": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\late-worker-artifacts\\p2p-mission-runtime-metadata-r2\\final-closeout",
+      "manifest": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\late-worker-artifacts\\p2p-mission-runtime-metadata-r2\\final-closeout\\manifest.json"
+    },
+    {
+      "originalWorktree": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-mission-npc-position-audit-r2",
+      "retainedRoot": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\late-worker-artifacts\\p2p-mission-npc-position-audit-r2\\final-closeout",
+      "manifest": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\late-worker-artifacts\\p2p-mission-npc-position-audit-r2\\final-closeout\\manifest.json"
+    }
+  ],
+  "fullIndex": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\late-worker-artifacts\\p2p-noop-final-review-r2\\final-closeout\\artifacts\\reliability-index-r2\\snapshot08\\final\\acceptance-index.json"
+}

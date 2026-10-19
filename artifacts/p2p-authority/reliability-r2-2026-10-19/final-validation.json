@@ -1,0 +1,54 @@
+{
+  "status": "PASS_READONLY_INDEX_VALIDATION_WITH_ACTUAL_MISSION_NPC_FAIL",
+  "runs": 14,
+  "previous267InputsUnchanged": true,
+  "currentInputs": 277,
+  "screenshots": 127,
+  "overallP2p": "NOT_COMPLETE",
+  "missionFullCritical": "FAIL_NEEDS_FIX",
+  "candidate24": {
+    "runId": "d65f5f5fd53b4fbfb7c31132f8f4dbb2",
+    "pids": [
+      24632,
+      26240
+    ],
+    "producer": "PASS_BOUNDED_SCENARIO",
+    "barrierFaultPointVerdict": "REACHED",
+    "physical": {
+      "barrier": {
+        "sequence": 1,
+        "epoch": 4
+      },
+      "held": 394,
+      "dropped": 394,
+      "holdMs": 75707,
+      "samples": 60
+    }
+  },
+  "outputs": [
+    {
+      "path": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-noop-final-review-r2\\artifacts\\reliability-index-r2\\snapshot08\\final/acceptance-index.json",
+      "sha256": "9ecfa84d66d3ca6851bb007619eed131c7983e853226cd618467111dabb9732b"
+    },
+    {
+      "path": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-noop-final-review-r2\\artifacts\\reliability-index-r2\\snapshot08\\final/acceptance-index.md",
+      "sha256": "30aae00ebc32d09bbad7f2cd25173b2aa81951a9eb4b51a2add1c55cd7bf301b"
+    },
+    {
+      "path": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-noop-final-review-r2\\artifacts\\reliability-index-r2\\snapshot08\\final/input-manifest.json",
+      "sha256": "7865136e0a00178299e56e0866fc194dc56bec4a899f85864323508bd2b4ad84"
+    },
+    {
+      "path": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-noop-final-review-r2\\artifacts\\reliability-index-r2\\snapshot08\\final/compact-index.json",
+      "sha256": "6839b4f81ec9d24b93bf0802c4f13ab9cd53ca4e8a9ac96a3ae93acb4fde6cb7"
+    },
+    {
+      "path": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-noop-final-review-r2\\artifacts\\reliability-index-r2\\snapshot08\\final/compact-index.md",
+      "sha256": "99ac6137a297ded0e454f58d151224a3fd1aa6654f3f6e47d4894f8074b7724d"
+    },
+    {
+      "path": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-noop-final-review-r2\\artifacts\\reliability-index-r2\\snapshot08\\final/supplementary-evidence-manifest.json",
+      "sha256": "3d827d8435ea999a2a5bff08c7fe75390effb136541eb6144b2b5111a22e470f"
+    }
+  ]
+}

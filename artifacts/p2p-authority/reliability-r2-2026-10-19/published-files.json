@@ -1,0 +1,85 @@
+{
+  "purpose": "Exact copied evidence bytes; nested -text attributes preserve hashes through checkout",
+  "files": [
+    {
+      "path": "artifacts/p2p-authority/reliability-r2-2026-10-19/.gitattributes",
+      "bytes": 69,
+      "sha256": "fd3cb80f76bfcdadca29d7ba75a60f8adb21f0b759cad27754c2a1dc622a0bf4"
+    },
+    {
+      "path": "artifacts/p2p-authority/reliability-r2-2026-10-19/closeout.json",
+      "bytes": 1042,
+      "sha256": "f78411c65675a4ab7579de6717f448ef03d94090ba2aefa6d27ffa0bebfdc2f7"
+    },
+    {
+      "path": "artifacts/p2p-authority/reliability-r2-2026-10-19/compact-index.md",
+      "bytes": 2945,
+      "sha256": "99ac6137a297ded0e454f58d151224a3fd1aa6654f3f6e47d4894f8074b7724d"
+    },
+    {
+      "path": "artifacts/p2p-authority/reliability-r2-2026-10-19/final-reg25-failure-names.json",
+      "bytes": 28252,
+      "sha256": "f7890b34092cf3ec9d918595f9ebc7f65eaefed86338514b62d530f36ab5e39a"
+    },
+    {
+      "path": "artifacts/p2p-authority/reliability-r2-2026-10-19/final-validation.json",
+      "bytes": 2208,
+      "sha256": "5f0b2d89fcfaaa0c083ffd43b518b7162dc6d92cd184b784cb6f286920ec9732"
+    },
+    {
+      "path": "artifacts/p2p-authority/reliability-r2-2026-10-19/input-manifest.json",
+      "bytes": 82066,
+      "sha256": "7865136e0a00178299e56e0866fc194dc56bec4a899f85864323508bd2b4ad84"
+    },
+    {
+      "path": "artifacts/p2p-authority/reliability-r2-2026-10-19/npc-position/acceptance-fail.log",
+      "bytes": 3894,
+      "sha256": "598bbfa752666c75ae93dd605cb7699f9d06c934e3378349863365b34eeeaec7"
+    },
+    {
+      "path": "artifacts/p2p-authority/reliability-r2-2026-10-19/npc-position/input-manifest.json",
+      "bytes": 3027,
+      "sha256": "f2bf197a14bbf0f2f0b79f21b4f88fd3c354e0bf851fbebd7b66b6835a690b87"
+    },
+    {
+      "path": "artifacts/p2p-authority/reliability-r2-2026-10-19/npc-position/mission05-npc-position.json",
+      "bytes": 419090,
+      "sha256": "0a41f021aa7d053f7e02b62ffe0ad183dc9cbaef334084ac3cc3afe8a57dd5b4"
+    },
+    {
+      "path": "artifacts/p2p-authority/reliability-r2-2026-10-19/regression25.json",
+      "bytes": 3576,
+      "sha256": "8457bd3e43f093308772aae142c86b91f212182d76baf33d19c45430308fdaac"
+    },
+    {
+      "path": "artifacts/p2p-authority/reliability-r2-2026-10-19/retained-locations.json",
+      "bytes": 4109,
+      "sha256": "bde84233903d25269987da7d4507fbaebfeafe8bd4fe3c6861fb31b3565e1fea"
+    },
+    {
+      "path": "artifacts/p2p-authority/reliability-r2-2026-10-19/retention-incident.json",
+      "bytes": 1340,
+      "sha256": "49009bc36148d385ba1bcf63c6feba5391c27f126aa4df869485b191e46c3f8f"
+    },
+    {
+      "path": "artifacts/p2p-authority/reliability-r2-2026-10-19/root-mission-critical-acceptance.mjs",
+      "bytes": 2039,
+      "sha256": "76a6a9da81b1f8381380b80083ec84aa347fbb13a671279b319e91d31bdee2d5"
+    },
+    {
+      "path": "artifacts/p2p-authority/reliability-r2-2026-10-19/source-change-list.json",
+      "bytes": 7290,
+      "sha256": "929071bb149dfab7b36dac18d8bd65331112e50bb881e8a976afa675d47c1cf3"
+    },
+    {
+      "path": "artifacts/p2p-authority/reliability-r2-2026-10-19/supplementary-evidence-manifest.json",
+      "bytes": 2408,
+      "sha256": "3d827d8435ea999a2a5bff08c7fe75390effb136541eb6144b2b5111a22e470f"
+    },
+    {
+      "path": "artifacts/p2p-authority/reliability-r2-2026-10-19/acceptance-summary.json",
+      "bytes": 273341,
+      "sha256": "232cd0fd8e36583ae1fa917c876c18c8fad043b06386dd10d308858a7615f78a"
+    }
+  ]
+}

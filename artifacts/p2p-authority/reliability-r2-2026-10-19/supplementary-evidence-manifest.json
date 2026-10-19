@@ -1,0 +1,47 @@
+[
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-noop-final-review-r2\\artifacts\\review\\candidate24-native-independent-audit.json",
+    "bytes": 49703,
+    "sha256": "a4e2adaaa1080956772c62a3e566e124b9c0cbc39d45a88f9053710b6ff32c4b"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-noop-final-review-r2\\artifacts\\review\\active23-native-independent-audit.json",
+    "bytes": 1919,
+    "sha256": "d82a2b2040bc17af1443fb3d9afc8ab1e24814248259ecc3bd92d50ada840e4a"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-noop-final-review-r2\\artifacts\\review\\mission05-native-independent-audit-v3.json",
+    "bytes": 16147,
+    "sha256": "216e491c4dc3d0aa6ad6472cfd407d4d0a0a3406025c39477d05588af82ba3dc"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-noop-final-review-r2\\artifacts\\review\\npc-position-independent-receipts\\mission05-npc-position.json",
+    "bytes": 419090,
+    "sha256": "0a41f021aa7d053f7e02b62ffe0ad183dc9cbaef334084ac3cc3afe8a57dd5b4"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-noop-final-review-r2\\artifacts\\review\\npc-position-independent-receipts\\report.zh-CN.md",
+    "bytes": 9677,
+    "sha256": "bbdde8b9e75b7ebd323eaea3b90a3fc0f48bc9cae4d3f0ae39ee4128984758c4"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-noop-final-review-r2\\artifacts\\review\\npc-position-independent-receipts\\acceptance-fail.log",
+    "bytes": 3894,
+    "sha256": "598bbfa752666c75ae93dd605cb7699f9d06c934e3378349863365b34eeeaec7"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-noop-final-review-r2\\artifacts\\review\\npc-position-independent-receipts\\independent-acceptance-fail.log",
+    "bytes": 3906,
+    "sha256": "4d15525cd2bde28160aaa5cd17144724ca828f196c6c836a70accec5eb189dfd"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-noop-final-review-r2\\artifacts\\review\\npc-position-independent-receipts\\independent-fail-receipt.json",
+    "bytes": 4737,
+    "sha256": "2663aaefd1d2ce89244aaa98225a8cca63d39ebfe742d937fcc14ef6ebdb7890"
+  },
+  {
+    "path": "E:\\code\\code home\\BannerlordCoop-worktrees\\p2p-noop-final-review-r2\\artifacts\\review\\final-reg25-failure-names.json",
+    "bytes": 28252,
+    "sha256": "f7890b34092cf3ec9d918595f9ebc7f65eaefed86338514b62d530f36ab5e39a"
+  }
+]

@@ -1,0 +1,84 @@
+{
+  "head": "5a3bc8f4cc032171da8577411b605dff607f02fc",
+  "kind": "actual-regression-with-explicit-baseline-failures",
+  "suites": [
+    {
+      "name": "gi",
+      "rawExitCode": 0,
+      "counters": {
+        "total": 3058,
+        "passed": 3058,
+        "failed": 0,
+        "notExecuted": 0
+      },
+      "addedFailures": [],
+      "removedFailures": [],
+      "baselineFailureCount": 0,
+      "currentFailureCount": 0,
+      "log": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression25\\closing-gi.log",
+      "logSha256": "2acffc980bee67d618a270dcaa92d88786bc79fbf06a48f62fa21ecb9896bf9d",
+      "trx": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression25\\closing-gi\\closing-gi.trx",
+      "trxSha256": "f0a1695f2aaef12f3c32fc5ee741de13f17debc73c2246590496300434a99c00"
+    },
+    {
+      "name": "coop",
+      "rawExitCode": 1,
+      "counters": {
+        "total": 1637,
+        "passed": 1442,
+        "failed": 195,
+        "notExecuted": 0
+      },
+      "addedFailures": [],
+      "removedFailures": [],
+      "baselineFailureCount": 195,
+      "currentFailureCount": 195,
+      "log": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression25\\closing-coop.log",
+      "logSha256": "cabc6eef33015591110afb4ca1303acc82654025d5b6857bafebc0b7e633b136",
+      "trx": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression25\\closing-coop\\closing-coop.trx",
+      "trxSha256": "e47b003023a545c16709f80c2afdbcd1bfd45488823f26bcdf8a69ab9e5a7549"
+    },
+    {
+      "name": "common",
+      "rawExitCode": 0,
+      "counters": {
+        "total": 423,
+        "passed": 423,
+        "failed": 0,
+        "notExecuted": 0
+      },
+      "addedFailures": [],
+      "removedFailures": [],
+      "baselineFailureCount": 0,
+      "currentFailureCount": 0,
+      "log": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression25\\closing-common.log",
+      "logSha256": "a3d6e6d6380e3563ae94a841cead918c43859d8e4b74aa72604eb23769f52ee7",
+      "trx": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression25\\closing-common\\closing-common.trx",
+      "trxSha256": "681b84e7a058fb2092caa017be11cb62db12c870a7cbf77e9b00035da45ec54a"
+    },
+    {
+      "name": "e2e",
+      "rawExitCode": 1,
+      "counters": {
+        "total": 71,
+        "passed": 61,
+        "failed": 10,
+        "notExecuted": 0
+      },
+      "addedFailures": [],
+      "removedFailures": [],
+      "baselineFailureCount": 10,
+      "currentFailureCount": 10,
+      "log": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression25\\closing-e2e.log",
+      "logSha256": "7702dbf8bb600e087d75f6935d560e339001181a8f2fc886a79faac49f0ba53b",
+      "trx": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression25\\closing-e2e\\closing-e2e.trx",
+      "trxSha256": "15e693482fa976aaa62ef01e034564f5804b5466080f987e903b6cd23b5d6e22"
+    }
+  ],
+  "build": {
+    "rawExitCode": 0,
+    "log": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\evidence\\p2p-reliability-r2-20261019\\regression25\\closing-mod-build.log",
+    "sha256": "9d0b8ff61e4f3a49869b18ee1f3c24929ed91484cf1b68e7512d94a9d1a23f60"
+  },
+  "passed": true
+}

@@ -1,0 +1,14 @@
+{
+  "kind": "late-independent-review-artifact-cleanup-omission",
+  "task": "p2p-active22-roster-audit-r2",
+  "description": "Root cleanup retained the submitted audit evidence but omitted two later unsubmitted independent Mission fd8 review attachments in that worker tree. Original native run artifacts, failure evidence, submitted worker tests, source commits and earlier SHA records remain intact.",
+  "lostAttachmentSha256": {
+    "mission-readiness-independent-node.log": "6cdce881f93df154c933358408185a8d1f900fe5a0f5e6a035fb8be28c78fe68",
+    "mission-readiness-independent-review.json": "c7f7d023fb2cf6b3a1264a1a8a0c1b107fed3fbff5e13ca2bb95018223f44efb"
+  },
+  "recovery": "Independent agent verified both current Mission script blobs equal fd8 and executed a new 17/17 test run. New artifacts are explicitly re-verification, not recreations of old attachments.",
+  "replacementLogSha256": "b4b0b46dd5dde4a7989bc5162c9b6fb78fc4d02f936033fef303133064495106",
+  "replacementReviewSha256": "3ce3004c2b3473e895d1c23346711b81d7b0bb56726d287ed3d76d3f63ff4cdb",
+  "prevention": "Before subsequent worker cleanup, automatically retain all ignored worker artifacts under artifacts/ using unique immutable snapshots with byte counts and SHA manifests, including late reviews omitted from prior handoffs.",
+  "nativeAcceptanceChanged": false
+}

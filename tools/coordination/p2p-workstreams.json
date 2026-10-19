@@ -29,6 +29,16 @@
       { "commit": "5d827e9bf5e685d6f093ecda15579f0a431871d8", "evidence": "artifacts/p2p-authority/wave-2026-10-19/npc-accepted.json" }
     ]
   },
+  "latestReliabilityCloseout": {
+    "baseline": "78ac921691bb74838c42a90dc4edff08db726fb9",
+    "implementationCommit": "7b07de4b79216efbfeab33e87e625388095b6f26",
+    "runtimeCommit": "5a3bc8f4cc032171da8577411b605dff607f02fc",
+    "report": "doc/p2p-reliability-r2-2026-10-19.md",
+    "evidence": "artifacts/p2p-authority/reliability-r2-2026-10-19/closeout.json",
+    "completeP2p": false,
+    "scope": "14 native runs retained. QA archive and bounded network safety PASS. Mission five-stage PASS but supplemental NPC position acceptance FAIL; complete natural day and lossless writer recovery remain unaccepted.",
+    "next": "Final frozen NPC position/navigation baseline through existing movement snapshot adapters, then typed Army/PartyBase lifetime completion and genuine 24h AI acceptance; no stale-checkpoint promotion."
+  },
   "workstreams": [
     { "id": "authority", "title": "战役权威与操作归属", "accepted": ["双人大地图 A→B→A", "最终屏障及任期校验", "限定 QA 场景四次原生招募及唯一执行", "A/B 本地 writer 原生离城"], "next": "实现远端 observer 离城的 writer 路由、归属、Epoch、序号校验；当前 A observer 安全阻挡", "scope": ["source/Coop.Core/", "source/Coop.Tests/", "source/GameInterface/Services/MobileParties/", "source/GameInterface.Tests/Services/MobileParties/"], "dependencies": [] },
     { "id": "checkpoint", "title": "世界检查点", "accepted": ["编号、兵力经验、共享会话和时钟交接", "重连后周期 callback 身份与 timer phase 恢复"], "next": "验证冷存档重启、完整 RNG 与玩家导航意图的连续性", "scope": ["source/Common/", "source/Common.Tests/", "source/GameInterface/Services/CampaignAuthority/"], "dependencies": [] },

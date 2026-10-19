@@ -1,0 +1,165 @@
+{
+  "kind": "supplemental-recorded-native-state-acceptance",
+  "runId": "c9715d0f5e2b4ce5add01f9b2f1b6a25",
+  "result": "FAIL",
+  "criterion": "same confirmed paused world tick requires sampled NPC coordinates to match between peers",
+  "note": "Independent supplementary criterion; original five scenario results and assertions preserved unchanged.",
+  "snapshots": [
+    {
+      "calls": [
+        323,
+        324
+      ],
+      "ticks": 78699089256620,
+      "sampledNpcCount": 24,
+      "mismatches": [
+        {
+          "handle": 6042,
+          "id": "lord_2_4_1_party_1",
+          "a": {
+            "x": 441.231049,
+            "y": 512.885559,
+            "troops": 111,
+            "wounded": 0
+          },
+          "b": {
+            "x": 433.513184,
+            "y": 514.2225,
+            "troops": 111,
+            "wounded": 0
+          },
+          "distance": 7.832806099713273
+        },
+        {
+          "handle": 6050,
+          "id": "lord_3_8_party_1",
+          "a": {
+            "x": 617.5863,
+            "y": 176.881546,
+            "troops": 115,
+            "wounded": 0
+          },
+          "b": {
+            "x": 618.3626,
+            "y": 175.430618,
+            "troops": 115,
+            "wounded": 0
+          },
+          "distance": 1.6455496805578123
+        },
+        {
+          "handle": 6087,
+          "id": "lord_1_21_party_1",
+          "a": {
+            "x": 462.358765,
+            "y": 448.51767,
+            "troops": 173,
+            "wounded": 0
+          },
+          "b": {
+            "x": 467.2956,
+            "y": 451.381866,
+            "troops": 173,
+            "wounded": 0
+          },
+          "distance": 5.7075352424352745
+        },
+        {
+          "handle": 6305,
+          "id": "lord_1_34_party_1",
+          "a": {
+            "x": 394.357819,
+            "y": 340.4383,
+            "troops": 157,
+            "wounded": 0
+          },
+          "b": {
+            "x": 398.652222,
+            "y": 334.743134,
+            "troops": 157,
+            "wounded": 0
+          },
+          "distance": 7.132798391512635
+        }
+      ]
+    },
+    {
+      "calls": [
+        341,
+        342
+      ],
+      "ticks": 78699089256620,
+      "sampledNpcCount": 24,
+      "mismatches": [
+        {
+          "handle": 6042,
+          "id": "lord_2_4_1_party_1",
+          "a": {
+            "x": 441.231049,
+            "y": 512.885559,
+            "troops": 111,
+            "wounded": 0
+          },
+          "b": {
+            "x": 433.513184,
+            "y": 514.2225,
+            "troops": 111,
+            "wounded": 0
+          },
+          "distance": 7.832806099713273
+        },
+        {
+          "handle": 6050,
+          "id": "lord_3_8_party_1",
+          "a": {
+            "x": 617.5863,
+            "y": 176.881546,
+            "troops": 115,
+            "wounded": 0
+          },
+          "b": {
+            "x": 618.3626,
+            "y": 175.430618,
+            "troops": 115,
+            "wounded": 0
+          },
+          "distance": 1.6455496805578123
+        },
+        {
+          "handle": 6087,
+          "id": "lord_1_21_party_1",
+          "a": {
+            "x": 462.358765,
+            "y": 448.51767,
+            "troops": 173,
+            "wounded": 0
+          },
+          "b": {
+            "x": 467.2956,
+            "y": 451.381866,
+            "troops": 173,
+            "wounded": 0
+          },
+          "distance": 5.7075352424352745
+        },
+        {
+          "handle": 6305,
+          "id": "lord_1_34_party_1",
+          "a": {
+            "x": 394.357819,
+            "y": 340.4383,
+            "troops": 157,
+            "wounded": 0
+          },
+          "b": {
+            "x": 398.652222,
+            "y": 334.743134,
+            "troops": 157,
+            "wounded": 0
+          },
+          "distance": 7.132798391512635
+        }
+      ]
+    }
+  ]
+}
