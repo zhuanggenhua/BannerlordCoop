@@ -1,6 +1,7 @@
 ﻿using Common;
 using Common.Logging;
 using Common.Util;
+using GameInterface.Policies;
 using HarmonyLib;
 using GameInterface.Services.MapEvents.Initialization;
 using SandBox.ViewModelCollection.Map;
@@ -22,6 +23,9 @@ internal class MapEventRobustnessPatches
     [HarmonyPostfix]
     private static void PostfixTroopUpgradeTracker(MapEvent __instance, ref TroopUpgradeTracker __result)
     {
+        // Native OnAfterLoad rebuilds missing trackers after its own null check.
+        if (CallOriginalPolicy.IsOriginalAllowed()) return;
+
         if (__result is null)
         {
             // A client must wait for the authoritative registered tracker rather than creating an
