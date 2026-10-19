@@ -32,6 +32,13 @@ const STABLE_PLAYER = ['heroId', 'heroStringId', 'partyId', 'partyStringId', 'cl
     'settlementId', 'x', 'y', 'active'];
 const STABLE_WORLD = ['campaign', 'partyIdentityHash', 'volunteerHash', 'nextHandle', 'allocationCounterHash'];
 
+export function nextSettlementPreparationAction(inspection) {
+    if (inspection?.settlement !== TOWN.id) return 'enter';
+    if (inspection.currentMenu === 'town_backstreet') return 'ready';
+    if (inspection.currentMenu === 'town') return 'open-backstreet';
+    return 'enter';
+}
+
 export function options(argv) {
     const config = { profile: 'local', save: 'P1B_DirectIP_Recruit' }, seen = new Set();
     const allowed = new Set(['repo', 'server', 'config', 'sdk-root', 'record', 'profile', 'save']);
@@ -417,19 +424,31 @@ export async function run(config) {
     }
     async function ensureSettlement(instance, controller) {
         const before = await inspect(instance, controller);
-        if (before.settlement === TOWN.id && before.currentMenu === 'town_backstreet')
+        const beforeAction = nextSettlementPreparationAction(before);
+        if (beforeAction === 'ready')
             return { alreadyInsideBackstreet: true, values: await settlementReplicas(controller, instance) };
+        if (beforeAction === 'open-backstreet') {
+            await command(instance, 'coop.debug.prisoner_sale.open_backstreet', [controller], true);
+            return { adaptedExistingTown: true, values: await settlementReplicas(controller, instance) };
+        }
         const first = await command(instance, 'coop.debug.location.enter', [TOWN.location], true);
         let view = await call('get_run', { run_id: runId });
         let mission = first.startsWith('Opening location') ||
             view.instances.find(value => value.name === instance)?.status?.missionActive;
         let current = await inspect(instance, controller);
-        if (!mission && (current.settlement !== TOWN.id || current.currentMenu !== 'town_backstreet')) {
-            // Danustica's first native entry can initialize PlayerEncounter without opening the tavern.
-            const second = await command(instance, 'coop.debug.location.enter', [TOWN.location], true);
-            view = await call('get_run', { run_id: runId });
-            mission = second.startsWith('Opening location') ||
-                view.instances.find(value => value.name === instance)?.status?.missionActive;
+        let openedBackstreet = false;
+        if (!mission) {
+            const currentAction = nextSettlementPreparationAction(current);
+            if (currentAction === 'open-backstreet') {
+                await command(instance, 'coop.debug.prisoner_sale.open_backstreet', [controller], true);
+                openedBackstreet = true;
+            } else if (currentAction !== 'ready') {
+                // Danustica's first native entry can initialize PlayerEncounter without opening the tavern.
+                const second = await command(instance, 'coop.debug.location.enter', [TOWN.location], true);
+                view = await call('get_run', { run_id: runId });
+                mission = second.startsWith('Opening location') ||
+                    view.instances.find(value => value.name === instance)?.status?.missionActive;
+            }
         }
         if (mission) {
             await waitState(instance, 'readyForMissionTests');
@@ -437,7 +456,7 @@ export async function run(config) {
             await poll('native map after requested Mission exit', () => nativeMap(instance), 60000);
         }
         current = await inspect(instance, controller);
-        if (current.settlement === TOWN.id && current.currentMenu === 'town')
+        if (!openedBackstreet && nextSettlementPreparationAction(current) === 'open-backstreet')
             await command(instance, 'coop.debug.prisoner_sale.open_backstreet', [controller], true);
         const values = await settlementReplicas(controller, instance);
         current = values[INSTANCES.indexOf(instance)];

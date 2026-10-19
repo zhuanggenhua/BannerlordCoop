@@ -3,7 +3,7 @@ import test from 'node:test';
 import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { assertPausedSnapshot, assertSaleApplications, assertSaleRegistrations, assertSaleTransition,
-    assertStopped, options, pollReadOnly, saleApplications, OnceActions } from './p2p-prisoner-sale.mjs';
+    assertStopped, nextSettlementPreparationAction, options, pollReadOnly, saleApplications, OnceActions } from './p2p-prisoner-sale.mjs';
 
 const clone = value => structuredClone(value);
 const ids = [
@@ -89,6 +89,16 @@ test('registration polling cannot pass while the joining actor is inactive', asy
     assert.equal(reads, 2);
     assert.deepEqual(result, ready);
 });
+
+test('an existing town menu adapts once instead of entering the tavern again', () => {
+    for (const { stage, inspection, expected } of [
+        { stage: 'initial inspect', inspection: { settlement: 'town_ES1', currentMenu: 'town' }, expected: 'open-backstreet' },
+        { stage: 'first enter inspect', inspection: { settlement: 'town_ES1', currentMenu: 'town' }, expected: 'open-backstreet' },
+        { stage: 'already in backstreet', inspection: { settlement: 'town_ES1', currentMenu: 'town_backstreet' }, expected: 'ready' },
+        { stage: 'not yet in target settlement', inspection: { settlement: 'map', currentMenu: 'map' }, expected: 'enter' },
+    ]) assert.equal(nextSettlementPreparationAction(inspection), expected, stage);
+});
+
 function appLine({ origin = 'A', writer = 'A', epoch = 3, authority = 'world-3', stream = 'a'.repeat(32), sequence = 1, party = 101,
     time = '12:00:00.000' } = {}) {
     return `[${time} INF] Prisoner sale applied originController="${origin}" writerController="${writer}" epoch=${epoch} authorityId=${authority} requestStream=${stream} requestSequence=${sequence} sellingPartyId=${party}`;
