@@ -3,8 +3,9 @@ import test from 'node:test';
 import { execFileSync } from 'node:child_process';
 import { assertAllAway, assertEngineProgress, assertMissionProgress, assertNativeState, assertTransportProgress,
     assertNoWorldProgress, assertSingleWriterProgress, assertFreeMapActor, assertMapActor, assertTimeModes,
-    nextEntryPhase, parseNativePartyState, prepareFreeMapActor } from './p2p-mission-lifecycle.mjs';
-import { OnceActions } from './p2p-prisoner-sale.mjs';
+    nextEntryPhase, parseNativePartyState, prepareFreeMapActor, runtimeMetadataExpectations,
+    assertRuntimeProcesses, readRuntimeProcesses } from './p2p-mission-lifecycle.mjs';
+import { OnceActions, createReadDeadlineScope, assertNoPollingMutation } from './p2p-prisoner-sale.mjs';
 
 const initial = ['A', 'B'].map(controller => ({ controller, mainHero: 'hero-' + controller, mainParty: 'party-' + controller }));
 const clone = value => structuredClone(value);
@@ -193,4 +194,144 @@ test('help is offline and cannot load SDK or require coordinator game paths', ()
     const output = execFileSync(process.execPath, ['tools/mcp/scenarios/p2p-mission-lifecycle.mjs', '--help'],
         { encoding: 'utf8', windowsHide: true });
     assert.match(output, /Coordinator only/); assert.match(output, /Import and --help are offline/);
+});
+
+function runtimeView() {
+    const names = ['Common', 'Coop', 'Coop.Core', 'Coop.Steam', 'GameInterface', 'Missions'];
+    const mvid = number => '00000000-0000-4000-8000-' + String(number).padStart(12, '0');
+    const instances = ['server', 'client1'].map((name, index) => {
+        const identity = { pid: 100 + index, startedUtc: '2026-10-19T14:00:00Z',
+            role: index ? 'client' : 'server', platformId: index ? 'B' : 'A', runToken: 'run' };
+        return { name, identity, processAlive: true, error: null, status: { pid: identity.pid,
+            processStartedUtc: identity.startedUtc, role: identity.role, platformId: identity.platformId,
+            runToken: identity.runToken, buildVersion: '0.1.7+runtime-sha', assemblyMvid: mvid(2),
+            loadedAssemblies: names.map((name, index) => ({ name, mvid: mvid(index + 1) })) } };
+    });
+    return { runId: 'run', error: null, instances, preflight: { bridge: { mvid: mvid(2) } } };
+}
+
+function metadataPoll(read) {
+    let clock = 0; const scope = createReadDeadlineScope(), deadlines = [];
+    return { deadlines, run: expected => readRuntimeProcesses({ expected,
+        read: () => { deadlines.push(scope.currentDeadline()); return read(); },
+        withDeadline: (deadline, action) => scope.run(deadline, action),
+        now: () => clock, sleep: async milliseconds => { clock += milliseconds; } }) };
+}
+
+test('cancelled or missing current metadata is retried within one readonly deadline until a wholly fresh pair exists', async () => {
+    const complete = runtimeView(), expected = runtimeMetadataExpectations(complete);
+    const missing = clone(complete); missing.instances[0].status = null;
+    const cancelled = clone(complete); cancelled.instances[1].status = null;
+    cancelled.instances[1].error = { code: 'operation_cancelled', outcomeUncertain: false, message: 'The operation was canceled.' };
+    const responses = [missing, cancelled, complete]; let reads = 0;
+    const poll = metadataPoll(() => responses[reads++]);
+    const result = await poll.run(expected);
+    assert.equal(reads, 3); assert.equal(result[0], complete.instances[0]); assert.equal(result[1], complete.instances[1]);
+    assert.deepEqual(poll.deadlines, [30000, 30000, 30000]);
+    assert.equal(missing.instances[0].status, null); assert.equal(cancelled.instances[1].status, null);
+    assert.equal(cancelled.instances[1].error.code, 'operation_cancelled', 'Original failed read must stay intact');
+});
+
+test('missing metadata fields require a new complete same-read receipt rather than inferred defaults', async () => {
+    const complete = runtimeView(), expected = runtimeMetadataExpectations(complete);
+    for (const key of ['buildVersion', 'assemblyMvid', 'loadedAssemblies']) {
+        const missing = clone(complete); delete missing.instances[1].status[key]; let reads = 0;
+        const result = await metadataPoll(() => ++reads === 1 ? missing : complete).run(expected);
+        assert.equal(reads, 2); assert.equal(result[1], complete.instances[1]);
+    }
+});
+
+test('complete metadata from different reads cannot be combined into a successful pair', async () => {
+    const complete = runtimeView(), expected = runtimeMetadataExpectations(complete);
+    const onlyA = clone(complete); onlyA.instances[1].status = null;
+    const onlyB = clone(complete); onlyB.instances[0].status = null;
+    let reads = 0; const responses = [onlyA, onlyB, complete];
+    const result = await metadataPoll(() => responses[reads++]).run(expected);
+    assert.equal(reads, 3); assert.equal(result[0], complete.instances[0]);
+});
+
+test('PID, starttime, run token, death and hard metadata errors stop immediately rather than waiting for a favourable read', async () => {
+    const good = runtimeView(), expected = runtimeMetadataExpectations(good);
+    const changes = [
+        view => view.instances[0].identity.pid++, view => view.instances[0].identity.startedUtc = 'later',
+        view => view.instances[0].identity.runToken = 'different', view => view.instances[0].processAlive = false,
+        view => view.instances[0].status.pid++, view => view.instances[0].status.processStartedUtc = 'later',
+        view => view.instances[0].status.runToken = 'different', view => view.runId = 'other',
+        view => view.error = { code: 'run_failed' }, view => view.instances.pop(),
+        view => view.instances[0].error = { code: 'transport_failed', outcomeUncertain: false },
+        view => delete view.instances[0].error,
+        view => { view.instances[0].status = null; view.instances[0].error = { code: 'response_identity_mismatch', outcomeUncertain: false }; },
+        view => { view.instances[0].status = null; view.instances[0].error = { code: 'operation_cancelled', outcomeUncertain: true }; },
+        view => view.instances[0].error = { code: 'operation_cancelled', outcomeUncertain: false },
+    ];
+    for (const change of changes) {
+        const bad = clone(good); change(bad); let reads = 0;
+        await assert.rejects(metadataPoll(() => ++reads === 1 ? bad : good).run(expected));
+        assert.equal(reads, 1, 'Unsafe receipt was retried: ' + change);
+    }
+});
+
+test('wrong build or assembly MVID is fatal even when another peer is missing and the next read would match', async () => {
+    const good = runtimeView(), expected = runtimeMetadataExpectations(good);
+    const changes = [
+        status => status.buildVersion = 'different', status => status.buildVersion = '',
+        status => status.assemblyMvid = '00000000-0000-4000-8000-000000000099',
+        status => status.loadedAssemblies[0].mvid = '00000000-0000-4000-8000-000000000099',
+        status => status.loadedAssemblies[0].mvid = '', status => status.loadedAssemblies = [],
+        status => status.loadedAssemblies.push(clone(status.loadedAssemblies[0])),
+        status => status.loadedAssemblies[0].name = '', status => status.loadedAssemblies.pop(),
+    ];
+    for (const change of changes) {
+        const bad = clone(good); bad.instances[1].status = null; change(bad.instances[0].status);
+        let reads = 0;
+        await assert.rejects(metadataPoll(() => ++reads === 1 ? bad : good).run(expected));
+        assert.equal(reads, 1);
+    }
+});
+
+test('launch pinning requires known two identities, distinct PIDs and host metadata matching actual preflight bridge', () => {
+    const good = runtimeView(); runtimeMetadataExpectations(good);
+    for (const change of [v => v.instances[1].identity.pid = v.instances[0].identity.pid,
+        v => delete v.instances[1].identity.startedUtc, v => delete v.instances[0].status.buildVersion,
+        v => v.preflight.bridge.mvid = '00000000-0000-4000-8000-000000000099',
+        v => v.instances[0].status.loadedAssemblies = [], v => v.instances[0].status = null]) {
+        const bad = clone(good); change(bad); assert.throws(() => runtimeMetadataExpectations(bad));
+    }
+});
+
+test('persistent missing metadata expires at the original 30s deadline without resetting its budget', async () => {
+    const good = runtimeView(), expected = runtimeMetadataExpectations(good), missing = clone(good);
+    missing.instances[1].status = null; let reads = 0;
+    const poll = metadataPoll(() => { reads++; return missing; });
+    await assert.rejects(poll.run(expected), /did not converge/);
+    assert.equal(reads, 60); assert.equal(new Set(poll.deadlines).size, 1); assert.equal(poll.deadlines[0], 30000);
+});
+
+test('a read finishing after the original deadline cannot pass even with complete correct metadata', async () => {
+    const good = runtimeView(); let clock = 0, reads = 0;
+    await assert.rejects(readRuntimeProcesses({ expected: runtimeMetadataExpectations(good),
+        read: async () => { reads++; clock = 30001; return good; }, now: () => clock,
+        sleep: async () => assert.fail('Late response must not be retried') }), /original deadline/);
+    assert.equal(reads, 1);
+});
+
+test('runtime metadata polling preserves the existing mutation guard and never retries transport exceptions', async () => {
+    const good = runtimeView(), expected = runtimeMetadataExpectations(good), scope = createReadDeadlineScope();
+    let calls = 0;
+    await assert.rejects(readRuntimeProcesses({ expected,
+        withDeadline: (deadline, action) => scope.run(deadline, action),
+        read: async () => { calls++; assertNoPollingMutation(scope.currentDeadline(), true); } }), /Mutations cannot run/);
+    assert.equal(calls, 1); calls = 0;
+    await assert.rejects(readRuntimeProcesses({ expected,
+        read: async () => { calls++; throw new Error('Unclassified transport failure'); } }), /Unclassified transport failure/);
+    assert.equal(calls, 1);
+});
+
+test('even non-Error transport rejections are terminal rather than turning into a retryable catch failure', async () => {
+    const good = runtimeView(), expected = runtimeMetadataExpectations(good);
+    for (const rejection of [null, undefined, false, 'transport-rejected']) {
+        let reads = 0;
+        const result = readRuntimeProcesses({ expected, read: async () => { if (++reads === 1) throw rejection; return good; } });
+        await assert.rejects(result); assert.equal(reads, 1);
+    }
 });

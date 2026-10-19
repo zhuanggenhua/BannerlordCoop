@@ -38,6 +38,100 @@ const LOCATION = 'Location_town_ES1_tavern';
 const MAP_STATE = 'TaleWorlds.CampaignSystem.GameState.MapState';
 const MISSION_STATE = 'TaleWorlds.MountAndBlade.MissionState';
 
+const RUNTIME_ASSEMBLIES = ['Common', 'Coop', 'Coop.Core', 'Coop.Steam', 'GameInterface', 'Missions'];
+const MVID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+
+function runtimeRows(view) {
+    assert.equal(view.error, null, 'Native run error');
+    assert.equal(view.instances?.length, 2, 'Expected both current native process receipts');
+    const rows = INSTANCES.map(name => view.instances.find(row => row.name === name));
+    assert.ok(rows.every(Boolean), 'Missing or duplicate native instance');
+    return rows;
+}
+
+function assemblyMetadata(status) {
+    assert.ok(Array.isArray(status.loadedAssemblies), 'Missing native assembly metadata');
+    const rows = status.loadedAssemblies.map(row => {
+        assert.ok(typeof row.name === 'string' && row.name.length > 0, 'Missing assembly name');
+        assert.match(row.mvid, MVID, 'Missing or invalid assembly MVID');
+        return [row.name, row.mvid];
+    }).sort();
+    assert.equal(new Set(rows.map(row => row[0])).size, rows.length, 'Duplicate assembly metadata');
+    for (const name of RUNTIME_ASSEMBLIES) assert.ok(rows.some(row => row[0] === name), 'Missing runtime assembly: ' + name);
+    return rows;
+}
+
+export function runtimeMetadataExpectations(launchRun) {
+    const rows = runtimeRows(launchRun);
+    const identities = rows.map(row => {
+        assert.ok(Number.isSafeInteger(row.identity?.pid) && row.identity.pid > 0);
+        for (const key of ['startedUtc', 'role', 'platformId', 'runToken'])
+            assert.ok(typeof row.identity[key] === 'string' && row.identity[key].length > 0, 'Missing launch identity: ' + key);
+        assert.equal(row.identity.runToken, launchRun.runId);
+        return structuredClone(row.identity);
+    });
+    assert.notEqual(identities[0].pid, identities[1].pid);
+    const host = rows[0].status;
+    assert.ok(host && typeof host.buildVersion === 'string' && host.buildVersion.length > 0, 'Missing launched host build anchor');
+    const assemblies = assemblyMetadata(host);
+    const assemblyMvid = launchRun.preflight?.bridge?.mvid;
+    assert.match(assemblyMvid, MVID, 'Missing preflight bridge MVID');
+    assert.equal(host.assemblyMvid, assemblyMvid);
+    assert.equal(assemblies.find(row => row[0] === 'Coop')[1], assemblyMvid);
+    return { runId: launchRun.runId, identities, buildVersion: host.buildVersion, assemblyMvid, assemblies };
+}
+
+export function assertRuntimeProcesses(view, expected) {
+    assert.equal(view.runId, expected.runId, 'Native run changed');
+    const rows = runtimeRows(view); let pending = false;
+    for (let index = 0; index < rows.length; index++) {
+        const row = rows[index], identity = expected.identities[index];
+        assert.deepEqual(row.identity, identity, 'Native launch identity changed');
+        assert.equal(row.processAlive, true, 'Native process is not alive');
+        assert.ok(Object.hasOwn(row, 'error'), 'Missing native status error receipt');
+        if (row.error !== null) {
+            assert.ok(row.status == null && row.error.code === 'operation_cancelled' && row.error.outcomeUncertain === false,
+                'Non-transient or uncertain native metadata error: ' + JSON.stringify(row.error));
+        }
+        if (row.status == null) { pending = true; continue; }
+        const status = row.status;
+        for (const [key, value] of Object.entries({ pid: identity.pid, processStartedUtc: identity.startedUtc,
+            role: identity.role, platformId: identity.platformId, runToken: identity.runToken }))
+            assert.equal(status[key], value, 'Native status identity mismatch: ' + key);
+        // Validate every available field before permitting a retry for an incomplete peer.
+        // A wrong build/MVID must not be hidden by a later favourable read.
+        if (status.buildVersion == null) pending = true;
+        else assert.equal(status.buildVersion, expected.buildVersion, 'Native build version changed');
+        if (status.assemblyMvid == null) pending = true;
+        else assert.equal(status.assemblyMvid, expected.assemblyMvid, 'Native bridge MVID changed');
+        if (status.loadedAssemblies == null) pending = true;
+        else assert.deepEqual(assemblyMetadata(status), expected.assemblies, 'Native assembly MVIDs changed');
+    }
+    if (pending) {
+        const error = new Error('Current native runtime metadata is incomplete');
+        error.code = 'ERR_NATIVE_METADATA_PENDING'; throw error;
+    }
+    return rows;
+}
+
+export async function readRuntimeProcesses({ read, expected, withDeadline = (_deadline, action) => action(),
+    now = Date.now, sleep = delay, onPending = async () => {} }) {
+    const result = await pollReadOnly('complete same-process native runtime metadata', deadline => withDeadline(deadline, async () => {
+        try {
+            const view = await read();
+            assert.ok(now() < deadline, 'Native metadata read exceeded the original deadline');
+            return { rows: assertRuntimeProcesses(view, expected) };
+        } catch (error) {
+            if (error?.code === 'ERR_NATIVE_METADATA_PENDING') throw error;
+            // pollReadOnly retries ordinary assertions. Return fatal evidence and throw outside
+            // that loop so identity, death, version and non-transient errors cannot be retried.
+            return { fatal: error };
+        }
+    }), { timeoutMs: 30000, now, sleep, onPending });
+    if (Object.hasOwn(result, 'fatal')) throw result.fatal;
+    return result.rows;
+}
+
 export function nextEntryPhase(output) {
     if (output === "Started a local encounter with 'town_ES1'.") return 'open-location';
     if (output === `Opening location '${LOCATION}'.`) return 'await-mission';
@@ -390,17 +484,17 @@ export async function run(config) {
         const started = await call('start_run', { profile: config.profile, client_count: 0, save_name: config.save }, true);
         assert.ok(runId); assert.equal(started.error, null); await waitReady('server', 'readyForCampaignTests');
         const launched = await call('start_client', { run_id: runId, client_index: 1 }, true);
-        assert.equal(launched.outcome, 'launched'); await waitReady('client1', 'readyToJoin');
+        assert.equal(launched.outcome, 'launched');
+        const runtimeExpected = runtimeMetadataExpectations(launched.run);
+        processPids = runtimeExpected.identities.map(identity => identity.pid);
+        await waitReady('client1', 'readyToJoin');
         assert.equal((await call('join_client', { run_id: runId, instance: 'client1' }, true)).ok, true);
         await waitReady('client1', 'readyForCampaignTests'); initial = await bothStates();
         assert.deepEqual(initial.map(value => value.controller), [profile.serverPlatformId, profile.clientPlatformIds[0]]);
-        const view = await call('get_run', { run_id: runId }); assert.equal(view.instances.length, 2);
-        const processes = INSTANCES.map(name => view.instances.find(value => value.name === name));
-        processPids = processes.map(row => row.identity.pid); assert.notEqual(...processPids);
-        assert.ok(processes.every(row => row.processAlive));
-        const assemblies = row => row.status.loadedAssemblies.map(value => [value.name, value.mvid]).sort();
-        assert.deepEqual(assemblies(processes[0]), assemblies(processes[1]));
-        assert.equal(processes[0].status.buildVersion, processes[1].status.buildVersion);
+        const processes = await readRuntimeProcesses({ expected: runtimeExpected,
+            read: () => call('get_run', { run_id: runId }),
+            withDeadline: (deadline, read) => deadlines.run(deadline, read),
+            onPending: error => emit({ phase: 'poll_pending', label: 'native runtime metadata', error: error.message }) });
         summary.processes = processes;
         const osProcesses = JSON.parse(execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-WindowStyle', 'Hidden', '-Command',
             "@(Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^Bannerlord.*\\.exe$|DedicatedServer' } | Select-Object Name,ProcessId,CreationDate,CommandLine) | ConvertTo-Json -Compress -Depth 4"],
