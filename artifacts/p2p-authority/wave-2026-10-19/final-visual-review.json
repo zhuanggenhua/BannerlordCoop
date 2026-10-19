@@ -1,0 +1,24 @@
+{
+  "runId": "06505b46b82940bebb836c41854708df",
+  "reviewer": "root",
+  "method": "Viewed both actual BMPs with view_image after completed run08; basic pixel sanity alone was not treated as semantic evidence.",
+  "scope": "Two final frames only; not prolonged rendering, physical input or combat acceptance.",
+  "images": [
+    {
+      "instance": "server",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\06505b46b82940bebb836c41854708df\\server-8864f3e527b5478c881d09e652a195ec.bmp",
+      "sha256": "16fee93cedcb14e5212ac181ea2014d12b2fd457cdebd720036e3b350d15c8ba",
+      "width": 2560,
+      "height": 1440,
+      "observation": "Native town menu, paused, 940 gold, 4 troops; no obvious trails in this frame."
+    },
+    {
+      "instance": "client1",
+      "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\runs\\06505b46b82940bebb836c41854708df\\client1-b1a69a1cbfac4b59a279265f2dbd5bb3.bmp",
+      "sha256": "0753fc4cbd45a375b335553a38c82813a7555c7e3ead930f26a17d1e14f39d23",
+      "width": 2560,
+      "height": 1440,
+      "observation": "Native map, paused, 900 gold, 6 troops; no obvious trails in this frame."
+    }
+  ]
+}

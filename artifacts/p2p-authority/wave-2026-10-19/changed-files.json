@@ -1,10 +1,54 @@
 {
   "range": {
     "fromExclusive": "a6d1ebcc19d9370ab156f6aa8a729e7a447f7aa3",
-    "toInclusive": "a9ac4d8febe426f474c816423494392e48a712ee"
+    "toInclusive": "91826a0d487d5f5b052254553d2587a78cb07303"
   },
-  "meaning": "Committed source and tools before this evidence publication. Publication artifacts themselves are listed in the final Git commit.",
+  "meaning": "Committed source, tools and previously published evidence before final report publication. The publication commit adds the final evidence manifest itself.",
   "files": [
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/baseline-failure-names.json"
+    },
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/changed-files.json"
+    },
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/failed-live-cases.json"
+    },
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/fault-accepted.json"
+    },
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/final-regression.json"
+    },
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/npc-accepted.json"
+    },
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/reconnect-periodic-event-rejection-failed.json"
+    },
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/recruit-stock-precondition-partial.json"
+    },
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/recruit-training-clock-failed.json"
+    },
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/ui-accepted-final.json"
+    },
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/writer-loss-observer-clock-failed.json"
+    },
     {
       "status": "A",
       "path": "doc/p2p-authority-wave-2026-10-19.md"
@@ -70,6 +114,18 @@
       "path": "source/GameInterface.Tests/Services/MobileParties/CampaignAuthorityTrainingBehaviorTests.cs"
     },
     {
+      "status": "A",
+      "path": "source/GameInterface.Tests/Services/MobileParties/PlayerLeaveAuthorityRoutingTests.cs"
+    },
+    {
+      "status": "A",
+      "path": "source/GameInterface.Tests/Services/MobileParties/PlayerPartySettlementExitPatchTests.cs"
+    },
+    {
+      "status": "A",
+      "path": "source/GameInterface.Tests/Services/MobileParties/SettlementAuthorityEntryTests.cs"
+    },
+    {
       "status": "M",
       "path": "source/GameInterface.Tests/Services/Time/MapTimeTrackerInterfaceTests.cs"
     },
@@ -116,6 +172,30 @@
     {
       "status": "M",
       "path": "source/GameInterface/Services/MobileParties/Patches/Disable/DisableMobilePartyTrainingBehavior.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface/Services/MobileParties/Patches/EnterSettlementActionPatches.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface/Services/MobileParties/Patches/LeaveSettlementActionPatches.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface/Services/MobileParties/Patches/PlayerLeaveSettlementPatch.cs"
+    },
+    {
+      "status": "A",
+      "path": "source/GameInterface/Services/MobileParties/Patches/PlayerPartySettlementExitPatch.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface/Services/Settlements/Patches/MobilePartyCachePatch.cs"
+    },
+    {
+      "status": "M",
+      "path": "source/GameInterface/Services/SiegeEvents/Commands/SiegeDebugCommand.cs"
     },
     {
       "status": "M",
@@ -168,6 +248,60 @@
     {
       "status": "A",
       "path": "tools/mcp/scenarios/p2p-recruit-training.mjs"
+    }
+  ],
+  "finalPublicationFiles": [
+    {
+      "status": "M",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/changed-files.json"
+    },
+    {
+      "status": "M",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/failed-live-cases.json"
+    },
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/final-task-closure.json"
+    },
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/final-visual-review.json"
+    },
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/interrupted-run07.json"
+    },
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/latest-baseline-failure-names.json"
+    },
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/latest-regression.json"
+    },
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/native-player-settlement-investigation.json"
+    },
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/orchestration-self-check.json"
+    },
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/recruit-training-accepted.json"
+    },
+    {
+      "status": "A",
+      "path": "artifacts/p2p-authority/wave-2026-10-19/remaining-log-diagnostics.json"
+    },
+    {
+      "status": "M",
+      "path": "doc/p2p-authority-wave-2026-10-19.md"
+    },
+    {
+      "status": "M",
+      "path": "tools/coordination/p2p-workstreams.json"
     }
   ]
 }

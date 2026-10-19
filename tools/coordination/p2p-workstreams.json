@@ -13,13 +13,29 @@
       "artifacts/p2p-authority/final-regression-comparison-2026-10-18.json"
     ]
   },
+  "latestAcceptedWave": {
+    "report": "doc/p2p-authority-wave-2026-10-19.md",
+    "runtimeCommit": "0f678f94b0750916541c321f1f2230e43067a512",
+    "recruitmentHarnessCommit": "91826a0d487d5f5b052254553d2587a78cb07303",
+    "scope": "Limited native QA town preparation, four one-shot recruitment paths and ordinary NPC daily callbacks. Not complete P1-B or ordinary observer travel acceptance.",
+    "evidence": [
+      "artifacts/p2p-authority/wave-2026-10-19/recruit-training-accepted.json",
+      "artifacts/p2p-authority/wave-2026-10-19/latest-regression.json",
+      "artifacts/p2p-authority/wave-2026-10-19/remaining-log-diagnostics.json"
+    ],
+    "earlierAcceptedRuns": [
+      { "commit": "a62d7cd9047c7776571475e05817749c0ab73b2d", "evidence": "artifacts/p2p-authority/wave-2026-10-19/fault-accepted.json" },
+      { "commit": "a62d7cd9047c7776571475e05817749c0ab73b2d", "evidence": "artifacts/p2p-authority/wave-2026-10-19/ui-accepted-final.json" },
+      { "commit": "5d827e9bf5e685d6f093ecda15579f0a431871d8", "evidence": "artifacts/p2p-authority/wave-2026-10-19/npc-accepted.json" }
+    ]
+  },
   "workstreams": [
-    { "id": "authority", "title": "战役权威与操作归属", "accepted": ["双人大地图 A→B→A", "最终屏障及任期校验"], "next": "调查迁移期间招募和城镇操作的传输身份耦合", "scope": ["source/Coop.Core/", "source/Coop.Tests/"], "dependencies": [] },
-    { "id": "checkpoint", "title": "世界检查点", "accepted": ["编号、兵力经验、共享会话和时钟交接"], "next": "验证动态权威下冷存档重启的连续性", "scope": ["source/Common/", "source/Common.Tests/", "source/GameInterface/Services/CampaignAuthority/"], "dependencies": [] },
-    { "id": "ai", "title": "NPC AI 周期调度", "accepted": ["周期 ticker 游标及债务交接"], "next": "清点仍按传输角色限制的 AI 和经济路径", "scope": ["source/GameInterface/Services/MobilePartyAIs/", "source/GameInterface.Tests/Services/CampaignAuthority/"], "dependencies": [] },
-    { "id": "pause", "title": "暂停与恢复", "accepted": ["真实酒馆 Mission 切换", "全员离开地图暂停和玩家返回恢复"], "next": "使有效租约暂停状态在 UI 中可见", "scope": ["source/GameInterface/Services/Time/", "source/GameInterface.Tests/Services/Time/"], "dependencies": [] },
-    { "id": "e2e", "title": "双端实机与状态对比", "accepted": ["三轮原生双进程验收日志"], "next": "为下一项独立功能建立前后世界状态对比", "scope": ["doc/automated-testing/", "source/E2E.Tests/"], "dependencies": ["authority", "checkpoint", "ai", "pause"] },
-    { "id": "fault", "title": "故障与竞争测试", "accepted": ["缺失最终 ACK 时不提升替代权威"], "next": "按断线、重复消息和延迟 ACK 分别建立故障证据", "scope": ["source/Coop.Tests/Server/Services/Session/", "source/Coop.Tests/Client/Services/Session/"], "dependencies": [] },
+    { "id": "authority", "title": "战役权威与操作归属", "accepted": ["双人大地图 A→B→A", "最终屏障及任期校验", "限定 QA 场景四次原生招募及唯一执行", "A/B 本地 writer 原生离城"], "next": "实现远端 observer 离城的 writer 路由、归属、Epoch、序号校验；当前 A observer 安全阻挡", "scope": ["source/Coop.Core/", "source/Coop.Tests/", "source/GameInterface/Services/MobileParties/", "source/GameInterface.Tests/Services/MobileParties/"], "dependencies": [] },
+    { "id": "checkpoint", "title": "世界检查点", "accepted": ["编号、兵力经验、共享会话和时钟交接", "重连后周期 callback 身份与 timer phase 恢复"], "next": "验证冷存档重启、完整 RNG 与玩家导航意图的连续性", "scope": ["source/Common/", "source/Common.Tests/", "source/GameInterface/Services/CampaignAuthority/"], "dependencies": [] },
+    { "id": "ai", "title": "NPC AI 周期调度", "accepted": ["周期 ticker 游标及债务交接", "普通 NPC 原生日训练手动回调在 B/A 执行及经验交接", "注册玩家不进入原生 NPC 自动离城候选"], "next": "验证自然跨日和各玩家 Clan/Army 模型；调查剩余 Clan ID 与 NPC MapEvent 日志", "scope": ["source/GameInterface/Services/MobilePartyAIs/", "source/GameInterface/Services/MobileParties/", "source/GameInterface.Tests/Services/CampaignAuthority/", "source/GameInterface.Tests/Services/MobileParties/"], "dependencies": [] },
+    { "id": "pause", "title": "暂停与恢复", "accepted": ["真实酒馆 Mission 切换", "全员离开地图暂停和玩家返回恢复", "原生地图时间栏与双 Mission HUD", "等待最终检查点时观察端精确停表"], "next": "随普通入离城与重连回归暂停恢复；writer-loss 恢复需独立协议，不能超时提升", "scope": ["source/GameInterface/Services/Time/", "source/GameInterface.Tests/Services/Time/"], "dependencies": [] },
+    { "id": "e2e", "title": "双端实机与状态对比", "accepted": ["四类双进程验收摘要及逐阶段截图日志", "招募训练13阶段、精确时钟与16项玩家状态一致"], "next": "普通距离校验旅行、远端离城、保存恢复及自然跨日持续运行；每项使用独占实机锁", "scope": ["doc/automated-testing/", "source/E2E.Tests/", "tools/mcp/scenarios/"], "dependencies": ["authority", "checkpoint", "ai", "pause"] },
+    { "id": "fault", "title": "故障与竞争测试", "accepted": ["缺失最终 ACK 时不提升替代权威", "broker 延迟/伪造/取消 ACK 与重复消息测试", "观察端真实重连后 A→B→A→B", "writer 真实失联后安全停住"], "next": "实现明确检查点恢复协议并做实机验收，再测试物理传输丢包；未实现失联 writer 恢复", "scope": ["source/Coop.Tests/Server/Services/Session/", "source/Coop.Tests/Client/Services/Session/"], "dependencies": [] },
     { "id": "review", "title": "独立代码审查", "accepted": [], "next": "逐项复核子代理提交及证据后允许集成", "scope": [], "dependencies": ["authority", "checkpoint", "ai", "pause", "e2e", "fault"] }
   ]
 }

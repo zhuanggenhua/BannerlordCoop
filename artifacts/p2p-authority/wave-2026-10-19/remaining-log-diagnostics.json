@@ -1,0 +1,43 @@
+{
+  "scope": "Remaining errors are reported, not suppressed. Comparison is with prior NPC02 source5d, not the original source baseline. Item counts depend on runtime duration; this does not prove their harmlessness.",
+  "runs": [
+    {
+      "run": ".mcp-local/p2p-recruit-training-run-08.jsonl",
+      "instance": "server",
+      "groups": {
+        "unregistered-clan": 758,
+        "NPC-map-event-upgrade-tracker": 11
+      },
+      "total": 769,
+      "logSha256": "04ecb85373da31842bbca9efaab0df06cdd9bd4a59d4ea9b8c43a7719b97af61"
+    },
+    {
+      "run": ".mcp-local/p2p-recruit-training-run-08.jsonl",
+      "instance": "client1",
+      "groups": {
+        "item-roster-write-diagnostic": 120
+      },
+      "total": 120,
+      "logSha256": "cc3318a83fdc9c84ccd240691e0e37bbe840d64555950f2bb0152c7882b66e16"
+    },
+    {
+      "run": ".mcp-local/p2p-npc-run-02.jsonl",
+      "instance": "server",
+      "groups": {
+        "unregistered-clan": 758,
+        "NPC-map-event-upgrade-tracker": 11
+      },
+      "total": 769,
+      "logSha256": "9cf667a9424a5060793e2a814620174f2892d40626b6e5a249130c277e8dd952"
+    },
+    {
+      "run": ".mcp-local/p2p-npc-run-02.jsonl",
+      "instance": "client1",
+      "groups": {
+        "item-roster-write-diagnostic": 110
+      },
+      "total": 110,
+      "logSha256": "3d358fd6ad9e89033bd47e83a0e4407ad06a8e80224d2bc6d7c9d502b02ff55d"
+    }
+  ]
+}

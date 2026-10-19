@@ -1,0 +1,59 @@
+{
+  "failedRun": "8731675bd5f74eab8d6042e57ba98f66",
+  "conclusion": "The proposed distant-coordinate explanation is disproven by actual run05 data. Both parties really reach town_A1 gate on both replicas before their settlement becomes null across handoff. A stale GoToPoint behavior is a concrete invalid QA precondition; B local Hold is recorded, so B's later leave requires the peer-copy/native-exit investigation and must not be explained by A's GoToPoint evidence alone.",
+  "coordinates": {
+    "town_ES1": {
+      "name": "Danustica",
+      "position": [
+        661.191,
+        276.466
+      ],
+      "gate": [
+        658.7773,
+        277.1635
+      ]
+    },
+    "town_A1": {
+      "name": "Quyaz",
+      "position": [
+        299.553,
+        264.853
+      ],
+      "gate": [
+        300.6186,
+        261.9282
+      ]
+    },
+    "source": "mb2/Modules/SandBox/ModuleData/settlements.xml"
+  },
+  "nativeChain": [
+    "Campaign.Tick",
+    "CampaignTickCacheDataStore.Tick",
+    "MobileParty.CheckExitingSettlementParallel",
+    "LeaveSettlementAction.ApplyForParty"
+  ],
+  "nativeMainPartyExemption": "The native early return precedes both port transition and exit candidate insertion. The patch extends it to registered player parties; NPC and direct leave remain native.",
+  "scope": "A stale GoToPoint is demonstrated. B local Hold does not prove the authority peer copy had Hold; that historical intermediate detail remains unobserved.",
+  "fixCommits": [
+    "7331cfb2a33eb2e3865d0976cfac12b725123160",
+    "0f678f94b0750916541c321f1f2230e43067a512"
+  ],
+  "nativeTests": {
+    "exitGuard": {
+      "redFailed": 4,
+      "redPassed": 4,
+      "greenPassed": 8
+    },
+    "localWriterLeave": {
+      "redFailed": 6,
+      "redPassed": 2,
+      "greenPassed": 13
+    }
+  },
+  "acceptedRun": "06505b46b82940bebb836c41854708df",
+  "rawQaReportSha256": "f8d4cd8f83c0518de37d1140f441cafc66b0bb783c649e06ccbed70b6b134bb5",
+  "limitations": [
+    "Observer leave protocol still lacks complete dynamic writer routing/epoch/sequence.",
+    "No original game decompiled source is published in this artifact."
+  ]
+}

@@ -1,0 +1,252 @@
+{
+  "schemaVersion": 1,
+  "kind": "orchestration-self-check",
+  "utc": "2026-10-19T01:35:15.601Z",
+  "head": "91826a0d487d5f5b052254553d2587a78cb07303",
+  "branch": "codex/p2p-orchestration",
+  "modelPolicy": "inherit-parent",
+  "nativeToolCallsPerformedByThisScript": false,
+  "independentModelInferencePerformed": false,
+  "gameLaunchOrDeploymentPerformed": false,
+  "checks": [
+    {
+      "description": "Inherited model and three-worker limit",
+      "passed": true
+    },
+    {
+      "description": "All seven workstreams registered exactly once",
+      "passed": true
+    },
+    {
+      "description": "Accepted baseline report exists",
+      "passed": true
+    },
+    {
+      "description": "artifacts/p2p-authority/map-16-accepted.json: accepted live result",
+      "passed": true
+    },
+    {
+      "description": "artifacts/p2p-authority/map-16-accepted.json: two distinct player processes",
+      "passed": true
+    },
+    {
+      "description": "artifacts/p2p-authority/map-16-accepted.json: recorded critical log checks are zero",
+      "passed": true
+    },
+    {
+      "description": "artifacts/p2p-authority/map-16-accepted.json: process cleanup recorded",
+      "passed": true
+    },
+    {
+      "description": "artifacts/p2p-authority/mission-01-accepted.json: accepted live result",
+      "passed": true
+    },
+    {
+      "description": "artifacts/p2p-authority/mission-01-accepted.json: two distinct player processes",
+      "passed": true
+    },
+    {
+      "description": "artifacts/p2p-authority/mission-01-accepted.json: recorded critical log checks are zero",
+      "passed": true
+    },
+    {
+      "description": "artifacts/p2p-authority/mission-01-accepted.json: process cleanup recorded",
+      "passed": true
+    },
+    {
+      "description": "artifacts/p2p-authority/mission-02-pause-resume-accepted.json: accepted live result",
+      "passed": true
+    },
+    {
+      "description": "artifacts/p2p-authority/mission-02-pause-resume-accepted.json: two distinct player processes",
+      "passed": true
+    },
+    {
+      "description": "artifacts/p2p-authority/mission-02-pause-resume-accepted.json: recorded critical log checks are zero",
+      "passed": true
+    },
+    {
+      "description": "artifacts/p2p-authority/mission-02-pause-resume-accepted.json: process cleanup recorded",
+      "passed": true
+    },
+    {
+      "description": "artifacts/p2p-authority/final-regression-comparison-2026-10-18.json: failing-name comparison retained",
+      "passed": true
+    },
+    {
+      "description": "orchestrator.test.mjs: implemented suite exists",
+      "passed": true
+    },
+    {
+      "description": "orchestrator.test.mjs: real test process passed",
+      "passed": true
+    },
+    {
+      "description": "resource-lock.test.mjs: implemented suite exists",
+      "passed": true
+    },
+    {
+      "description": "resource-lock.test.mjs: real test process passed",
+      "passed": true
+    },
+    {
+      "description": "codex-session.test.mjs: implemented suite exists",
+      "passed": true
+    },
+    {
+      "description": "codex-session.test.mjs: real test process passed",
+      "passed": true
+    },
+    {
+      "description": "deployment-guard.test.mjs: implemented suite exists",
+      "passed": true
+    },
+    {
+      "description": "deployment-guard.test.mjs: real test process passed",
+      "passed": true
+    },
+    {
+      "description": "Installed Codex CLI responds to a read-only version probe",
+      "passed": true
+    }
+  ],
+  "tests": [
+    {
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tools\\coordination\\orchestrator.test.mjs"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "tests": 25,
+      "failures": 0,
+      "log": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\self-check\\1792373715601-2c245597\\orchestrator.tap.log",
+      "sha256": "d29168cd83c77c870859619ae98a6ab9e16fcea4488c86aa6afebda52ee6d655",
+      "error": null
+    },
+    {
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tools\\coordination\\resource-lock.test.mjs"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "tests": 12,
+      "failures": 0,
+      "log": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\self-check\\1792373715601-2c245597\\resource-lock.tap.log",
+      "sha256": "51dc3ffc7ba05e56c41a971bee42ed555231a86ebb57aeb075ac688cf2926429",
+      "error": null
+    },
+    {
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tools\\coordination\\codex-session.test.mjs"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "tests": 28,
+      "failures": 0,
+      "log": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\self-check\\1792373715601-2c245597\\codex-session.tap.log",
+      "sha256": "8b15e9b37573c9ff0eab1c14302c2a08984f23a4fca61bdab14259707491ca60",
+      "error": null
+    },
+    {
+      "command": [
+        "node",
+        "--test",
+        "--test-reporter=tap",
+        "tools\\coordination\\deployment-guard.test.mjs"
+      ],
+      "exitCode": 0,
+      "signal": null,
+      "tests": 4,
+      "failures": 0,
+      "log": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\self-check\\1792373715601-2c245597\\deployment-guard.tap.log",
+      "sha256": "9ededf14044a0bc0a01e66b6c0345a20e87a6d0119901953dbf4224a0f6549a9",
+      "error": null
+    }
+  ],
+  "output": "E:\\code\\code home\\BannerlordCoop\\.git\\codex-coordination\\self-check\\1792373715601-2c245597",
+  "gameCodeChangesSinceBaseline": [
+    "source/Common.Tests/Serialization/CampaignSchedulerCheckpointSerializationTests.cs",
+    "source/Common/CampaignSchedulerCheckpoint.cs",
+    "source/Coop.Core/Client/Services/TroopRosters/Handlers/ClientTroopRosterHandler.cs",
+    "source/Coop.Core/Server/Services/Session/CampaignSimulationAvailabilityServerHandler.cs",
+    "source/Coop.Core/Server/Services/TroopRosters/Handlers/ServerTroopRosterHandler.cs",
+    "source/Coop.Tests/Client/Services/TroopRosters/ClientTroopRosterAuthorityCommandTests.cs",
+    "source/Coop.Tests/Server/Services/Session/CampaignAuthorityHandoffFaultTests.cs",
+    "source/Coop.Tests/Server/Services/Session/CampaignSimulationAvailabilityServerHandlerTests.cs",
+    "source/Coop.Tests/Server/Services/TroopRosters/ListenHostRecruitmentTests.cs",
+    "source/GameInterface.Tests/GameInterface.Tests.csproj",
+    "source/GameInterface.Tests/Services/CampaignAuthority/CampaignPeriodicEventIdentityTests.cs",
+    "source/GameInterface.Tests/Services/CampaignAuthority/CampaignSchedulerCheckpointServiceTests.cs",
+    "source/GameInterface.Tests/Services/Locations/ListenHostTimeOverlayTests.cs",
+    "source/GameInterface.Tests/Services/MapEvents/MissionStateFinalizeDiagnosticsPatchTests.cs",
+    "source/GameInterface.Tests/Services/MobileParties/CampaignAuthorityTrainingBehaviorTests.cs",
+    "source/GameInterface.Tests/Services/MobileParties/PlayerLeaveAuthorityRoutingTests.cs",
+    "source/GameInterface.Tests/Services/MobileParties/PlayerPartySettlementExitPatchTests.cs",
+    "source/GameInterface.Tests/Services/MobileParties/SettlementAuthorityEntryTests.cs",
+    "source/GameInterface.Tests/Services/Time/MapTimeTrackerInterfaceTests.cs",
+    "source/GameInterface.Tests/Services/Time/Patches/MapTimeDisplayPatchesTests.cs",
+    "source/GameInterface.Tests/Services/Time/Patches/MapTimeInputDuringPauseTests.cs",
+    "source/GameInterface.Tests/Services/Time/PausedObserverClockTests.cs",
+    "source/GameInterface.Tests/Services/Time/UI/CampaignTimeDisplayTests.cs",
+    "source/GameInterface.Tests/Services/Time/UI/MissionMapTimeVMTests.cs",
+    "source/GameInterface.Tests/Services/TroopRosters/RecruitmentAuthorityRoutingTests.cs",
+    "source/GameInterface.Tests/Utils/Commands/SystemDeveloperDirectCommandTests.cs",
+    "source/GameInterface/Services/CampaignAuthority/CampaignAuthorityDebugCommands.cs",
+    "source/GameInterface/Services/CampaignAuthority/CampaignSchedulerCheckpointService.cs",
+    "source/GameInterface/Services/Locations/Patches/PlayerLocationEntryPatches.cs",
+    "source/GameInterface/Services/MobileParties/Patches/Disable/DisableMobilePartyTrainingBehavior.cs",
+    "source/GameInterface/Services/MobileParties/Patches/EnterSettlementActionPatches.cs",
+    "source/GameInterface/Services/MobileParties/Patches/LeaveSettlementActionPatches.cs",
+    "source/GameInterface/Services/MobileParties/Patches/PlayerLeaveSettlementPatch.cs",
+    "source/GameInterface/Services/MobileParties/Patches/PlayerPartySettlementExitPatch.cs",
+    "source/GameInterface/Services/Settlements/Patches/MobilePartyCachePatch.cs",
+    "source/GameInterface/Services/SiegeEvents/Commands/SiegeDebugCommand.cs",
+    "source/GameInterface/Services/Time/Commands/TimeCommands.cs",
+    "source/GameInterface/Services/Time/Interaces/MapTimeTrackerInterface.cs",
+    "source/GameInterface/Services/Time/Patches/MapTimeDisplayPatches.cs",
+    "source/GameInterface/Services/Time/Patches/TimePatches.cs",
+    "source/GameInterface/Services/Time/UI/CampaignTimeDisplay.cs",
+    "source/GameInterface/Services/Time/UI/MissionMapTimeVM.cs",
+    "source/GameInterface/Services/Time/UI/MissionMapTimeView.cs",
+    "source/GameInterface/Services/TroopRosters/Commands/RecruitmentDebugCommands.cs",
+    "source/GameInterface/Services/TroopRosters/Messages/RecruitmentAttempted.cs",
+    "source/GameInterface/Services/TroopRosters/Patches/RecruitmentVMPatches.cs"
+  ],
+  "acceptedEvidence": [
+    {
+      "path": "artifacts/p2p-authority/map-16-accepted.json",
+      "sha256": "6a6ad639ed5379d07bfb91b903c42c68ee82bcc0f66dd80640d925b185305b3c",
+      "runId": "f2b18040c3b34e7ab8745c512b788857"
+    },
+    {
+      "path": "artifacts/p2p-authority/mission-01-accepted.json",
+      "sha256": "aef7ca1f3228fb32dc13286f6c29f288c23c886e8b6f32f14710c2a8d18ec751",
+      "runId": "03bf651923284d66a1d2686a15043497"
+    },
+    {
+      "path": "artifacts/p2p-authority/mission-02-pause-resume-accepted.json",
+      "sha256": "3d9d25c81c4cef7eed61321dcd853e7a7475c4669c38f76acab2f5bfbb00be78",
+      "runId": "a796e32dc297483f877bc5ef46a93b47"
+    },
+    {
+      "path": "artifacts/p2p-authority/final-regression-comparison-2026-10-18.json",
+      "sha256": "08bf0d9bed6c3fe6547750f115d175400ece8e1bf892914ae77e310aff4881ba",
+      "runId": null
+    }
+  ],
+  "codexCli": {
+    "exitCode": 0,
+    "version": "codex-cli 0.163.0-alpha.10.2",
+    "error": null
+  },
+  "status": "passed"
+}

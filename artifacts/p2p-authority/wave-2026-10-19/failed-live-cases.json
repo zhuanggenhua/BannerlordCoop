@@ -154,6 +154,118 @@
           }
         }
       }
+    },
+    {
+      "label": "native-player-auto-exit-after-authority-roundtrip",
+      "status": "failed_not_accepted",
+      "runId": "8731675bd5f74eab8d6042e57ba98f66",
+      "harnessHead": "e901ffc53fa610043e674a6234348294257f0151",
+      "passedFeatures": [
+        "join-single-native-actors",
+        "A-only-world-tick",
+        "native-settlement-preparation"
+      ],
+      "failure": {
+        "message": "No affordable native recruitable slot for LocalA; no stock/gold fixture will be invented",
+        "stack": "Error: No affordable native recruitable slot for LocalA; no stock/gold fixture will be invented\n    at recruitSlot (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:106:11)\n    at recruit (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:491:22)\n    at async feature (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:418:26)\n    at async run (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:618:9)\n    at async file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:848:10"
+      },
+      "cleanup": [
+        {
+          "name": "server",
+          "cleanupComplete": true,
+          "processAlive": false,
+          "processTreeAlive": false
+        },
+        {
+          "name": "client1",
+          "cleanupComplete": true,
+          "processAlive": false,
+          "processTreeAlive": false
+        }
+      ],
+      "rawRecord": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-recruit-training-run-05.jsonl",
+      "rawRecordSha256": "4fa024f17f729ac450c0537364763d8456812fa356ae1f5fc60e4444585bac31",
+      "summarySha256": "4d7252bae9208d0050da3ecdff7a36558cd451844932d7619eda1fc76f25c08e",
+      "logChecks": {
+        "server": {
+          "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-recruit-training-run-05.jsonl.server.log",
+          "sha256": "1c9846036f73290bab5f77c2783baf0ff32bd4e130d2e644ecc81913f912cfe1",
+          "critical": {
+            "realTick": 0,
+            "duplicateIds": 0,
+            "aiBatch": 0
+          }
+        },
+        "client1": {
+          "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-recruit-training-run-05.jsonl.client1.log",
+          "sha256": "bbc4b8ac8ad19b640858e2fcfcf0770a409bc82463bb6b8245219534282f9b2d",
+          "critical": {
+            "realTick": 0,
+            "duplicateIds": 0,
+            "aiBatch": 0
+          }
+        }
+      }
+    },
+    {
+      "label": "outside-town-observer-local-UI-stock-query-is-null",
+      "status": "failed_not_accepted",
+      "runId": "18c3ad7fe2924f7b9c614be90b1b78f2",
+      "harnessHead": "0f678f94b0750916541c321f1f2230e43067a512",
+      "passedFeatures": [
+        "join-single-native-actors",
+        "A-only-world-tick",
+        "native-settlement-preparation",
+        "A-writer-native-recruit-1",
+        "A-to-B-final-checkpoint",
+        "A-observer-native-recruit-2",
+        "B-writer-native-recruit-3",
+        "B-native-NPC-daily-training",
+        "B-only-world-tick",
+        "B-to-A-XP-and-number-continuity"
+      ],
+      "failure": {
+        "message": "A returned recruit single authoritative application did not converge: Cannot read properties of null (reading 'find')",
+        "stack": "Error: A returned recruit single authoritative application did not converge: Cannot read properties of null (reading 'find')\n    at poll (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:321:15)\n    at async recruit (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:506:23)\n    at async feature (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:418:26)\n    at async run (file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:665:9)\n    at async file:///E:/code/code%20home/BannerlordCoop/tools/mcp/scenarios/p2p-recruit-training.mjs:848:10"
+      },
+      "cleanup": [
+        {
+          "name": "server",
+          "cleanupComplete": true,
+          "processAlive": false,
+          "processTreeAlive": false
+        },
+        {
+          "name": "client1",
+          "cleanupComplete": true,
+          "processAlive": false,
+          "processTreeAlive": false
+        }
+      ],
+      "rawRecord": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-recruit-training-run-06.jsonl",
+      "rawRecordSha256": "e4fc2c8adc9efba83fff7b2c8058f86f1fe94502b6609232bbfcdf59328a4bed",
+      "summarySha256": "4e59d863ba7030b430266fe0b4dd9f2f2a906166f4e64191ed8901d33fdf4d9a",
+      "logChecks": {
+        "server": {
+          "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-recruit-training-run-06.jsonl.server.log",
+          "sha256": "9f274e232d7fdde36aefe59fa7948c29ff5e86854fa0e84c723be515625e6d40",
+          "critical": {
+            "realTick": 0,
+            "duplicateIds": 0,
+            "aiBatch": 0
+          }
+        },
+        "client1": {
+          "path": "E:\\code\\code home\\BannerlordCoop\\.mcp-local\\p2p-recruit-training-run-06.jsonl.client1.log",
+          "sha256": "4534c9a883d9d7ee9aae63e16a06a3820b7210fcf7fc8146da68069dad2a0374",
+          "critical": {
+            "realTick": 0,
+            "duplicateIds": 0,
+            "aiBatch": 0
+          }
+        }
+      },
+      "limitation": "All4 cart submissions executed once, but fourth post-cart global hash/final16fields were not measured before this test-scope failure."
     }
   ]
 }

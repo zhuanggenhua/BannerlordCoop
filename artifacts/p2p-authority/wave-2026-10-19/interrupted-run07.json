@@ -1,0 +1,30 @@
+{
+  "status": "interrupted_unverified_not_a_product_failure",
+  "at": "2026-10-19T01:24:00.241Z",
+  "runId": "4f04011519644dd5a0fbd43fa39dfdf4",
+  "sourceCommit": "0f678f94b0750916541c321f1f2230e43067a512",
+  "harnessHead": "91826a0d487d5f5b052254553d2587a78cb07303",
+  "lastRecord": {
+    "utc": "2026-10-18T17:32:31.610Z",
+    "phase": "request",
+    "callId": 6,
+    "name": "wait_for_state",
+    "args": {
+      "run_id": "4f04011519644dd5a0fbd43fa39dfdf4",
+      "instance": "client1",
+      "state": "readyForCampaignTests",
+      "timeout_seconds": 300
+    },
+    "mutation": false
+  },
+  "completedFeatures": [],
+  "recruitmentRequests": 0,
+  "formerOwnerPid": 432,
+  "recordSha256": "8d1f88522f93531b2d2e352dcb47debded5ed96d91fe7389769fc7c090facfbb",
+  "summaryText": "{}",
+  "ownedGamePids": [
+    34132,
+    7144
+  ],
+  "limitation": "No complete stop_run/summary was recorded. OS process absence is recorded separately; this run is not accepted."
+}
