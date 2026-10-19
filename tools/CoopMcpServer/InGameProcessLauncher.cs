@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 
 namespace CoopMcpServer;
 
@@ -26,13 +26,17 @@ public sealed class InGameProcessLauncher : IGameProcessLauncher
 
     public ProcessStartInfo CreateStartInfo(LaunchProfile profile, string role, string platformId, string runToken, string saveName = null)
     {
+        profile.ValidateClientProxy(role == "client" ? 1 : 0);
         var info = new ProcessStartInfo(profile.Executable)
         {
             UseShellExecute = false,
             WorkingDirectory = Path.GetDirectoryName(profile.Executable),
         };
-        foreach (string argument in new[] { "/singleplayer", "/" + role, "/autoconnect",
-            "/platformId", platformId, "/cooptestrun", runToken })
+        foreach (string argument in new[] { "/singleplayer", "/" + role, "/autoconnect" })
+            info.ArgumentList.Add(argument);
+        if (role == "client" && profile.ClientProxyPort.HasValue)
+            info.ArgumentList.Add("127.0.0.1:" + profile.ClientProxyPort.Value);
+        foreach (string argument in new[] { "/platformId", platformId, "/cooptestrun", runToken })
             info.ArgumentList.Add(argument);
         if (role == "client") info.ArgumentList.Add("/cooptestmanualjoin");
         if (role == "server" && profile.ListenAuthority) info.ArgumentList.Add("/listenhost");

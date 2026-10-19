@@ -2,7 +2,7 @@
 
 A standalone .NET 10 stdio MCP server using the official C# `ModelContextProtocol` SDK, pinned to 1.4.1. No Bannerlord DLLs are loaded into the MCP process. The shared V1 wire protocol is source-linked from `source/Common/LiveTesting/LiveTestProtocol.cs`.
 
-V1 starts **an in-game `/server` process**, plus configurable deferred `/client` processes. The host does not play: anyone playing, including the host operator, uses a client. `IGameProcessLauncher` is the replacement seam for a future dedicated-server launcher; no dedicated-server implementation is included.
+V1 starts an in-game host plus configurable deferred clients. A profile with `ListenAuthority: true` adds `/listenhost`: A plays and hosts in that one game process; B uses one client process. The legacy profile without this flag still starts a non-playing in-game server. No dedicated-server implementation is included.
 
 ## Install
 
@@ -30,6 +30,8 @@ V1 starts **an in-game `/server` process**, plus configurable deferred `/client`
    ```
 
 Use one MCP server session and one co-op host at a time on the local game ports. The transport is stdio plus local Windows named pipes, not HTTP. The launcher explicitly opts each DEBUG game process in with `/autoconnect /cooptestrun` and a fresh run token. Clients additionally receive `/cooptestmanualjoin`. Ordinary game launches are unaffected. Use only trusted local MCP clients, since registered co-op commands can change the save/world. No new command-role bypass or `AllowedThread` scope is introduced.
+
+For a single-client UDP fault test, the optional profile field `clientProxyPort: 24200` routes only B through `127.0.0.1:24200`; A keeps its usual game port. Start the loopback proxy from `tools/mcp/scenarios/udp-fault-proxy.mjs` inside the coordinator's exclusive game-lock scope and close it after `stop_run`. The proxy can drop, delay and reorder actual UDP datagrams, including acknowledgments. Its socket tests prove the injector works; they do not prove game recovery. Proxy profiles reject more than one client and ports outside 1..65535.
 
 ## Agent workflow
 

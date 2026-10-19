@@ -1,7 +1,40 @@
-namespace CoopMcpServer.Tests;
+﻿namespace CoopMcpServer.Tests;
 
 public sealed class InGameProcessLauncherTests
 {
+    [Fact]
+    public void LoopbackProxyChangesOnlyTheClientsStructuredEndpoint()
+    {
+        var profile = new LaunchProfile { Executable = @"C:\Game Folder\Bannerlord.exe", ListenAuthority = true, ClientProxyPort = 24200 };
+        var launcher = new InGameProcessLauncher(new OwnedProcessFactory());
+        var client = launcher.CreateStartInfo(profile, "client", "B", "token");
+        var host = launcher.CreateStartInfo(profile, "server", "A", "token");
+        int flag = client.ArgumentList.IndexOf("/autoconnect");
+        Assert.Equal("127.0.0.1:24200", client.ArgumentList[flag + 1]);
+        Assert.DoesNotContain("127.0.0.1:24200", host.ArgumentList);
+        Assert.Contains("/listenhost", host.ArgumentList);
+        Assert.Contains("/cooptestmanualjoin", client.ArgumentList);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(65536)]
+    public void InvalidProxyPortIsRejectedBeforeProcessConstruction(int port)
+    {
+        var profile = new LaunchProfile { Executable = @"C:\Game Folder\Bannerlord.exe", ClientProxyPort = port };
+        Assert.Throws<ArgumentException>(() => new InGameProcessLauncher(new OwnedProcessFactory())
+            .CreateStartInfo(profile, "client", "B", "token"));
+    }
+
+    [Fact]
+    public void SinglePeerProxyProfileRejectsMultipleClients()
+    {
+        var profile = new LaunchProfile { ClientProxyPort = 24200 };
+        Assert.Throws<ArgumentException>(() => profile.ValidateClientProxy(2));
+        profile.ValidateClientProxy(0);
+        profile.ValidateClientProxy(1);
+    }
+
     [Theory]
     [InlineData("server", true)]
     [InlineData("client", false)]

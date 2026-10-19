@@ -33,6 +33,7 @@ public sealed class LaunchProfile
     public string[] Modules { get; set; } = { "Native", "SandBoxCore", "SandBox", "StoryMode", "Coop" };
     public string ServerPlatformId { get; set; } = "testserver";
     public bool ListenAuthority { get; set; }
+    public int? ClientProxyPort { get; set; }
     public string[] ClientPlatformIds { get; set; } = { "testclient1", "testclient2" };
 
     // Conservative estimate from ~6 GiB observed game peaks, with room for loading spikes.
@@ -48,6 +49,7 @@ public sealed class LaunchProfile
 
     public void Validate(int clientCount)
     {
+        ValidateClientProxy(clientCount);
         if (clientCount < 0 || clientCount > 16 || ClientPlatformIds == null || clientCount > ClientPlatformIds.Length)
             throw new ArgumentException("client_count must be 0..16 and fit the profile's clientPlatformIds.");
         if (!Path.IsPathFullyQualified(Executable ?? "") ||
@@ -64,5 +66,12 @@ public sealed class LaunchProfile
                 m.Any(c => !char.IsAsciiLetterOrDigit(c) && c != '_' && c != '-')) ||
             !Modules.Contains("Coop", StringComparer.Ordinal))
             throw new ArgumentException("modules must include Coop and contain only module identifiers.");
+    }
+
+    public void ValidateClientProxy(int clientCount)
+    {
+        if (ClientProxyPort.HasValue &&
+            (ClientProxyPort.Value < 1 || ClientProxyPort.Value > 65535 || clientCount > 1))
+            throw new ArgumentException("clientProxyPort must be 1..65535 and supports only one loopback client.");
     }
 }
