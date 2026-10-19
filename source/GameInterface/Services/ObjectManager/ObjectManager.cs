@@ -599,12 +599,40 @@ public class ObjectManager : IObjectManager
         handle = 0;
         if (obj != null && TryGetHandle(obj, out handle)) return true;
 
+#if DEBUG
+        logger.Error(
+            "[{ClassName}] Failed to get network handle for object of type {ObjectType}, identity {ObjectIdentity}\n{CallStack}",
+            nameof(ObjectManager),
+            typeof(T),
+            GetDebugObjectIdentity(obj),
+            Environment.StackTrace);
+#else
         logger.Error(
             "[{ClassName}] Failed to get network handle for object of type {ObjectType}",
             nameof(ObjectManager),
             typeof(T));
+#endif
         return false;
     }
+
+#if DEBUG
+    private static string GetDebugObjectIdentity<T>(T obj)
+    {
+        if (obj == null) return "null";
+
+        var identity = $"reference:{RuntimeHelpers.GetHashCode(obj):x8}";
+        if (obj is not MBObjectBase mbObject) return identity;
+
+        try
+        {
+            return $"{identity}, stringId:{mbObject.StringId ?? "<null>"}";
+        }
+        catch (Exception exception)
+        {
+            return $"{identity}, stringId:<unavailable:{exception.GetType().Name}>";
+        }
+    }
+#endif
 
     public bool TryGetObjectWithLogging<T>(string id, out T obj)
     {
