@@ -151,3 +151,86 @@ public class NetworkJoinCampaignBaselineTests
         return received;
     }
 }
+
+public class NetworkJoinCampaignBaselineCorrelationTests
+{
+    private readonly ICommonSerializer serializer;
+
+    public NetworkJoinCampaignBaselineCorrelationTests()
+    {
+        new SurrogateCollection();
+        serializer = new ProtoBufSerializer(new SerializableTypeMapper());
+    }
+
+    [Fact]
+    public void CompletePausedCheckpointBaseline_RoundTripsExactLeaseAndRequestIdentity()
+    {
+        var lease = new AuthorityLease("room", "authority", string.Empty, 7, isPaused: true);
+        const string requestId = "d4388b2b0f8b4f939c6f86ebcb9c1251";
+        var message = new NetworkJoinCampaignBaseline(
+            123L,
+            TimeControlEnum.Pause,
+            Array.Empty<NetworkMobilePartyJoinState>(),
+            committedPausedCheckpointLease: lease,
+            baselineRequestId: requestId);
+
+        var received = RoundTrip(message);
+
+        Assert.True(received.TryGetCommittedPausedCheckpointLease(out var receivedLease));
+        Assert.Equal(lease, receivedLease);
+        Assert.Equal(requestId, received.BaselineRequestId);
+    }
+
+    [Fact]
+    public void IncompleteCampaignBaseline_DoesNotCarryPausedCheckpointLease()
+    {
+        var lease = new AuthorityLease("room", "authority", string.Empty, 7, isPaused: true);
+        var message = new NetworkJoinCampaignBaseline(
+            123L,
+            TimeControlEnum.Pause,
+            Array.Empty<NetworkMobilePartyJoinState>(),
+            isComplete: false,
+            committedPausedCheckpointLease: lease);
+
+        var received = RoundTrip(message);
+
+        Assert.False(received.HasCommittedPausedCheckpointLease);
+        Assert.False(received.TryGetCommittedPausedCheckpointLease(out _));
+    }
+
+    [Fact]
+    public void PausedCheckpointBaseline_RequiresCorrelatedRequestId()
+    {
+        var lease = new AuthorityLease("room", "authority", string.Empty, 7, isPaused: true);
+        var message = new NetworkJoinCampaignBaseline(
+            123L,
+            TimeControlEnum.Pause,
+            Array.Empty<NetworkMobilePartyJoinState>(),
+            committedPausedCheckpointLease: lease,
+            baselineRequestId: "");
+
+        Assert.False(message.HasCommittedPausedCheckpointLease);
+        Assert.False(message.TryGetCommittedPausedCheckpointLease(out _));
+    }
+
+    [Fact]
+    public void JoinSync_RoundTripsCorrelatedBaselineRequest()
+    {
+        const string requestId = "d4388b2b0f8b4f939c6f86ebcb9c1251";
+
+        var received = RoundTrip(new NetworkJoinSync(
+            JoinSyncSignal.ReplayApplied,
+            baselineRequestId: requestId));
+
+        Assert.Equal(JoinSyncSignal.ReplayApplied, received.Signal);
+        Assert.Equal(requestId, received.BaselineRequestId);
+    }
+
+    private T RoundTrip<T>(T message) where T : IMessage
+    {
+        byte[] bytes = serializer.Serialize(message);
+        var received = Assert.IsType<T>(serializer.Deserialize<IMessage>(bytes));
+        Assert.Equal(bytes, serializer.Serialize(received));
+        return received;
+    }
+}

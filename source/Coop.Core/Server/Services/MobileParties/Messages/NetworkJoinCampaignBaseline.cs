@@ -61,17 +61,75 @@ public readonly struct NetworkJoinCampaignBaseline : IMessage
     [ProtoMember(5)]
     public readonly TroopRosterXpBaseline[] TroopXpBaselines;
 
+    [ProtoMember(6)]
+    public readonly bool HasCommittedPausedCheckpointLease;
+
+    [ProtoMember(7)]
+    public readonly string PausedCheckpointRoomId;
+
+    [ProtoMember(8)]
+    public readonly string PausedCheckpointAuthorityId;
+
+    [ProtoMember(9)]
+    public readonly string PausedCheckpointAuthorityControllerId;
+
+    [ProtoMember(10)]
+    public readonly long PausedCheckpointEpoch;
+
+    [ProtoMember(11)]
+    public readonly string BaselineRequestId;
+
     public NetworkJoinCampaignBaseline(
         long serverTicks,
         TimeControlEnum timeControlMode,
         NetworkMobilePartyJoinState[] partyStates,
         bool isComplete = true,
-        TroopRosterXpBaseline[] troopXpBaselines = null)
+        TroopRosterXpBaseline[] troopXpBaselines = null,
+        AuthorityLease? committedPausedCheckpointLease = null,
+        string baselineRequestId = null)
     {
         ServerTicks = serverTicks;
         TimeControlMode = timeControlMode;
         PartyStates = partyStates;
         IsComplete = isComplete;
         TroopXpBaselines = troopXpBaselines ?? Array.Empty<TroopRosterXpBaseline>();
+        BaselineRequestId = baselineRequestId ?? string.Empty;
+
+        AuthorityLease lease = committedPausedCheckpointLease.GetValueOrDefault();
+        HasCommittedPausedCheckpointLease = isComplete &&
+            HasValidBaselineRequestId(BaselineRequestId) &&
+            committedPausedCheckpointLease.HasValue && lease.IsValid && lease.IsPaused;
+        PausedCheckpointRoomId = HasCommittedPausedCheckpointLease ? lease.RoomId : string.Empty;
+        PausedCheckpointAuthorityId = HasCommittedPausedCheckpointLease ? lease.AuthorityId : string.Empty;
+        PausedCheckpointAuthorityControllerId = HasCommittedPausedCheckpointLease
+            ? lease.AuthorityControllerId
+            : string.Empty;
+        PausedCheckpointEpoch = HasCommittedPausedCheckpointLease ? lease.Epoch : 0;
     }
+
+    public bool TryGetCommittedPausedCheckpointLease(out AuthorityLease lease)
+    {
+        lease = default;
+        return IsComplete && TryGetPausedCheckpointLease(out lease);
+    }
+
+    public bool TryGetPausedCheckpointLease(out AuthorityLease lease)
+    {
+        lease = default;
+        if (!HasCommittedPausedCheckpointLease) return false;
+
+        var candidate = new AuthorityLease(
+            PausedCheckpointRoomId,
+            PausedCheckpointAuthorityId,
+            PausedCheckpointAuthorityControllerId,
+            PausedCheckpointEpoch,
+            isPaused: true);
+        if (!candidate.IsValid) return false;
+
+        lease = candidate;
+        return true;
+    }
+
+    public static bool HasValidBaselineRequestId(string baselineRequestId) =>
+        Guid.TryParseExact(baselineRequestId, "N", out _);
 }

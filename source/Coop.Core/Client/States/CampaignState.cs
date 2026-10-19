@@ -1,6 +1,7 @@
 ﻿// Ignore Spelling: Finalizer
 
 using Common;
+using Common.Logging;
 using Common.Messaging;
 using Common.Network;
 using Coop.Core.Client.Messages;
@@ -14,6 +15,7 @@ using GameInterface.Services.UI.Messages;
 using System.Globalization;
 using System;
 using System.Threading;
+using Serilog;
 
 namespace Coop.Core.Client.States;
 
@@ -22,6 +24,8 @@ namespace Coop.Core.Client.States;
 /// </summary>
 public class CampaignState : ClientStateBase
 {
+    private static readonly ILogger Logger = LogManager.GetLogger<CampaignState>();
+
     private readonly IMessageBroker messageBroker;
     private readonly ILoadingInterface loadingInterface;
     private readonly IGameStateInterface gameStateInterface;
@@ -29,11 +33,14 @@ public class CampaignState : ClientStateBase
     private readonly INetwork network;
     private readonly IMapTimeTrackerInterface mapTimeTrackerInterface;
     private readonly bool waitingForJoinCatchUp;
+    private volatile bool disposed;
     private bool replayAppliedQueued;
     private int lastReplayBatchId;
     private IDisposable joinCatchUpDrainBudget;
     private volatile bool baselineResponseExpected;
     private volatile bool finalBaselineResponseExpected;
+    private volatile string pendingBaselineRequestId = string.Empty;
+    private string finalBaselineRequestId = string.Empty;
     private int successfulBaselines;
     private volatile bool waitingForTimeCatchUp;
     private volatile bool finalTimeCatchUp;
@@ -108,6 +115,7 @@ public class CampaignState : ClientStateBase
 
     public override void Dispose()
     {
+        disposed = true;
         ReleaseJoinCatchUpDrainBudget();
         messageBroker.Unsubscribe<MainMenuEntered>(Handle_MainMenuEntered);
         messageBroker.Unsubscribe<MissionStateEntered>(Handle_MissionStateEntered);
@@ -118,6 +126,12 @@ public class CampaignState : ClientStateBase
             messageBroker.Unsubscribe<CampaignTimeSampleReceived>(Handle_CampaignTimeSampleReceived);
         }
     }
+
+    internal bool CanAcceptBaseline(string requestId) =>
+        !disposed && ReferenceEquals(Logic.State, this) &&
+        baselineResponseExpected && !waitingForTimeCatchUp && !waitingForWorldReady &&
+        !string.IsNullOrEmpty(requestId) &&
+        string.Equals(requestId, pendingBaselineRequestId, StringComparison.Ordinal);
 
     internal void Handle_JoinSync(MessagePayload<NetworkJoinSync> obj)
     {
@@ -144,8 +158,8 @@ public class CampaignState : ClientStateBase
             {
                 if (ReferenceEquals(Logic.State, this) == false) return;
 
-                baselineResponseExpected = true;
-                SendJoinSignal(JoinSyncSignal.ReplayApplied);
+                string requestId = ExpectBaselineResponse(isFinalBaseline: false);
+                SendJoinSignal(JoinSyncSignal.ReplayApplied, baselineRequestId: requestId);
             }, context: nameof(JoinSyncSignal.ReplayComplete));
             return;
         }
@@ -167,9 +181,18 @@ public class CampaignState : ClientStateBase
     {
         if (!baselineResponseExpected || waitingForTimeCatchUp || waitingForWorldReady) return;
 
+        string requestId = obj.What.BaselineRequestId ?? string.Empty;
+        string expectedRequestId = pendingBaselineRequestId;
+        bool legacyUnscopedBaseline = requestId.Length == 0 &&
+            !obj.What.HasPausedCheckpointAttestation;
+        if (!string.Equals(requestId, expectedRequestId, StringComparison.Ordinal) &&
+            !legacyUnscopedBaseline) return;
+
         bool isFinalBaseline = finalBaselineResponseExpected;
+        bool hasPausedCheckpointAttestation = obj.What.HasPausedCheckpointAttestation;
         baselineResponseExpected = false;
         finalBaselineResponseExpected = false;
+        pendingBaselineRequestId = string.Empty;
 
         SetCatchUpLoadingMessage();
         if (!obj.What.Success)
@@ -183,6 +206,25 @@ public class CampaignState : ClientStateBase
 
         if (isFinalBaseline)
         {
+            if (hasPausedCheckpointAttestation)
+            {
+                AuthorityLease lease = obj.What.PausedCheckpointLease.Value;
+                waitingForWorldReady = true;
+                Logger.Information(
+                    "Join final baseline advanced from paused checkpoint on peer {PeerId} for room {RoomId}, " +
+                    "authority {AuthorityId}, epoch {Epoch}, request {RequestId}",
+                    obj.What.SourcePeer.Id,
+                    lease.RoomId,
+                    lease.AuthorityId,
+                    lease.Epoch,
+                    requestId);
+                SendJoinSignal(
+                    JoinSyncSignal.FinalBaselineApplied,
+                    baselineRequestId: requestId);
+                return;
+            }
+
+            finalBaselineRequestId = requestId;
             waitingForTimeCatchUp = true;
             finalTimeCatchUp = true;
             return;
@@ -192,6 +234,25 @@ public class CampaignState : ClientStateBase
         if (successfulBaselines < 2)
         {
             RequestBaseline(isFinalBaseline: false);
+            return;
+        }
+
+        if (hasPausedCheckpointAttestation)
+        {
+            AuthorityLease lease = obj.What.PausedCheckpointLease.Value;
+            mapTimeTrackerInterface.ResetForCampaignJoin();
+            string finalRequestId = ExpectBaselineResponse(isFinalBaseline: true);
+            Logger.Information(
+                "Join initial baselines advanced from paused checkpoint on peer {PeerId} for room {RoomId}, " +
+                "authority {AuthorityId}, epoch {Epoch}, response request {RequestId}",
+                obj.What.SourcePeer.Id,
+                lease.RoomId,
+                lease.AuthorityId,
+                lease.Epoch,
+                requestId);
+            SendJoinSignal(
+                JoinSyncSignal.BaselineApplied,
+                baselineRequestId: finalRequestId);
             return;
         }
 
@@ -207,9 +268,17 @@ public class CampaignState : ClientStateBase
         waitingForTimeCatchUp = false;
         finalTimeCatchUp = false;
         mapTimeTrackerInterface.ResetForCampaignJoin();
+        string requestId = ExpectBaselineResponse(isFinalBaseline);
+        SendJoinSignal(JoinSyncSignal.BaselineRequested, baselineRequestId: requestId);
+    }
+
+    private string ExpectBaselineResponse(bool isFinalBaseline)
+    {
+        string requestId = Guid.NewGuid().ToString("N");
+        pendingBaselineRequestId = requestId;
         baselineResponseExpected = true;
         finalBaselineResponseExpected = isFinalBaseline;
-        SendJoinSignal(JoinSyncSignal.BaselineRequested);
+        return requestId;
     }
 
     private void UpdateJoinProgress(int packetsRemaining)
@@ -272,14 +341,17 @@ public class CampaignState : ClientStateBase
                 {
                     finalTimeCatchUp = false;
                     waitingForWorldReady = true;
-                    SendJoinSignal(JoinSyncSignal.FinalBaselineApplied);
+                    SendJoinSignal(
+                        JoinSyncSignal.FinalBaselineApplied,
+                        baselineRequestId: finalBaselineRequestId);
                     return;
                 }
 
                 mapTimeTrackerInterface.ResetForCampaignJoin();
-                baselineResponseExpected = true;
-                finalBaselineResponseExpected = true;
-                SendJoinSignal(JoinSyncSignal.BaselineApplied);
+                string finalRequestId = ExpectBaselineResponse(isFinalBaseline: true);
+                SendJoinSignal(
+                    JoinSyncSignal.BaselineApplied,
+                    baselineRequestId: finalRequestId);
             }
             finally
             {
@@ -288,8 +360,11 @@ public class CampaignState : ClientStateBase
         }, context: nameof(Handle_CampaignTimeSampleReceived));
     }
 
-    private void SendJoinSignal(JoinSyncSignal signal, int replayBatchId = 0) =>
-        network.SendAll(new NetworkJoinSync(signal, replayBatchId));
+    private void SendJoinSignal(
+        JoinSyncSignal signal,
+        int replayBatchId = 0,
+        string baselineRequestId = null) =>
+        network.SendAll(new NetworkJoinSync(signal, replayBatchId, baselineRequestId));
 
     private void ReleaseJoinCatchUpDrainBudget() =>
         Interlocked.Exchange(ref joinCatchUpDrainBudget, null)?.Dispose();

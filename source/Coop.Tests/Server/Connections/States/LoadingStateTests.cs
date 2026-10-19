@@ -4,6 +4,7 @@ using Common.Messaging;
 using Common.Network;
 using Common.Network.Messages;
 using Common.Network.Coalescing;
+using Common.Tests.Utils;
 using Coop.Core.Server.Connections;
 using Coop.Core.Server.Connections.Messages;
 using Coop.Core.Server.Connections.States;
@@ -942,9 +943,9 @@ namespace Coop.Tests.Server.Connections.States
             DrainGameThread();
         }
 
-        private void SendAndDrain(LoadingState state, JoinSyncSignal signal)
+        private void SendAndDrain(LoadingState state, JoinSyncSignal signal, string baselineRequestId = null)
         {
-            Signal(state, signal);
+            Signal(state, signal, baselineRequestId: baselineRequestId);
             DrainGameThread();
         }
 
@@ -954,11 +955,15 @@ namespace Coop.Tests.Server.Connections.States
                     peer ?? playerPeer,
                     new NetworkPlayerCampaignEntered()));
 
-        private void Signal(LoadingState state, JoinSyncSignal signal, int replayBatchId = 0) =>
+        private void Signal(
+            LoadingState state,
+            JoinSyncSignal signal,
+            int replayBatchId = 0,
+            string baselineRequestId = null) =>
             state.JoinSyncHandler(
                 new MessagePayload<NetworkJoinSync>(
                     playerPeer,
-                    new NetworkJoinSync(signal, replayBatchId)));
+                    new NetworkJoinSync(signal, replayBatchId, baselineRequestId)));
 
         private int SignalCount(JoinSyncSignal signal) =>
             serverComponent.TestNetwork
@@ -989,4 +994,92 @@ namespace Coop.Tests.Server.Connections.States
 
         private static void DrainGameThread() => GameThread.Run(() => { }, blocking: true);
     }
+}
+
+public sealed class LoadingStateBaselineCorrelationTests
+{
+    [Fact]
+    public void FinalBaselineAcknowledgementMustEchoItsRequestId()
+    {
+        const string firstRequestId = "d4388b2b0f8b4f939c6f86ebcb9c1251";
+        const string secondRequestId = "f73c1e26fd9b4b15a1ed34d0a5c9c28e";
+        const string thirdRequestId = "7ee9c6c0b10f44dbb2bcc94ca73c6ca2";
+        const string finalRequestId = "fcbe0ce3195b47909d29fd80648f1456";
+        var network = new TestNetwork();
+        var peer = network.CreatePeer();
+        var logic = new Mock<IConnectionLogic>();
+        var broker = new TestMessageBroker();
+        var baselineSender = new Mock<IJoinCampaignBaselineSender>();
+        var kingdomBaselineSender = new Mock<IJoinCampaignKingdomBaseLineSender>();
+        var connectionMessageQueue = new Mock<IConnectionMessageQueue>();
+        connectionMessageQueue
+            .Setup(queue => queue.FlushBatch(peer))
+            .Returns(new JoinReplayBatchResult(0, 0, hasMore: false));
+        connectionMessageQueue
+            .Setup(queue => queue.OpenWithTailBatch(peer, It.IsAny<IMessage>(), It.IsAny<Func<bool>>()))
+            .Callback<NetPeer, IMessage, Func<bool>>((target, marker, tryBeginOpen) =>
+            {
+                if (tryBeginOpen()) network.SendImmediate(target, marker);
+            })
+            .Returns(new JoinReplayBatchResult(0, 0, hasMore: false));
+        var coalescer = new Mock<ISendCoalescer>();
+        coalescer.Setup(value => value.Flush(network));
+        LoadingState state = null!;
+        logic.SetupGet(value => value.Peer).Returns(peer);
+        logic.SetupGet(value => value.State).Returns(() => state);
+        state = new LoadingState(
+            logic.Object,
+            broker,
+            network,
+            baselineSender.Object,
+            kingdomBaselineSender.Object,
+            connectionMessageQueue.Object,
+            coalescer.Object);
+
+        try
+        {
+            state.PlayerCampaignEnteredHandler(new MessagePayload<NetworkPlayerCampaignEntered>(
+                peer,
+                new NetworkPlayerCampaignEntered()));
+            DrainGameThread();
+
+            SendAndDrain(state, peer, JoinSyncSignal.ReplayApplied, firstRequestId);
+            baselineSender.Verify(sender => sender.Send(peer, firstRequestId), Times.Once);
+            SendAndDrain(state, peer, JoinSyncSignal.BaselineRequested, secondRequestId);
+            SendAndDrain(state, peer, JoinSyncSignal.BaselineRequested, thirdRequestId);
+            SendAndDrain(state, peer, JoinSyncSignal.BaselineApplied, finalRequestId);
+            baselineSender.Verify(sender => sender.Send(peer, finalRequestId), Times.Once);
+
+            SendAndDrain(state, peer, JoinSyncSignal.FinalBaselineApplied, thirdRequestId);
+            connectionMessageQueue.Verify(
+                queue => queue.OpenWithTailBatch(peer, It.IsAny<IMessage>(), It.IsAny<Func<bool>>()),
+                Times.Never);
+
+            SendAndDrain(state, peer, JoinSyncSignal.FinalBaselineApplied, finalRequestId);
+            connectionMessageQueue.Verify(
+                queue => queue.OpenWithTailBatch(peer, It.IsAny<IMessage>(), It.IsAny<Func<bool>>()),
+                Times.Once);
+            Assert.Single(network.GetPeerMessagesFromType<NetworkJoinSync>(peer),
+                message => message.Signal == JoinSyncSignal.WorldReady);
+        }
+        finally
+        {
+            state.Dispose();
+            broker.Dispose();
+        }
+    }
+
+    private static void SendAndDrain(
+        LoadingState state,
+        NetPeer peer,
+        JoinSyncSignal signal,
+        string requestId)
+    {
+        state.JoinSyncHandler(new MessagePayload<NetworkJoinSync>(
+            peer,
+            new NetworkJoinSync(signal, baselineRequestId: requestId)));
+        DrainGameThread();
+    }
+
+    private static void DrainGameThread() => GameThread.Run(() => { }, blocking: true);
 }

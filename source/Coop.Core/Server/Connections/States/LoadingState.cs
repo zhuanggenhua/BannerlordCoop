@@ -9,6 +9,7 @@ using Coop.Core.Server.Services.MobileParties;
 using Coop.Core.Server.Services.Kingdoms;
 using LiteNetLib;
 using Serilog;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 
@@ -62,6 +63,7 @@ public class LoadingState : ConnectionStateBase
     private bool replayDrainBlocked;
     private long joinProgressVersion;
     private ReplayContinuation replayContinuation;
+    private string currentBaselineRequestId;
 #if DEBUG
 
     internal string DebugJoinState =>
@@ -204,6 +206,7 @@ public class LoadingState : ConnectionStateBase
                     peer,
                     JoinPhase.WaitingForReplayApplied,
                     isFinal: false,
+                    payload.What.BaselineRequestId,
                     nameof(JoinSyncSignal.ReplayApplied));
                 break;
             case JoinSyncSignal.BaselineRequested when CurrentPhase == JoinPhase.WaitingForInitialBaseline:
@@ -211,6 +214,7 @@ public class LoadingState : ConnectionStateBase
                     peer,
                     JoinPhase.WaitingForInitialBaseline,
                     isFinal: false,
+                    payload.What.BaselineRequestId,
                     nameof(JoinSyncSignal.BaselineRequested));
                 break;
             case JoinSyncSignal.BaselineRequested when CurrentPhase == JoinPhase.WaitingForFinalBaseline:
@@ -218,6 +222,7 @@ public class LoadingState : ConnectionStateBase
                     peer,
                     JoinPhase.WaitingForFinalBaseline,
                     isFinal: true,
+                    payload.What.BaselineRequestId,
                     nameof(JoinSyncSignal.BaselineRequested));
                 break;
             case JoinSyncSignal.BaselineApplied
@@ -226,9 +231,15 @@ public class LoadingState : ConnectionStateBase
                     peer,
                     JoinPhase.WaitingForInitialBaseline,
                     isFinal: true,
+                    payload.What.BaselineRequestId,
                     nameof(JoinSyncSignal.BaselineApplied));
                 break;
-            case JoinSyncSignal.FinalBaselineApplied when CurrentPhase == JoinPhase.WaitingForFinalBaseline:
+            case JoinSyncSignal.FinalBaselineApplied
+                when CurrentPhase == JoinPhase.WaitingForFinalBaseline &&
+                     string.Equals(
+                         payload.What.BaselineRequestId ?? string.Empty,
+                         currentBaselineRequestId ?? string.Empty,
+                         StringComparison.Ordinal):
                 QueueWorldReady(peer);
                 break;
             case JoinSyncSignal.CatchUpApplied when CurrentPhase == JoinPhase.WaitingForCatchUpApplied:
@@ -241,6 +252,7 @@ public class LoadingState : ConnectionStateBase
         NetPeer peer,
         JoinPhase expected,
         bool isFinal,
+        string baselineRequestId,
         string context)
     {
         JoinPhase queued = isFinal ? JoinPhase.FinalBaselineQueued : JoinPhase.InitialBaselineQueued;
@@ -252,6 +264,8 @@ public class LoadingState : ConnectionStateBase
             lock (joinGate)
             {
                 if (!IsCurrent(queued)) return;
+
+                currentBaselineRequestId = baselineRequestId;
 
                 if (totalBaselinesSent >= MaxBaselinesPerJoin)
                 {
@@ -429,7 +443,7 @@ public class LoadingState : ConnectionStateBase
                     return;
                 }
                 initialBaselinesSent++;
-                campaignBaselineSender.Send(peer);
+                SendBaseline(peer);
                 campaignKingdomBaselineSender.Send(peer);
                 return;
             case ReplayContinuation.FinalBaseline:
@@ -440,13 +454,21 @@ public class LoadingState : ConnectionStateBase
                     return;
                 }
                 connectionMessageQueue.EndFinalBaselineCoverage(peer);
-                campaignBaselineSender.Send(peer);
+                SendBaseline(peer);
                 campaignKingdomBaselineSender.Send(peer);
                 return;
         }
     }
 
     private void AdvanceJoinProgress() => Interlocked.Increment(ref joinProgressVersion);
+
+    private void SendBaseline(NetPeer peer)
+    {
+        if (currentBaselineRequestId == null)
+            campaignBaselineSender.Send(peer);
+        else
+            campaignBaselineSender.Send(peer, currentBaselineRequestId);
+    }
 
     private JoinPhase CurrentPhase => (JoinPhase)Volatile.Read(ref phase);
 

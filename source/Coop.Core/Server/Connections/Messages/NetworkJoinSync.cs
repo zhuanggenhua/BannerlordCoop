@@ -28,9 +28,13 @@ public readonly struct NetworkJoinSync : IMessage
     [ProtoMember(2)]
     public readonly int ReplayBatchId;
 
-    public NetworkJoinSync(JoinSyncSignal signal, int replayBatchId = 0)
+    [ProtoMember(3)]
+    public readonly string BaselineRequestId;
+
+    public NetworkJoinSync(JoinSyncSignal signal, int replayBatchId = 0, string baselineRequestId = null)
     {
         Signal = signal;
         ReplayBatchId = replayBatchId;
+        BaselineRequestId = baselineRequestId ?? string.Empty;
     }
 }

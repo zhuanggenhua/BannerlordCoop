@@ -2,6 +2,7 @@
 using Common.Network;
 using Coop.Core.Server.Services.MobileParties.Messages;
 using GameInterface.Services.Heroes.Interaces;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.MobileParties.Data;
 using GameInterface.Services.Time.Interfaces;
 using LiteNetLib;
@@ -17,6 +18,7 @@ namespace Coop.Core.Server.Services.MobileParties;
 public interface IJoinCampaignBaselineSender
 {
     void Send(NetPeer peer);
+    void Send(NetPeer peer, string baselineRequestId);
 }
 
 internal sealed class JoinCampaignBaselineSender : IJoinCampaignBaselineSender
@@ -29,6 +31,7 @@ internal sealed class JoinCampaignBaselineSender : IJoinCampaignBaselineSender
     private readonly ITimeControlInterface timeControlInterface;
     private readonly IPlayerPartyTroopXpBaselineProvider troopXpBaselineProvider;
     private readonly IPartyBehaviorWireMapper partyBehaviorWireMapper;
+    private readonly ICampaignAuthorityContext authorityContext;
 
     public JoinCampaignBaselineSender(
         INetwork network,
@@ -36,7 +39,8 @@ internal sealed class JoinCampaignBaselineSender : IJoinCampaignBaselineSender
         IMobilePartyBehaviorSnapshot mobilePartyBehaviorSnapshot,
         ITimeControlInterface timeControlInterface,
         IPlayerPartyTroopXpBaselineProvider troopXpBaselineProvider,
-        IPartyBehaviorWireMapper partyBehaviorWireMapper)
+        IPartyBehaviorWireMapper partyBehaviorWireMapper,
+        ICampaignAuthorityContext authorityContext)
     {
         this.network = network;
         this.mapTimeTrackerInterface = mapTimeTrackerInterface;
@@ -44,9 +48,12 @@ internal sealed class JoinCampaignBaselineSender : IJoinCampaignBaselineSender
         this.timeControlInterface = timeControlInterface;
         this.troopXpBaselineProvider = troopXpBaselineProvider;
         this.partyBehaviorWireMapper = partyBehaviorWireMapper;
+        this.authorityContext = authorityContext;
     }
 
-    public void Send(NetPeer peer)
+    public void Send(NetPeer peer) => Send(peer, null);
+
+    public void Send(NetPeer peer, string baselineRequestId)
     {
         var campaignObjectManager = Campaign.Current?.CampaignObjectManager;
         var parties = campaignObjectManager?.MobileParties;
@@ -111,6 +118,13 @@ internal sealed class JoinCampaignBaselineSender : IJoinCampaignBaselineSender
             troopXpBaselines = Array.Empty<TroopRosterXpBaseline>();
         }
 
+        AuthorityLease? committedPausedCheckpointLease = null;
+        if (isComplete && authorityContext.TryGetCurrentLease(out var currentLease) &&
+            currentLease.IsValid && currentLease.IsPaused)
+        {
+            committedPausedCheckpointLease = currentLease;
+        }
+
         network.SendImmediate(
             peer,
             new NetworkJoinCampaignBaseline(
@@ -118,6 +132,21 @@ internal sealed class JoinCampaignBaselineSender : IJoinCampaignBaselineSender
                 timeControlInterface.GetTimeControl(),
                 partyStates,
                 isComplete,
-                troopXpBaselines));
+                troopXpBaselines,
+                committedPausedCheckpointLease,
+                baselineRequestId));
+
+        if (committedPausedCheckpointLease.HasValue)
+        {
+            AuthorityLease lease = committedPausedCheckpointLease.Value;
+            Logger.Information(
+                "Sent complete paused-checkpoint join baseline to peer {PeerId} for room {RoomId}, " +
+                "authority {AuthorityId}, epoch {Epoch}, request {RequestId}",
+                peer?.Id,
+                lease.RoomId,
+                lease.AuthorityId,
+                lease.Epoch,
+                baselineRequestId);
+        }
     }
 }

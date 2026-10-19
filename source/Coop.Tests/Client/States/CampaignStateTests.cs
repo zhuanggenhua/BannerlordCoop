@@ -8,17 +8,28 @@ using System.Threading;
 using Common.Tests.Utils;
 using Coop.Core.Client;
 using Coop.Core.Client.Messages;
+using Coop.Core.Client.Services.MobileParties;
+using Coop.Core.Client.Services.MobileParties.Handlers;
 using Coop.Core.Client.States;
 using Coop.Core.Server.Connections.Messages;
+using Coop.Core.Server.Services.MobileParties.Messages;
+using Coop.Tests.Mocks;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.GameState.Interfaces;
 using GameInterface.Services.GameState.Messages;
+using GameInterface.Services.Heroes.Enum;
+using GameInterface.Services.Heroes.Interaces;
+using GameInterface.Services.MobileParties.Data;
 using GameInterface.Services.Time.Interfaces;
 using GameInterface.Services.UI.Interfaces;
 using GameInterface.Services.UI.Messages;
 using Moq;
+using LiteNetLib;
+using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 using Xunit.Abstractions;
+using LiteNetLib;
 
 namespace Coop.Tests.Client.States;
 
@@ -352,6 +363,167 @@ public class CampaignStateTests : IDisposable
         Assert.Empty(TestMessageBroker.GetMessagesFromType<ClientCampaignReady>());
         Assert.Equal(0, JoinSignalCount(JoinSyncSignal.CatchUpApplied));
     }
+
+    private static void DrainGameThread() => GameThread.Run(() => { }, blocking: true);
+}
+
+public sealed class PausedCampaignStateCorrelationTests
+{
+    [Fact]
+    public void PausedCheckpointJoin_RequiresCurrentRequestIdAndAdvancesWithoutTimeSamples()
+    {
+        var broker = new TestMessageBroker();
+        var network = new Mock<INetwork>();
+        var roomHostPeerProvider = network.As<IRoomHostPeerProvider>();
+        var peer = new TestNetwork().CreatePeer();
+        roomHostPeerProvider.Setup(provider => provider.IsCurrentRoomHostPeer(peer)).Returns(true);
+        var sentMessages = new List<IMessage>();
+        network
+            .Setup(value => value.SendAll(It.IsAny<IMessage>()))
+            .Callback<IMessage>(sentMessages.Add);
+        var logic = new Mock<IClientLogic>();
+        var loadingState = new LoadingState(
+            logic.Object,
+            broker,
+            null!,
+            null!,
+            null!,
+            null!,
+            null!,
+            null!);
+        IClientState currentState = loadingState;
+        logic.SetupGet(value => value.State).Returns(() => currentState);
+        var loadingInterface = new Mock<ILoadingInterface>();
+        var mapTimeTracker = new Mock<IMapTimeTrackerInterface>();
+        var mobilePartySnapshot = new Mock<IMobilePartyBehaviorSnapshot>();
+        mobilePartySnapshot
+            .Setup(snapshot => snapshot.TryApplyJoinBaseline(
+                It.IsAny<MobilePartyJoinState[]>(),
+                It.IsAny<Action>()))
+            .Callback<MobilePartyJoinState[], Action>((_, beforeApply) => beforeApply())
+            .Returns(true);
+        var troopXpApplier = new Mock<IPlayerPartyTroopXpBaselineApplier>();
+        troopXpApplier
+            .Setup(applier => applier.TryApply(It.IsAny<TroopRosterXpBaseline[]>()))
+            .Returns(true);
+        var behaviorMapper = new Mock<IPartyBehaviorWireMapper>();
+        var timeControl = new Mock<ITimeControlInterface>();
+        var authorityContext = new Mock<ICampaignAuthorityContext>();
+        var lease = new AuthorityLease("room", "authority", string.Empty, 4, isPaused: true);
+        authorityContext.Setup(context => context.TryGetCurrentLease(out lease)).Returns(true);
+        var handler = new JoinCampaignBaselineHandler(
+            broker,
+            mapTimeTracker.Object,
+            mobilePartySnapshot.Object,
+            timeControl.Object,
+            troopXpApplier.Object,
+            behaviorMapper.Object,
+            network.Object,
+            authorityContext.Object,
+            () => logic.Object);
+        var campaignState = new CampaignState(
+            logic.Object,
+            broker,
+            network.Object,
+            loadingInterface.Object,
+            null!,
+            null!,
+            mapTimeTracker.Object);
+        currentState = campaignState;
+
+        try
+        {
+            broker.Publish(this, new NetworkJoinSync(JoinSyncSignal.ReplayComplete));
+            DrainGameThread();
+            string firstRequestId = LastRequest(sentMessages, JoinSyncSignal.ReplayApplied).BaselineRequestId;
+
+            PublishPausedBaseline(broker, peer, lease, "ffffffffffffffffffffffffffffffff");
+            mobilePartySnapshot.Verify(
+                snapshot => snapshot.TryApplyJoinBaseline(
+                    It.IsAny<MobilePartyJoinState[]>(), It.IsAny<Action>()),
+                Times.Never);
+            timeControl.Verify(
+                control => control.ClientSetTimeControl(It.IsAny<TimeControlEnum>()),
+                Times.Never);
+            mapTimeTracker.Verify(
+                tracker => tracker.ApplyCampaignJoinBaseline(It.IsAny<long>()),
+                Times.Never);
+            troopXpApplier.Verify(
+                applier => applier.TryApply(It.IsAny<TroopRosterXpBaseline[]>()),
+                Times.Never);
+            Assert.Equal(0, SignalCount(sentMessages, JoinSyncSignal.BaselineRequested));
+
+            PublishPausedBaseline(broker, peer, lease, firstRequestId);
+            string secondRequestId = LastRequest(sentMessages, JoinSyncSignal.BaselineRequested).BaselineRequestId;
+            Assert.NotEqual(firstRequestId, secondRequestId);
+
+            PublishPausedBaseline(broker, peer, lease, firstRequestId);
+            mobilePartySnapshot.Verify(
+                snapshot => snapshot.TryApplyJoinBaseline(
+                    It.IsAny<MobilePartyJoinState[]>(), It.IsAny<Action>()),
+                Times.Once);
+            timeControl.Verify(
+                control => control.ClientSetTimeControl(It.IsAny<TimeControlEnum>()),
+                Times.Once);
+            mapTimeTracker.Verify(
+                tracker => tracker.ApplyCampaignJoinBaseline(It.IsAny<long>()),
+                Times.Once);
+            troopXpApplier.Verify(
+                applier => applier.TryApply(It.IsAny<TroopRosterXpBaseline[]>()),
+                Times.Once);
+            Assert.Equal(1, SignalCount(sentMessages, JoinSyncSignal.BaselineRequested));
+            Assert.Equal(secondRequestId, LastRequest(sentMessages, JoinSyncSignal.BaselineRequested).BaselineRequestId);
+            Assert.Equal(0, SignalCount(sentMessages, JoinSyncSignal.FinalBaselineApplied));
+
+            PublishPausedBaseline(broker, peer, lease, secondRequestId);
+            string finalRequestId = LastRequest(sentMessages, JoinSyncSignal.BaselineApplied).BaselineRequestId;
+            Assert.NotEqual(secondRequestId, finalRequestId);
+
+            PublishPausedBaseline(broker, peer, lease, finalRequestId);
+
+            Assert.Equal(1, SignalCount(sentMessages, JoinSyncSignal.FinalBaselineApplied));
+            Assert.Equal(finalRequestId, LastRequest(sentMessages, JoinSyncSignal.FinalBaselineApplied).BaselineRequestId);
+            mapTimeTracker.Verify(
+                tracker => tracker.TryCompleteCampaignJoinCatchUp(out It.Ref<bool>.IsAny),
+                Times.Never);
+
+            broker.Publish(this, new NetworkJoinSync(JoinSyncSignal.WorldReady));
+            DrainGameThread();
+
+            loadingInterface.Verify(value => value.HideLoadingScreen(), Times.Once);
+            Assert.Single(broker.GetMessagesFromType<ClientCampaignReady>());
+            Assert.Equal(1, SignalCount(sentMessages, JoinSyncSignal.CatchUpApplied));
+        }
+        finally
+        {
+            handler.Dispose();
+            campaignState.Dispose();
+            loadingState.Dispose();
+        }
+    }
+
+    private static void PublishPausedBaseline(
+        TestMessageBroker broker,
+        NetPeer peer,
+        AuthorityLease lease,
+        string requestId)
+    {
+        broker.Publish(
+            peer,
+            new NetworkJoinCampaignBaseline(
+                12345L,
+                TimeControlEnum.Pause,
+                Array.Empty<NetworkMobilePartyJoinState>(),
+                committedPausedCheckpointLease: lease,
+                baselineRequestId: requestId));
+        DrainGameThread();
+    }
+
+    private static int SignalCount(List<IMessage> sentMessages, JoinSyncSignal signal) =>
+        sentMessages.OfType<NetworkJoinSync>().Count(message => message.Signal == signal);
+
+    private static NetworkJoinSync LastRequest(List<IMessage> sentMessages, JoinSyncSignal signal) =>
+        sentMessages.OfType<NetworkJoinSync>().Last(message => message.Signal == signal);
 
     private static void DrainGameThread() => GameThread.Run(() => { }, blocking: true);
 }
