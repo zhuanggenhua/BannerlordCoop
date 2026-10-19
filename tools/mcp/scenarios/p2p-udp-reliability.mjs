@@ -11,13 +11,15 @@ export const HELP = `Usage: node tools/mcp/scenarios/p2p-udp-reliability.mjs
   --repo <coordinator checkout> --server <CoopMcpServer.exe> --config <profiles-proxy.json>
   --sdk-root <node_modules> --record <new evidence.jsonl>
   [--profile local] [--save P1B_DirectIP_Recruit] [--rounds 3]
-  [--timeout-seconds 75] [--lost-writer]
+  [--timeout-seconds 75] [--lost-writer] [--barrier-only]
 
 Run under tools/coordination/with-game-lock.mjs, from the coordinator only.
 The selected ListenAuthority profile must set clientProxyPort (for example24200).
 One loopback UDP proxy binds that port and forwards to the native host port4200.
 Default: three or more A/B/A rounds under real packet loss/delay/reordering,
 then a committed-paused candidate disconnect, timeout and fresh-barrier reconnect.
+--barrier-only: one paused A/B/A preparation and the disconnect boundary only;
+NPC simulation and multi-round stress are explicitly NOT_RUN. Cannot set --rounds.
 --lost-writer: separate pre-final-ACK writer-loss safety experiment, explicitly
 NOT lossless recovery. Rejoin must be refused with CampaignCheckpointUnavailable.
 Every feature records whole logs, two BMP receipts and UDP stats; stop_run and
@@ -44,7 +46,7 @@ export function options(argv) {
         const key = argv[i]?.replace(/^--/, '');
         assert.ok(argv[i]?.startsWith('--') && !seen.has(key), 'Invalid or duplicate option: ' + argv[i]);
         seen.add(key);
-        if (key === 'lost-writer') { config[key] = true; continue; }
+        if (key === 'lost-writer' || key === 'barrier-only') { config[key] = true; continue; }
         assert.ok(allowed.has(key) && argv[i + 1] && !argv[i + 1].startsWith('--'), 'Invalid option: ' + argv[i]);
         config[key] = argv[++i];
     }
@@ -52,7 +54,9 @@ export function options(argv) {
         assert.ok(config[key], 'Missing --' + key); config[key] = resolve(config[key]);
     }
     config.rounds = Number(config.rounds); config['timeout-seconds'] = Number(config['timeout-seconds']);
-    assert.ok(Number.isInteger(config.rounds) && config.rounds >= 3 && config.rounds <= 20, 'rounds must be3..20');
+    if (config['barrier-only']) {
+        assert.ok(!seen.has('rounds') && !config['lost-writer'], 'barrier-only is the candidate boundary, not configurable stress or active writer loss'); config.rounds=1;
+    } else assert.ok(Number.isInteger(config.rounds) && config.rounds >= 3 && config.rounds <= 20, 'rounds must be3..20');
     assert.ok(Number.isInteger(config['timeout-seconds']) && config['timeout-seconds'] >= 65 && config['timeout-seconds'] <= 180,
         'timeout-seconds must be65..180, longer than the real60s network timeout');
     return config;
@@ -170,7 +174,9 @@ export async function run(config) {
     const summary = { scenario: 'p2p-udp-reliability', startedUtc: new Date().toISOString(), config,
         codeHead: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: config.repo, encoding: 'utf8', windowsHide: true }).trim(),
         features: [], screenshots: [], probes: [], failed: null, cleanupConfirmed: false, passed: false,
-        losslessWriterRecovery: 'NOT_IMPLEMENTED', scope: 'Real loopback UDP faults, existing map authority protocol; no combat, native daily or cold-save acceptance.' };
+        losslessWriterRecovery: 'NOT_IMPLEMENTED',
+        stressCoverage: config['barrier-only'] ? 'NOT_RUN' : 'requires all configured active rounds',
+        simulationCoverage: config['barrier-only'] ? 'NOT_RUN' : 'sole writer five-second intervals', scope: 'Real loopback UDP faults, existing map authority protocol; no combat, native daily or cold-save acceptance.' };
     const proxy = new UdpFaultProxy({ listenPort: profile.port });
     const client = new Client({ name: 'codex-p2p-udp-reliability', version: '1.0.0' });
     const transport = new StdioClientTransport({ command: config.server, args: ['--config', config.config], cwd: config.repo,
@@ -357,12 +363,12 @@ export async function run(config) {
         });
         proxy.setFault({ dropEvery: 11, delayEvery: 5, delayMs: 250 });
         for (let round = 1; round <= config.rounds; round++) {
-            await feature('loss-delay-reorder-round-' + round, async () => {
+            await feature(config['barrier-only'] ? 'paused-handoff-under-network-faults' : 'loss-delay-reorder-round-' + round, async () => {
                 const a = await awaitWriter(initial[0].controller), aProbe = await allocation('server');
-                const aTick = await soleTick('server');
+                const aTick = config['barrier-only'] ? { simulation: 'NOT_RUN', snapshot: await pause() } : await soleTick('server');
                 await command('server', 'coop.debug.authority.availability', ['yield'], true);
                 const b = await awaitWriter(initial[1].controller); assert.equal(epoch(b[0]), epoch(a[0]) + 2);
-                const bProbe = await allocation('client1'), bTick = await soleTick('client1');
+                const bProbe = await allocation('client1'), bTick = config['barrier-only'] ? { simulation: 'NOT_RUN', snapshot: await pause() } : await soleTick('client1');
                 await command('server', 'coop.debug.authority.availability', ['auto'], true);
                 const returned = await awaitWriter(initial[0].controller); assert.equal(epoch(returned[0]), epoch(b[0]) + 2);
                 return { a, b, returned, aProbe, bProbe, aTick, bTick, snapshot: await pause() };

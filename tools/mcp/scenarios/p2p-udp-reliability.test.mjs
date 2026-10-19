@@ -97,3 +97,11 @@ test('actual Serilog process/time/context prefixes expose every ERR and FTL seve
     ];
     assert.deepEqual(logDiagnostics(actual.join('\r\n')).errorLines, [actual[0], actual[1], actual[4]]);
 });
+
+test('barrier-only selects one paused handoff without accepting multi-round stress', () => {
+    const selected=options([...argv,'--barrier-only']);
+    assert.equal(selected['barrier-only'],true); assert.equal(selected.rounds,1);
+    assert.throws(()=>options([...argv,'--barrier-only','--rounds','3']));
+    assert.throws(()=>options([...argv,'--barrier-only','--lost-writer']));
+    assert.throws(()=>options([...argv,'--rounds','1']));
+});
