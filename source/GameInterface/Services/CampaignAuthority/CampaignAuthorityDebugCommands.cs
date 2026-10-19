@@ -15,6 +15,8 @@ using TaleWorlds.CampaignSystem.Roster;
 using GameInterface.Services.ObjectManager;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.GameState;
+using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
 using TaleWorlds.MountAndBlade;
 
@@ -99,8 +101,14 @@ public static class CampaignAuthorityDebugCommands
         public IExpectedArgs[] ExpectedArgs { get; } = Array.Empty<IExpectedArgs>();
         public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
         {
-            if (Campaign.Current == null || !rosters.TryCapture(out var checkpoint))
+            if (Campaign.Current == null)
                 return new(false, "World rosters are unavailable or contain unregistered identities", "world_unavailable");
+            if (!rosters.TryCapture(out var checkpoint))
+                return new(false, JsonConvert.SerializeObject(new
+                {
+                    error = "World rosters are unavailable or contain unregistered identities",
+                    diagnostics = CaptureRosterFailureDiagnostics(),
+                }), "world_unavailable");
             var parties = Campaign.Current.MobileParties.Select(party => new
             {
                 handle = objects.TryGetHandle(party, out var handle) ? handle : 0,
@@ -145,6 +153,198 @@ public static class CampaignAuthorityDebugCommands
             using var sha = SHA256.Create();
             return BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(value)))).Replace("-", "");
         }
+
+        private object CaptureRosterFailureDiagnostics()
+        {
+            const int maxEntries = 32;
+            const int maxCharactersPerRoster = 12;
+            var worldParties = Campaign.Current.MobileParties?.ToArray() ?? Array.Empty<MobileParty>();
+            var parties = worldParties
+                .Where(party => party != null)
+                .Select(party => new CampaignRosterDiagnosticPartyReference(party.StringId, party, party.IsActive))
+                .ToArray();
+            var rosters = new List<CampaignRosterDiagnosticRosterReference>();
+
+            foreach (var party in worldParties)
+            {
+                if (party == null) continue;
+                rosters.Add(new CampaignRosterDiagnosticRosterReference(
+                    "mobileParty", party.StringId, party, party.Party, "member", party.MemberRoster));
+                rosters.Add(new CampaignRosterDiagnosticRosterReference(
+                    "mobileParty", party.StringId, party, party.Party, "prison", party.PrisonRoster));
+            }
+
+            foreach (var settlement in Settlement.All)
+            {
+                if (settlement == null) continue;
+                rosters.Add(new CampaignRosterDiagnosticRosterReference(
+                    "settlement", settlement.StringId, settlement, settlement.Party, "member", settlement.Party?.MemberRoster));
+                rosters.Add(new CampaignRosterDiagnosticRosterReference(
+                    "settlement", settlement.StringId, settlement, settlement.Party, "prison", settlement.Party?.PrisonRoster));
+            }
+
+            return CampaignRosterFailureDiagnostics.Describe(objects, parties, rosters, maxEntries, maxCharactersPerRoster);
+        }
+    }
+
+    internal sealed class CampaignRosterDiagnosticPartyReference
+    {
+        public CampaignRosterDiagnosticPartyReference(string id, object instance, bool? active = null)
+        { Id = id; Instance = instance; Active = active; }
+        public string Id { get; }
+        public object Instance { get; }
+        public bool? Active { get; }
+    }
+
+    internal sealed class CampaignRosterDiagnosticRosterReference
+    {
+        public CampaignRosterDiagnosticRosterReference(
+            string ownerKind, string ownerId, object owner, object partyBase, string rosterKind, TroopRoster roster)
+        {
+            OwnerKind = ownerKind;
+            OwnerId = ownerId;
+            Owner = owner;
+            PartyBase = partyBase;
+            RosterKind = rosterKind;
+            Roster = roster;
+        }
+
+        public string OwnerKind { get; }
+        public string OwnerId { get; }
+        public object Owner { get; }
+        public object PartyBase { get; }
+        public string RosterKind { get; }
+        public TroopRoster Roster { get; }
+    }
+
+    internal static class CampaignRosterFailureDiagnostics
+    {
+        internal static object Describe(
+            IObjectManager objects,
+            IEnumerable<CampaignRosterDiagnosticPartyReference> parties,
+            IEnumerable<CampaignRosterDiagnosticRosterReference> rosters,
+            int maxEntries,
+            int maxCharactersPerRoster)
+        {
+            var partyRows = parties.Select(party =>
+            {
+                uint? handle = GetHandle(objects, party.Instance);
+                return new { party.Id, party.Instance, party.Active, hasHandle = handle.HasValue, handle };
+            }).ToArray();
+
+            var missingParties = partyRows.Where(party => !party.hasHandle).ToArray();
+            var duplicatePartyIds = partyRows
+                .Where(party => !string.IsNullOrEmpty(party.Id))
+                .GroupBy(party => party.Id, StringComparer.Ordinal)
+                .Where(group => group.Count() > 1)
+                .ToArray();
+
+            int rosterIssueCount = 0;
+            int missingCharacterCount = 0;
+            int invalidElementCount = 0;
+            var rosterIssues = new List<object>();
+            foreach (var reference in rosters)
+            {
+                var ownerHandle = GetHandle(objects, reference.Owner);
+                var partyBaseHandle = GetHandle(objects, reference.PartyBase);
+                var rosterHandle = GetHandle(objects, reference.Roster);
+                int? count = reference.Roster == null ? null : reference.Roster._count;
+                bool validRoster = reference.Roster?.data != null &&
+                    reference.Roster._count >= 0 && reference.Roster._count <= reference.Roster.data.Length;
+                int rosterMissingCharacters = 0;
+                int rosterInvalidElementCount = 0;
+                var missingCharacters = new List<object>();
+                var invalidElements = new List<object>();
+
+                if (validRoster)
+                {
+                    for (int index = 0; index < reference.Roster._count; index++)
+                    {
+                        var element = reference.Roster.data[index];
+                        var character = element.Character;
+                        if (character == null || !objects.TryGetHandle(character, out _))
+                        {
+                            rosterMissingCharacters++;
+                            missingCharacterCount++;
+                            if (missingCharacters.Count < maxCharactersPerRoster)
+                            {
+                                missingCharacters.Add(new
+                                {
+                                    index,
+                                    id = character?.StringId,
+                                    handle = GetHandle(objects, character),
+                                });
+                            }
+                        }
+
+                        if (element.Number < 0 || element.WoundedNumber < 0 || element.WoundedNumber > element.Number || element.Xp < 0)
+                        {
+                            rosterInvalidElementCount++;
+                            invalidElementCount++;
+                            if (invalidElements.Count < maxCharactersPerRoster)
+                            {
+                                invalidElements.Add(new
+                                {
+                                    index,
+                                    number = element.Number,
+                                    wounded = element.WoundedNumber,
+                                    xp = element.Xp,
+                                });
+                            }
+                        }
+                    }
+                }
+
+                bool ownerMissing = reference.OwnerKind == "mobileParty" && ownerHandle == null;
+                bool rosterMissing = rosterHandle == null;
+                bool invalidRoster = !validRoster;
+                if (!ownerMissing && !rosterMissing && !invalidRoster && rosterMissingCharacters == 0 && rosterInvalidElementCount == 0) continue;
+
+                rosterIssueCount++;
+                if (rosterIssues.Count >= maxEntries) continue;
+                rosterIssues.Add(new
+                {
+                    ownerKind = reference.OwnerKind,
+                    ownerId = reference.OwnerId,
+                    rosterKind = reference.RosterKind,
+                    ownerHandle,
+                    partyBaseHandle,
+                    rosterHandle,
+                    count,
+                    validRoster,
+                    missingCharacterCount = rosterMissingCharacters,
+                    missingCharacters,
+                    missingCharactersTruncated = rosterMissingCharacters > missingCharacters.Count,
+                    invalidElementCount = rosterInvalidElementCount,
+                    invalidElements,
+                    invalidElementsTruncated = rosterInvalidElementCount > invalidElements.Count,
+                });
+            }
+
+            return new
+            {
+                mobilePartyCount = partyRows.Length,
+                missingPartyCount = missingParties.Length,
+                missingParties = missingParties.Take(maxEntries).Select(party => new { id = party.Id, active = party.Active, party.handle }).ToArray(),
+                missingPartiesTruncated = missingParties.Length > maxEntries,
+                duplicatePartyIdCount = duplicatePartyIds.Length,
+                duplicatePartyIds = duplicatePartyIds.Take(maxEntries).Select(group => new
+                {
+                    id = group.Key,
+                    parties = group.Take(8).Select(party => new { active = party.Active, handle = party.handle }).ToArray(),
+                    partiesTruncated = group.Count() > 8,
+                }).ToArray(),
+                duplicatePartyIdsTruncated = duplicatePartyIds.Length > maxEntries,
+                rosterIssueCount,
+                rosterIssues,
+                rosterIssuesTruncated = rosterIssueCount > rosterIssues.Count,
+                missingCharacterReferenceCount = missingCharacterCount,
+                invalidElementCount,
+            };
+        }
+
+        private static uint? GetHandle(IObjectManager objects, object instance) =>
+            instance != null && objects.TryGetHandle(instance, out var handle) ? handle : (uint?)null;
     }
 
     public sealed class AllocationProbeCommand : ICoopCommand
