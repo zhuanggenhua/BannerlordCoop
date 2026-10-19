@@ -19,7 +19,7 @@ public class BannerCampaignBehaviorInterface : IBannerCampaignBehaviorInterface
     public void OnCollectLootItems(BannerCampaignBehavior behavior, PartyBase winnerParty, ItemRoster gainedLoots)
     {
         // Replace MainParty with IsPlayerParty()
-        if (!winnerParty.MobileParty.IsPlayerParty()) return;
+        if (!winnerParty.IsMobile || !winnerParty.MobileParty.IsPlayerParty()) return;
 
         // Use party's MapEvent instead of MainParty.MobileParty.MapEvent
         MapEvent mapEvent = winnerParty.MobileParty.MapEvent;
