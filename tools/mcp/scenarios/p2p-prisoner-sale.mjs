@@ -436,6 +436,9 @@ export async function run(config) {
             await command(instance, 'coop.debug.location.leave', [], true);
             await poll('native map after requested Mission exit', () => nativeMap(instance), 60000);
         }
+        current = await inspect(instance, controller);
+        if (current.settlement === TOWN.id && current.currentMenu === 'town')
+            await command(instance, 'coop.debug.prisoner_sale.open_backstreet', [controller], true);
         const values = await settlementReplicas(controller, instance);
         current = values[INSTANCES.indexOf(instance)];
         return { first, mission, current, values };
@@ -541,7 +544,8 @@ export async function run(config) {
                 'coop.debug.authority.availability', 'coop.debug.players.party_state', 'coop.debug.set_time_mode',
                 'coop.debug.get_time_mode',
                 'coop.debug.location.list', 'coop.debug.location.enter', 'coop.debug.location.leave',
-                'coop.debug.prisoner_sale.prepare', 'coop.debug.prisoner_sale.inspect', 'coop.debug.prisoner_sale.submit'])
+                'coop.debug.prisoner_sale.prepare', 'coop.debug.prisoner_sale.inspect',
+                'coop.debug.prisoner_sale.open_backstreet', 'coop.debug.prisoner_sale.submit'])
                 assert.ok(catalog.includes(name), `${instance} lacks ${name}`);
         }
 

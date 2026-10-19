@@ -12,8 +12,10 @@ using Newtonsoft.Json;
 using System;
 using System.Linq;
 using TaleWorlds.CampaignSystem;
+using TaleWorlds.CampaignSystem.GameMenus;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.MountAndBlade;
 
 namespace GameInterface.Services.Party.Commands;
 
@@ -25,6 +27,7 @@ public static class PrisonerSaleDebugCommands
     private const int FixtureCount = 2;
     private const int FixtureWounded = 1;
     private const int FixtureXp = 137;
+    private const string BackstreetMenu = "town_backstreet";
 
     private static CoopCommandResult Failed(string error, string code = "command_failed") =>
         new(false, error, code);
@@ -84,6 +87,11 @@ public static class PrisonerSaleDebugCommands
         return TryGetLease(authority, out lease) &&
             authority.TryGetLocalAuthorityLease(out var localLease) && localLease == lease;
     }
+
+    internal static bool CanOpenBackstreet(string settlementId, string currentMenu, bool missionActive) =>
+        !missionActive && string.Equals(settlementId, SettlementId, StringComparison.Ordinal) &&
+        (string.Equals(currentMenu, "town", StringComparison.Ordinal) ||
+            string.Equals(currentMenu, BackstreetMenu, StringComparison.Ordinal));
 
     private static object[] Snapshot(TroopRoster roster) =>
         roster.GetTroopRoster().Select(element => new
@@ -253,6 +261,83 @@ public static class PrisonerSaleDebugCommands
                 prisonRoster = Snapshot(targetParty.PrisonRoster),
                 expectedRansomTotal = RansomTotal(targetParty.PrisonRoster, targetParty),
                 players = players.Players.Select(player => player.ControllerId).OrderBy(value => value, StringComparer.Ordinal).ToArray(),
+            });
+        }
+    }
+
+    public sealed class OpenBackstreetCommand : ICoopCommand
+    {
+        private readonly IObjectManager objects;
+        private readonly IPlayerManager players;
+        private readonly ICampaignAuthorityContext authority;
+        private readonly IControllerIdProvider controller;
+
+        public OpenBackstreetCommand(IObjectManager objects, IPlayerManager players,
+            ICampaignAuthorityContext authority, IControllerIdProvider controller)
+        { this.objects = objects; this.players = players; this.authority = authority; this.controller = controller; }
+
+        public string Prefix => "coop.debug.prisoner_sale";
+        public string Name => "open_backstreet";
+        public string Description => "Opens the local player's native Danustica backstreet menu.";
+        public CoopCommandSide Side => CoopCommandSide.Both;
+        public IExpectedArgs[] ExpectedArgs { get; } =
+            { new ExpectedArgs("controller_id", "Must match this process's local registered player actor.") };
+
+        public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
+        {
+            if (!IsP2P()) return Failed("The prisoner-sale fixture is disabled on dedicated authority.", "p2p_only");
+            if (args.Count != 1 || string.IsNullOrWhiteSpace(args[0]))
+                return Failed("Expected one local controller id.", "invalid_args");
+            if (!TryGetLocalActor(objects, players, controller, out var localPlayer, out var localHero, out var localParty))
+                return Failed("The local registered campaign actor is unavailable.", "local_actor_unavailable");
+            if (!string.Equals(args[0], localPlayer.ControllerId, StringComparison.Ordinal))
+                return Failed("Backstreet presentation is limited to the local registered player actor.", "not_local_actor");
+            if (!TryGetLease(authority, out var lease))
+                return Failed("A confirmed, unfrozen campaign lease is required.", "lease_unavailable");
+            if (Campaign.Current == null)
+                return Failed("A native campaign is required.", "campaign_unavailable");
+
+            string currentMenu = Campaign.Current.CurrentMenuContext?.GameMenu?.StringId;
+            if (!CanOpenBackstreet(localParty.CurrentSettlement?.StringId, currentMenu, Mission.Current != null))
+                return Failed("The local player must be at Danustica's town menu with no active Mission.", "native_menu_required");
+
+            bool alreadyOpen = false;
+            bool opened = false;
+            if (!authority.TryExecuteWithCurrentLease(lease, () =>
+            {
+                if (!TryGetLease(authority, out var currentLease) || currentLease != lease ||
+                    !TryGetLocalActor(objects, players, controller, out var currentPlayer, out var currentHero, out var currentParty) ||
+                    !string.Equals(currentPlayer.ControllerId, localPlayer.ControllerId, StringComparison.Ordinal) ||
+                    !ReferenceEquals(currentHero, localHero) || !ReferenceEquals(currentParty, localParty) ||
+                    Campaign.Current == null ||
+                    !CanOpenBackstreet(currentParty.CurrentSettlement?.StringId,
+                        Campaign.Current.CurrentMenuContext?.GameMenu?.StringId, Mission.Current != null))
+                    return;
+
+                string confirmedMenu = Campaign.Current.CurrentMenuContext?.GameMenu?.StringId;
+                if (string.Equals(confirmedMenu, BackstreetMenu, StringComparison.Ordinal))
+                {
+                    alreadyOpen = true;
+                    return;
+                }
+
+                GameMenu.SwitchToMenu(BackstreetMenu);
+                opened = true;
+            }))
+                return Failed("Campaign authority changed before opening the native menu.", "stale_lease");
+
+            if (!opened && !alreadyOpen)
+                return Failed("The local menu context changed before opening the native menu.", "context_changed");
+
+            return Succeeded(new
+            {
+                status = alreadyOpen ? "already_open" : "opened",
+                lease,
+                controller = localPlayer.ControllerId,
+                heroId = localHero.StringId,
+                partyId = localParty.StringId,
+                settlementId = localParty.CurrentSettlement?.StringId,
+                menu = BackstreetMenu,
             });
         }
     }

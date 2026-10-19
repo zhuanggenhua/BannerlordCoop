@@ -165,6 +165,7 @@ test('cleanup means both owned native process trees have exited', () => {
 test('scenario uses the production sale prefix, exact application ledger, one-shot mutations, and strict cleanup', async () => {
     const source = await readFile(new URL('./p2p-prisoner-sale.mjs', import.meta.url), 'utf8');
     assert.match(source, /coop\.debug\.prisoner_sale\.submit/);
+    assert.match(source, /coop\.debug\.prisoner_sale\.open_backstreet/);
     assert.match(source, /coop\.debug\.get_time_mode/);
     assert.match(source, /application record/);
     assert.match(source, /'stop_run'/);
