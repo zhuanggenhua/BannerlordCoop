@@ -1,74 +1,70 @@
-# P2P 可靠性收口记录（持续更新）
+# P2P 可靠性收口记录（2026-10-19）
 
-本轮以 `8b32121e15bade8331d4ec917e2be05f1d008ebe` 为用户指定基线。仍为单进程 ListenHost：A 负责房间传输，当前战役写入由已确认且未冻结的 Epoch 租约决定。未增加独立服务器。
+整体状态：**尚未完成验收**。用户指定基线为 `8b32121e15bade8331d4ec917e2be05f1d008ebe`。维持每位玩家一个游戏进程的 ListenHost 架构；房间房主与当前战役权威分离，不增加独立服务器或本地回环客户端。
 
-## 已通过：A 权威存档的双进程冷启动恢复
+## 强制修改边界
 
-运行代码：`90ae8f0531bb00b38ad6aa825ef316d7907b4aa4`。修复在世界对象注册、生命周期补丁、本地原生玩家绑定和空领主队伍处理全部完成后，发布 `CampaignInitializationCompleted`。可用性协调器在收到该事件及 `CampaignReady` 前，不变更初始权威租约。没有放宽 ObjectManager 对观察者、暂停或冻结节点分配编号的限制。
+用户追加的“优先复用原项目成熟实现，最小化核心改动，禁止无证据重写”已在 `02ea3bf868b5a5a4c2b562e700396ad43414f484` 写入根目录 [AGENTS.md](../AGENTS.md)。后续每次准备修改既有核心模块，必须先记录原功能、适配层不足的具体证据、受影响不变量、回归测试。能适配就不改核心，不因代码风格扩大范围。
 
-旧代码的自动化复现产生暂停 Epoch 2 和对象句柄 0；修复后专项测试 17/17 通过。完整 Coop 测试为 1,416 通过、195 失败；失败名称与原有基线逐项比较，新增和消失均为 0。第一次完整运行新增的五项交接测试失败已保留，并通过补齐真实初始化事件修复测试夹具，未删除或弱化交接断言。
+保护 Mission NPC Owner/Puppet、移动同步、动作与伤害路由、LiteNetLib、Protobuf、LZ4、AutoSync 生成器、对象注册主体、存档快照和增量追赶。本轮没有重写这些算法。权威迁移验收优先于同步精度、千人战场性能和第三方 Mod 兼容。
 
-实机 Cold03 三项全部通过：双人初始世界一致、原生保存唯一新存档、全部退出后启动两个新进程并恢复该存档。初始 PID 为 25460、22008，冷启动 PID 为 23396、17576。每轮均为两个玩家游戏进程，并确认完整退出。
+## 本轮实际代码与自动化结果
 
-冷恢复后两端全部 1,455 支部队均有网络句柄；世界时钟、部队身份、兵力、伤兵、经验、金币、招募数据、编号分配状态及本地玩家身份比较通过。还比较了跨保存的完整语义摘要，未容忍丢弃非活动部队。恢复使用新 RoomId/AuthorityId 和递增 Epoch。存档为 `P2P_Cold_20261019T041052501Z_af05d2f7`；原测试存档未覆盖。
+当前测试工具提交 `14349168e0725d1637cf3a3a4063d79c62224a57`；最新实机加载的 C# 源码为 `6b177722c3d9bf33b305c45e92a5f77c5c676c18`，其后只有两份 JS 验收断言变更。游戏为本机 1.4.8；每次部署及双进程场景均由总控独占实机锁执行。
 
-结构化证据：[`artifacts/p2p-authority/reliability-cold03-2026-10-19.json`](../artifacts/p2p-authority/reliability-cold03-2026-10-19.json)。完整请求、日志、截图及验证回执保留在本机 `.mcp-local/p2p-cold-save-03.jsonl*` 和 Git common 目录的 `codex-coordination/evidence/p2p-reliability-20261019/cold03-receipt.json`。Cold01/02 的失败证据保留，未改写为通过。
+完整回归18在上述 C# 提交运行，结果如下。历史失败按完整名称逐项比较，新增、消失均为零；Coop/E2E 原始退出码仍为1，不能称为全绿。
 
-## 已通过：双向观察者离城及地图交接
+| 检查 | 通过 | 失败 | 结论 |
+| --- | ---: | ---: | --- |
+| GameInterface | 2997 | 0 | PASS |
+| Coop | 1442 | 195 | 历史失败逐名一致 |
+| Common | 423 | 0 | PASS |
+| 选定 E2E | 61 | 10 | 历史失败逐名一致 |
+| Mod Debug 构建 | — | — | 退出码0 |
+| 当前两组 Node 场景断言 | 33 | 0 | PASS，运行于14349168 |
 
-运行代码：`bff7aec55077f69250e313b58572895a35853964`。Observer03 的 9/9 阶段通过，A/B PID 为 14384、22508。B 观察者通过 A 权威离城、A 观察者通过 B 权威离城均只有一次权威执行；两端均回到原生地图，角色及部队身份保持稳定，A→B→A 后比较世界时钟、编号、兵力、经验、金币、注册数量及玩家状态一致。两端日志非空且无 ERR/FTL，并确认两个进程完整退出。
+完整日志、TRX、SHA256及回执在 Git common 目录 `codex-coordination/evidence/p2p-reliability-20261019/regression18`。历史回归14新增45项E2E失败、回归16新增2项反射夹具失败均保留原始证据，并在之后修复；没有将其并入历史豁免。
 
-修复将离城请求与任期、玩家、部队、城镇及序号关联，在原生离城结束后清除重入产生的旧进入请求；呈现层完成事件独立于有世界副作用的权威离城事件。保留 Observer01/02 原始失败。准备城镇位置使用权威端 QA 命令，因此这项验收不等同于普通远距离旅行/入城验收；单权威运行样本各五秒，不等同于自然跨日。
+## 双进程实机结果与限制
 
-结构化证据：[Observer03 验收摘要](../artifacts/p2p-authority/reliability-observer03-2026-10-19.json)。完整原始证据在本机 `.mcp-local/p2p-observer-leave-03.jsonl*`。
-
-## 当前未通过与待验证
-
-| 场景 | 真实结果 | 证据及后续 |
+| 场景 | 结果 | 严格限定的结论 |
 | --- | --- | --- |
-| UDP 丢包、延迟、乱序下活动 A→B→A | Active13 三轮 PASS（限定范围） | 运行代码64d3f01fd0b4952777e1b07bea6403413cd448eb。双进程PID26092/21324，三轮逐项比较关键世界及玩家状态通过；后续交接中断重连仍FAIL，因此整段脚本不是全通过。Active11的TroopRoster缺号本次未复现，只增加诊断，未称为根因修复。 |
-| 最终屏障交接中断与重新加入 | Candidate12/Active13 到达故障点，恢复 FAIL | 新任期最终屏障被真实网络拦截，75 秒断网后 B 在同进程重连，但未获得新权威；B 重初始化还记录 AutoSync 重复补丁 ERR。保持暂停，未出现超时强行提升；需继续修复并复测。Candidate08 未到达故障点的历史结果保留。 |
-| 观察者离城 | Observer03 9/9 PASS（限定范围） | 见上方完整说明；普通远距离旅行和入城仍需独立验收。 |
-| NPC/玩家售俘动态权威归属 | 代码已集成，实机 NOT RUN | 原先单独的严格 NPC 候选被总控拒绝；现与玩家请求权威路由一同集成到9160ce02。总控专项26/26，包括销毁后排队任务保护、保留去重水位的256流上限和远端玩家英雄整单拒绝；仍需真实售俘路径验收，不能称为功能完成。 |
-| 自然跨日、完整 AI 周期连续性 | NOT RUN | 当前周期计数器可能把合法补跑归为重复，需限定或修正判据后验收。 |
-| 旧权威在最终 ACK 前突然失联且无损接管 | 未实现 | 当前安全策略保持冻结，并拒绝使用房主过期快照接回；不得把安全拒绝称为无损恢复。 |
+| Cold03：A权威保存、退出后双进程冷恢复 | PASS 3/3，旧版本 | 运行90ae8f05；1455支部队、3896兵员表及身份、兵力经验、金币、招募、时钟、分配器恢复比较通过。只支持保存A权威的该场景。 |
+| Observer03：双向观察者离城 | PASS 9/9，旧版本 | 运行bff7aec5；QA准备城镇位置、离城各执行一次并完成A→B→A。不等于普通长距离旅行验收。 |
+| Candidate19：暂停检查点断网后同进程重连 | 脚本PASS 2/2，限定验收 | 运行159ccb38；PID13292/22048，75137ms真实断网；旧屏障作废、新请求关联新屏障，最终回到A，初末关键世界一致。 |
+| Active21：真实UDP丢包、延迟、乱序 | PASS 5/5，限定验收 | 运行159ccb38；PID21592/20188；三轮活动A→B→A及丢失最终ACK后的安全拒绝。安全冻结不等于无损恢复。 |
+| Sale28：普通NPC售俘四种玩家/权威组合 | PASS 9/9，限定验收 | 游戏6b177722，工具14349168；PID25344/4708。A本地权威、B经A、A经B、B本地权威四路；运行中应用账本依次1/2/3/4条。最终QA合并日志重复追加了归档后续页；原始归档各有两条成功记录，合计四条，逐字节保留全部运行日志前缀。总控直接对原始文件校验，不按文本去重；合并工具缺陷仍待修复。 |
+| 自然跨日与完整NPC AI周期 | NOT RUN | 短时Tick采样不能替代完整周期，合法补跑也不能直接计为重复。 |
+| 当前新版Mission切换及全员离图暂停恢复 | 未完成新版完整验收 | 旧范围证据保留；测试准备期间进出酒馆不算完整Mission同步验收。 |
+| 旧权威在最终ACK前失联后的无损恢复 | 未实现 | 当前保持冻结，明确拒绝房主过期检查点；没有超时强行提升。 |
 
-UDP 工具四组 Node 测试在 `c5f205c0b660645f187643ffbda619250c5f0ae1` 为 43/43。最后一次总控完整回归在 `bff7aec55077f69250e313b58572895a35853964` 为 GameInterface 2,957/0、Coop 1,419/195、Common 423/0、选定 E2E 60/10，195/10 失败名称均与历史基线逐项一致，新增和消失均为 0；Coop/E2E 的原始退出码仍为 1，不能称为全绿。上述计数不包含未集成的售俘候选。
+Candidate19仍有两项公开限制：B保留旧超时提示，未接受“无阻挡的重连UI”；重连中间阶段视觉对象类型计数A2902/B3421，但下一网络句柄均45029，其余关键世界数据一致，返回A后计数再次一致。没有发现该样本的实际编号冲突，也不能据此宣称所有阶段分配器状态完全一致。原有Math.Max检查点合并语义保留，禁止为凑哈希相等而回退编号或重写注册主体。
 
-Candidate08 和 Initial-barrier10 的 B 空日志失败保留。已在 `1c7ef7fc32fa91894ee9fc51360a4ab5b1ccab67` 将文件日志初始化提前到显式 AutoConnect 地址解析之前。Active11 实机检查两端完整归档日志均有各自 PID 的实际日志前缀和启动头，B PID 2852 的归档为 367,822 字节；其中真实兵员句柄错误保持可见。这只证明日志修复，不改变压力测试 FAIL。对应摘要保留在 Git common 目录 `codex-coordination/evidence/p2p-reliability-20261019/active11-logging-proof.json`。所有未通过场景都保持未验收，P2P 可靠性收口与完整 P1-B 均未标记完成。
+Sale28最终两端数据一致：A main_hero/player_party，金币1048、兵力1；B Player/Player，金币968、兵力5；英雄、家族、部队各注册一次。两次权威交接的编号下界检查通过。总控重新打开两张最终原始BMP，HUD分别1048/1、968/5，与数据一致。此前“B HUD1000/1”的口头判断是截图误读，已撤回，不作为缺陷或改代码依据。静态截图不证明持续操作、无拖影或完整UI验收。
 
-Active13 限定三轮压力证据： [结构化摘要](../artifacts/p2p-authority/reliability-active13-bounded-2026-10-19.json)。两端第三轮截图已人工查看：A 为原生地图/HUD，B 为自己的城镇菜单及地图/HUD；静态截图不证明不存在时间连续的拖影。所有阶段日志检查继续严格处理 ERR/FTL。后续重连产生的重复补丁错误仍记录，未下调或忽略。
+普通出售会合法创建dummy兵员表：原有注册路径每个新句柄使写入者类型计数增加2、接收者增加1。Sale26旧断言错误地要求出售前后计数恒定，虽然金币与兵力经验正确同步，整段仍FAIL。Sale28改为按实际原代码语义校验新增句柄、2:1类型计数、其他类型不变及交接下界；没有修改注册主体迁就测试。
 
-暂停重连的静态循环已确认：暂停租约没有本地世界权威，CampaignTimeSyncHandler 不发送普通时钟心跳；普通 CampaignTimePacket 也明确拒绝暂停租约。加入基线应用后，CampaignState 只有收到时钟样本才会推进到最终加入屏障；ClientCampaignReady 又是 MapReady 及候选资格的前提。因此暂停后重新加入存在缺少心跳的循环等待。Candidate12/Active13 的运行表现与此一致，但确切卡住的 JoinSync 子阶段尚未逐条记录；当前实现任务将限定在已有完整检查点的加入握手，不放开暂停时钟包或缺少旧权威最终检查点的入场限制。
+## 本轮修改范围审查
 
-## 当前新增回归：暂停部署并修复
+| 修改 | 原功能、适配判断 | 必须守住的不变量与验证 |
+| --- | --- | --- |
+| 生命周期补丁身份识别，57fcc294 | 原收集器安装泛型生命周期钩子；真实Harmony元数据还原开放定义，外围消息适配不能修复安装器身份误判。只修识别，生成器与注册主体不改。 | 同一闭合身份只装一次、未知身份拒绝猜测；真实Harmony及两个连续E2E环境、重连验证。 |
+| 暂停检查点加入握手 | 复用快照、Replay、增量尾部和最终屏障；暂停时没有普通时钟心跳，需在原状态机内关联已提交租约与请求nonce。 | 外来/过期响应拒绝、最终ACK与当前请求关联、不得放开暂停时钟写入；Candidate19限定验证。 |
+| 玩家连接回调租约保护，1e86fddd | 原断线回调Park玩家并创建视觉对象；非权威节点世界写入违规。保护两个入口，原Park/Activate/CreateVisual主体不变。 | 游戏线程复核当前租约、连接代次及Dispose；专项22/22、完整回归及Candidate19。一般已停放玩家的远端恢复路由仍未实现。 |
+| DEBUG原生菜单准备，4323e7ff及1608f985 | 复用GameMenu.SwitchToMenu；已在城镇时不重复进酒馆，避免无关Mission准备路径。 | 注册本地玩家、地图与菜单状态、未冻结权威校验；生产售俘验证不放宽。 |
+| 成功日志，6b177722 | 原P2P处理器执行后缺少成功记录；仅追加9行关联日志。 | 不改金币、兵员表、去重、路由或执行顺序；完整回归及真实P2P日志。 |
+| QA并发轮询及编号断言，c52d70ec及14349168 | 原并行准备共享轮询期限会串扰；使用每场景异步上下文，并按原分配器语义核对。 | 读取轮询不发变更、等待兄弟任务停止、失败仍保留；负例覆盖编号回退、错比例、其他类型变化及交接下界丢失。 |
 
-当前集成代码8f14614c16d00f883cad17304aa12b0bab9999af包含售俘路由及同进程重复补丁初始化修复。总控专项测试26/26、3/3通过，但完整回归14结果为：GameInterface 2983/0，Coop 1419/195（与旧基线逐名相同），Common423/0；选定E2E为15/55，相比原60/10新增45项失败、旧失败消失0项。该脚本退出1，尚未执行末尾Mod构建，更未部署此版本。不能把45项加入历史豁免。
+本轮57fcc294之后的文件清单：PlayerPartyVisibilityHandler.cs、PlayerPartyVisibilityLeaseTests.cs、PrisonerSaleDebugCommands.cs、PrisonerSaleDebugCommandTests.cs、DefenderSiegeContextFixtureTests.cs、SellPrisonersHandler.cs，以及tools/mcp/scenarios下p2p-prisoner-sale.mjs和.test.mjs。完整相对路径见结构化证据和Git diff。
 
-新增E2E失败的实际日志包含原生构造函数LifetimePatches.CreatePrefix安装时的CLR InvalidProgramException，随后对象注册失败。已分配独立工作树对比修改前后，尚未确定是生产补丁逻辑还是E2E构造函数夹具交互；不预先归因环境，也不通过忽略错误或伪造句柄处理。原始TRX、日志和逐项比较在Git common目录codex-coordination/evidence/p2p-reliability-20261019/regression14。上次实际部署和实机运行仍为64d3f01f。
+## 失败证据、后续与编排
 
-暂停检查点加入协议、真实售俘测试工具及上述新增回归修复分别由三个gpt-6-luna/xhigh子代理在独立工作树进行；当前均未验收完成。
+Sale16/17/18/20/22/24/26全部保留FAIL，未因后续通过改写。Sale20准备期间真实调用链为UsableMachine.OnMissionEnded → Mission.set_MissionEnded → EndMission → LeaveLocationCommand，出现NullReference；只避免不必要的准备路径，未宣称修复Mission核心。Sale22原始cleanupConfirmed=false；后续OS确认进程退出与令牌绑定的锁恢复另存回执，不篡改原结果。
 
-## 官方文档与本机版本核对
+Active11兵员表缺号错误在Active21未复现，根因尚未确认；目前只有诊断增强，不能报为根因修复。后续优先修复QA归档分页合并、完成自然跨日/AI周期与Mission/暂停恢复，再处理有完整状态依据的失联恢复。暂不扩大玩法或重写核心。
 
-用户提供的 [TaleWorlds Modding Documentation](https://moddocs.bannerlord.com/) 已纳入参考。该站链接到独立的 [API 版本索引](https://apidoc.bannerlord.com/)，本次已确认存在与本机游戏版本相符的 [1.4.8 文档](https://apidoc.bannerlord.com/v/1.4.8/)。优先入口为 [Campaign](https://apidoc.bannerlord.com/v/1.4.8/class_tale_worlds_1_1_campaign_system_1_1_campaign.html)、[CampaignBehaviorBase](https://apidoc.bannerlord.com/v/1.4.8/class_tale_worlds_1_1_campaign_system_1_1_campaign_behavior_base.html) 和 [MBCampaignEvent](https://apidoc.bannerlord.com/v/1.4.8/class_tale_worlds_1_1_campaign_system_1_1_m_b_campaign_event.html)。
+子代理按用户要求使用gpt-6-luna/xhigh，最多三个，独立worktree；总控审查集成、回归、独占实机。旧p2p-cold-checkpoint-audit残留清理曾被策略阻止，继续cleanup_required，不绕过。只清理证据已留档且限定验收完成的本轮工作树。
 
-官方 API 可交叉核对 WaitAsyncTasks、OnMissionIsStarting、OnStateChanged、RegisterEvents、SyncData 等公开接口；函数的内部调用顺序、线程边界、暂停时行为，以及本项目 Epoch/最终检查点协议，仍用本机引擎实现、源码测试和双进程日志验证。文档中的接口存在性不作为权威迁移已验收的证据。第三方 Harmony 的闭合泛型补丁问题另按实际库源码与最小复现排查。
+用户提供的[官方Mod文档](https://moddocs.bannerlord.com/)及[1.4.8 API](https://apidoc.bannerlord.com/v/1.4.8/)用于交叉核对公开接口；引擎内部顺序、异步边界和本项目Epoch协议仍以本机代码与实测为准。接口存在不是验收证据。
 
-## 编排约束
-
-用户追加强制架构原则：优先复用原项目成熟实现，最小化核心改动，禁止无证据重写。已写入根目录 AGENTS.md。保护 Mission NPC Owner/Puppet、移动同步、动作/伤害路由、LiteNetLib、Protobuf、LZ4、AutoSync 生成器、对象注册主体、存档快照和增量追赶；优先完成已有权威迁移验收，再考虑精度、千人战场性能及第三方 Mod 兼容。后续每次修改既有核心模块前必须说明原功能、适配层不足的具体证据、受影响不变量及回归计划。
-
-当前待集成修改的范围审查如下，均尚未获得本次新版双进程实机验收：
-
-| 修改 | 原有功能与适配层判断 | 可能受影响的不变量 | 必须验证 |
-| --- | --- | --- | --- |
-| AutoSyncPatchCollector 泛型身份修复 | 原收集器安装生命周期钩子。真实 Harmony 元数据将闭合泛型还原为开放定义，导致内部身份比较误判并重复安装；外围消息适配不能修正安装器判定。仅修安装器及针对性测试，不修改生成器、LifetimePatches 或对象注册主体。 | 同 owner/目标/闭合补丁/类型只安装一次；不同 owner 冲突；无已安装闭合身份记录时拒绝猜测；实际被卸载的钩子可重新安装。 | 真实 Harmony 泛型复现、未知泛型拒绝、两个连续 E2E 环境、选定 E2E 逐名旧失败比较、GI 全量及实机重连无重复补丁错误。 |
-| 暂停检查点加入握手 | 现有 Replay、重复基线、增量尾部及最终屏障保留。CampaignState 等待暂停期间不存在的普通时钟心跳，外围适配不能让该状态机推进。只在现有完整基线上附带已提交暂停租约和客户端请求 nonce。 | 真实当前房主 NetPeer、确认 Epoch、应用前关联当前请求、旧响应无副作用、最终 ACK 关联、原队列顺序；不得放开暂停时钟包或旧权威最终 ACK 缺失时的恢复拒绝。 | 陈旧/外来连接/换任期/销毁后排队响应拒绝；真实 handler 到 CampaignState 的无心跳完成与旧请求跨阶段重放；Coop 全量逐名比较；真实交接断线及重新加入。 |
-| 售俘验收适配工具 | 新增 DEBUG 命令调用原 UI prefix 和已有权威售俘处理器；现有 handler 仅追加成功执行日志，不新增替代操作实现。 | 注册玩家、本地 MainHero/MainParty、当前租约、原金币收款对象、处理器一次执行、观察者不本地执行。 | 新命令/Node 断言测试及 A/B 两种权威下四种本地/观察者操作实测；严格金币、兵力经验、身份、注册及日志对比。 |
-
-按用户新指示，子代理使用 `gpt-6-luna`、`xhigh`，最多三个。总控保留任务拆分、独立审查、集成、自动回归及独占实机验收职责；子代理不部署、不启动游戏。
-
-配置提交 `97caec4bdefcf5703f8a7d0b4852d2c976362afa` 已通过实际命令应用到现有编排状态，随后新建任务的模型快照为 `explicit-user / gpt-6-luna / xhigh`。总控运行完整编排自检，四组测试分别 28、12、28、4 项，合计 72/72；配置值与持久化值均为 `applied`。历史任务的模型记录及实机锁没有改写。自检回执位于 Git common 目录 `codex-coordination/evidence/p2p-reliability-20261019/worker-model-policy-receipt.json`。
-
-旧 `p2p-cold-checkpoint-audit` 残留目录清理曾被自动策略拒绝，继续登记为 `cleanup_required`，不绕过拒绝，不影响已保留的成果。仅清理本轮注册、证据已保留且验收完成的独立工作树。
+结构化本轮证据：[reliability-closeout-wave-2026-10-19.json](../artifacts/p2p-authority/reliability-closeout-wave-2026-10-19.json)。包含运行代码、PID来源、快照、原始文件哈希、失败记录、修改文件及回归计数。Sale28独立日志审计位于Git common目录的codex-coordination/evidence/p2p-reliability-20261019/sale28-final-log-audit.json，SHA256为baabf38539c020403de7fa1119d613653214b432bfd641da13872da84ed94be7。Cold03及Observer03的独立结构化证据保留在同一artifacts/p2p-authority目录。
