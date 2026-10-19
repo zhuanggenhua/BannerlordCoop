@@ -761,7 +761,10 @@ export async function run(config) {
                 assertStopped(stopped, initial ? 2 : undefined); summary.cleanupConfirmed = true;
             } catch (error) { summary.cleanupError = { message: error.message, stack: error.stack }; process.exitCode = 1; }
             if (summary.cleanupConfirmed) {
-                try { await collectLogs(true); }
+                try {
+                    await collectLogs(true);
+                    summary.finalAppliedEntries = assertSaleApplications(INSTANCES.map(instance => logState[instance].text), summary.sales);
+                }
                 catch (error) { summary.logVerificationError = error.message; process.exitCode = 1; }
             }
         }

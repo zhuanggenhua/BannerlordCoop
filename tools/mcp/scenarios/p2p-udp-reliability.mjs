@@ -182,7 +182,7 @@ export function assertProcessLogCompleteness(text, expectedPid) {
     assert.ok(Number.isSafeInteger(expectedPid) && expectedPid > 0, 'Missing actual expected PID for process log');
     assert.equal(typeof text, 'string', 'Process log is not text');
     assert.ok(text.length > 0, 'Process log is empty');
-    const prefixes = [...text.matchAll(/^\[\((\d+)\)\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3}\s+[^\]\n]+\]/gm)];
+    const prefixes = [...text.matchAll(/^\[\((\d+)\)\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3}\s+[^\]\r\n]+\]/gm)];
     assert.ok(prefixes.length > 0, 'Process log has no actual Serilog process prefix');
     const observedPids = [...new Set(prefixes.map(match => Number(match[1])))];
     assert.deepEqual(observedPids, [expectedPid], `Process log prefixes do not match expected PID ${expectedPid}`);
@@ -225,7 +225,7 @@ export function logDiagnostics(text) {
         duplicateIds: (text.match(/Duplicate id:|Generated duplicate id |Duplicate object handle:/gi) ?? []).length,
         aiBatch: (text.match(/(?:AI batch.*fail|Failed.*AI batch)/gi) ?? []).length,
         errorLines: text.split(/\r?\n/).filter(line => {
-            const prefix = line.match(/^\s*\[([^\]\n]*)\]/)?.[1];
+            const prefix = line.match(/^\s*\[([^\]\r\n]*)\]/)?.[1];
             return prefix !== undefined && /(?:^|\s)(?:ERR|FTL|ERROR|FATAL)(?:\s|$)/.test(prefix);
         }) };
 }
