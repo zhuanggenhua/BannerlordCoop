@@ -11,7 +11,9 @@ using GameInterface.Services.PartyComponents.Messages;
 using HarmonyLib;
 using Serilog;
 using System;
+using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Party.PartyComponents;
@@ -294,12 +296,17 @@ internal class PartyComponentHandler : IHandler
     {
         if (component != null) component.MobileParty = party;
         if (ReferenceEquals(party._partyComponent, component)) return;
+        bool published = manager.MobileParties.Any(value => ReferenceEquals(value, party));
         // Match SetPartyComponent's native partition bookkeeping without replaying
-        // component Finish/Create/Initialize side effects on an observer.
-        manager.BeforePartyComponentChanged(party);
+        // component Finish/Create/Initialize side effects on an observer. An unpublished
+        // party is inserted into its partition by the original AddMobileParty, once.
+        if (published) manager.BeforePartyComponentChanged(party);
         party._partyComponent = component;
         party.UpdatePartyComponentFlags();
-        manager.AfterPartyComponentChanged(party);
+        if (published) manager.AfterPartyComponentChanged(party);
+        if (!published)
+            Logger.Debug("Bound party component {PartyId} referenceHash {PartyReferenceHash} published {Published} component {ComponentType}",
+                party.StringId, RuntimeHelpers.GetHashCode(party), published, component?.GetType().FullName);
     }
 
     private void Handle_PartyComponentLeaderChanged(MessagePayload<PartyComponentLeaderChanged> payload)
