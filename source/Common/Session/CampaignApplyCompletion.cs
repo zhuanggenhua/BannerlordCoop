@@ -75,9 +75,9 @@ public sealed class CampaignApplyCompletion : IMessageApplyObserver
             catch (Exception ex)
             {
                 // Observation must never change the original broker/queue exception behavior.
+                var lease = identity.CurrentLease;
                 lock (gate)
                 {
-                    var lease = identity.CurrentLease;
                     if (!states.TryGetValue(lease, out var state)) states.Add(lease, state = new State());
                     state.Fault ??= "Apply continuation notification failed: " + ex;
                 }

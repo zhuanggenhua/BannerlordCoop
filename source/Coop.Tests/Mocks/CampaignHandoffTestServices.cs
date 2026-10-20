@@ -1,4 +1,6 @@
 ﻿using Common;
+using Common.Network;
+using LiteNetLib;
 using GameInterface.Services.CampaignAuthority;
 using Moq;
 using System;
@@ -7,6 +9,14 @@ namespace Coop.Tests.Mocks;
 
 internal static class CampaignHandoffTestServices
 {
+    public static NetPeer AuthenticateRoomPeer(Mock<INetwork> network)
+    {
+        var peer = new TestNetwork().CreatePeer();
+        network.As<IRoomHostPeerProvider>().Setup(value => value.IsCurrentRoomHostPeer(It.IsAny<NetPeer>()))
+            .Returns((NetPeer candidate) => ReferenceEquals(candidate, peer));
+        return peer;
+    }
+
     public static CampaignSchedulerCheckpoint Checkpoint() => new(0, 50, 0,
         Array.Empty<CampaignPeriodicTickerState>(), Array.Empty<CampaignPeriodicEventState>());
 

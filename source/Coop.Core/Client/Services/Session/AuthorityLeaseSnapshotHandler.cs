@@ -32,7 +32,7 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
     {
         internal AuthorityLease Source, Target;
         internal long Ticks; internal string Hash;
-        internal bool Installed, AckAttempted;
+        internal bool Installed, AckAttempted, MutationStarted;
     }
     private Installation installation;
     private sealed class DeferredSnapshot
@@ -60,8 +60,18 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
             if (pending != null) ApplySnapshotSafely(pending.Snapshot, pending.Peer);
         }, context: nameof(AuthorityLeaseSnapshotHandler));
     }
+    private bool CanApplyFromRoomPeer(NetPeer peer) => Volatile.Read(ref disposed) == 0 && peer != null &&
+        network is IRoomHostPeerProvider provider && provider.IsCurrentRoomHostPeer(peer);
+    private bool RequireCurrentSnapshotPeer(NetworkAuthorityLeaseSnapshot snapshot, NetPeer peer)
+    {
+        if (CanApplyFromRoomPeer(peer)) return true;
+        if (installation?.MutationStarted == true && installation.Target == snapshot.ToLease())
+            CampaignApplyCompletion.For(sessionIdentity).RecordFailure(installation.Source, "Room host peer or service lifetime changed during final snapshot installation.");
+        return false;
+    }
     private void ApplySnapshotSafely(NetworkAuthorityLeaseSnapshot snapshot, NetPeer peer)
     {
+        if (!RequireCurrentSnapshotPeer(snapshot, peer)) return;
         try { ApplySnapshotOnGameThread(snapshot, peer); }
         catch (System.Exception ex)
         {
@@ -99,6 +109,7 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
     {
         var snapshot = payload.What;
         var peer = payload.Who as NetPeer;
+        if (!CanApplyFromRoomPeer(peer)) return;
         LogMovementAckStage("snapshot-ingress", snapshot, peer);
         GameThread.EnqueueSafe(() => ApplySnapshotSafely(snapshot, peer), context: nameof(AuthorityLeaseSnapshotHandler));
         LogMovementAckStage("snapshot-queued", snapshot, peer);
@@ -152,8 +163,10 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
                 using (completion.ObserveSource(typeof(NetworkAuthorityLeaseSnapshot), checkpoint.SourceLease))
                 using (CampaignExecutionScope.Enter(CampaignExecutionPhase.CheckpointInstall))
                 {
-                    if (RejectMovementAck(!clock.TryApplyAuthorityHandoffBaseline(checkpoint.Ticks), "clock-baseline", snapshot, peer) ||
-                        RejectMovementAck(!install(), "movement-install", snapshot, peer)) return;
+                    installation.MutationStarted = true;
+                    if (RejectMovementAck(!clock.TryApplyAuthorityHandoffBaseline(checkpoint.Ticks), "clock-baseline", snapshot, peer)) return;
+                    if (!RequireCurrentSnapshotPeer(snapshot, peer)) return;
+                    if (RejectMovementAck(!install(), "movement-install", snapshot, peer)) return;
                     installation.Installed = true;
                 }
             }
@@ -164,6 +177,7 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
                 return;
             }
         }
+        if (!RequireCurrentSnapshotPeer(snapshot, peer)) return;
         if (!sessionIdentity.TryApply(lease, snapshot.RoomHostControllerId))
         {
             LogMovementAckStage("snapshot-rejected-session-apply", snapshot, peer);
@@ -177,7 +191,7 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
 
         if (lease.IsPaused && movement != null && network != null && controller != null)
         {
-            if (installation.AckAttempted) return;
+            if (!RequireCurrentSnapshotPeer(snapshot, peer) || installation.AckAttempted) return;
             installation.AckAttempted = true;
             LogMovementAckStage("send-call-delivery-unconfirmed", snapshot, peer);
             network.SendAll(new NetworkCampaignMovementBaselineApplied(lease, controller.ControllerId, snapshot.MovementCheckpoint));

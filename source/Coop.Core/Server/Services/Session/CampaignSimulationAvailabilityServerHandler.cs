@@ -221,6 +221,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             return;
         }
 
+        // A receive callback may have entered before Dispose and resumed after peer-map cleanup.
+        if (Volatile.Read(ref disposed) != 0) return;
         var report = payload.What;
         ForgetSupersededPeerReports(peer, player.ControllerId);
         if (!coordinator.Report(player.ControllerId, report.Availability, report.Revision))
@@ -401,7 +403,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
 
     private void ReconcileLease(CampaignAuthoritySelection selection)
     {
-        if (!ModInformation.IsListenAuthority || network == null || sessionIdentity == null ||
+        if (Volatile.Read(ref disposed) != 0 || !ModInformation.IsListenAuthority || network == null || sessionIdentity == null ||
             !IsCampaignInitializationReady()) return;
 
         if (!GameThread.Instance.IsGameThread)
@@ -779,6 +781,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
 
     private void Handle_FreezeAcknowledged(MessagePayload<NetworkCampaignAuthorityFreezeAcknowledged> payload)
     {
+        if (Volatile.Read(ref disposed) != 0) return;
         if (payload.Who is not NetPeer peer)
         {
             LogFreezeAckStage("ingress-rejected-non-peer", null, payload.What);
@@ -800,6 +803,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
 
     private void ApplyFreezeAcknowledgement(NetPeer peer, NetworkCampaignAuthorityFreezeAcknowledged ack)
     {
+        if (Volatile.Read(ref disposed) != 0) return;
         LogFreezeAckStage("game-thread", peer, ack);
         Player player = null;
         if (RejectFreezeAck(!ModInformation.IsListenAuthority, "session-mode", peer, ack) ||
@@ -907,6 +911,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             }
             if (RejectFreezeAck(!CampaignApplyCompletion.For(sessionIdentity).CanAcknowledgeThrough(lease, out _),
                 "checkpoint-descendants-incomplete-or-faulted", peer, ack)) return;
+            if (Volatile.Read(ref disposed) != 0) return;
             finalMovementCheckpoint = ack.MovementCheckpoint;
             if (RejectFreezeAck(!TryCommitLease(lease, string.Empty, isPaused: true), "paused-lease-commit", peer, ack)) return;
             hasPendingFreeze = false;

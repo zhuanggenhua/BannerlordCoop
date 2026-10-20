@@ -1,5 +1,8 @@
 ﻿using Common;
 using Common.Messaging;
+using Common.Network;
+using Coop.Tests.Mocks;
+using Moq;
 using Common.Network.Session;
 using Common.Serialization;
 using Common.Session;
@@ -42,7 +45,8 @@ public class CampaignAuthoritySyncEnvelopeClientHandlerTests
         var applied = new System.Collections.Generic.List<int>();
         broker.Subscribe<CoopNetworkBaseTests.AuthorityProbeMessage>(payload => applied.Add(payload.What.Value));
         using var envelopes = new CampaignAuthoritySyncEnvelopeClientHandler(broker, identity, serializer);
-        using var snapshots = new AuthorityLeaseSnapshotHandler(broker, identity);
+        var network = new Mock<INetwork>();var roomPeer = CampaignHandoffTestServices.AuthenticateRoomPeer(network);
+        using var snapshots = new AuthorityLeaseSnapshotHandler(broker, identity, network: network.Object);
         using var entered = new System.Threading.ManualResetEventSlim();
         using var release = new System.Threading.ManualResetEventSlim();
 
@@ -55,9 +59,9 @@ public class CampaignAuthoritySyncEnvelopeClientHandlerTests
         {
             Assert.True(entered.Wait(System.TimeSpan.FromSeconds(5)));
             broker.Publish(this, CreateEnvelope(serializer, "authority-a", 4, 1, 41));
-            broker.Publish(this, new NetworkAuthorityLeaseSnapshot(
+            broker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(
                 new AuthorityLease("room-a", "authority-paused", string.Empty, 5, isPaused: true), "host"));
-            broker.Publish(this, new NetworkAuthorityLeaseSnapshot(
+            broker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(
                 new AuthorityLease("room-a", "authority-b", "host", 6), "host"));
             broker.Publish(this, CreateEnvelope(serializer, "authority-b", 6, 1, 61));
         }

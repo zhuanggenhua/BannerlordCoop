@@ -147,4 +147,36 @@ public class CampaignApplyCompletionTests : IDisposable
         Assert.Throws<InvalidOperationException>(() => Completion.ObserveSource(typeof(Result), other));
         Assert.Equal(CampaignApplyStatus.Faulted, Completion.GetStatusThrough(other, out _));
     }
+    [Fact]
+    public void ProgressFailureNeverHoldsCompletionGateWhileWaitingForSessionGate()
+    {
+        var inner = new SessionIdentity(); Assert.True(inner.TryApply(lease, "a"));
+        using var sessionHeld = new ManualResetEventSlim(); using var release = new ManualResetEventSlim();
+        using var getterEntered = new ManualResetEventSlim();
+        var proxy = new Moq.Mock<ISessionIdentity>();
+        proxy.SetupGet(value => value.CurrentLease).Returns(() => { getterEntered.Set(); return inner.CurrentLease; });
+        var observed = CampaignApplyCompletion.For(proxy.Object);
+        observed.Progressed += () => throw new InvalidOperationException("notification failure");
+        var holder = Task.Factory.StartNew(() => inner.TryExecuteWithLease(lease, () =>
+        { sessionHeld.Set(); Assert.True(release.Wait(TimeSpan.FromSeconds(5))); }), CancellationToken.None,
+            TaskCreationOptions.LongRunning, TaskScheduler.Default);
+        Task? notifier = null; Task<bool>? probe = null;
+        try
+        {
+            Assert.True(sessionHeld.Wait(TimeSpan.FromSeconds(5)));
+            notifier = Task.Factory.StartNew(() => observed.RecordFailure(lease, "initial failure"), CancellationToken.None,
+                TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            Assert.True(getterEntered.Wait(TimeSpan.FromSeconds(5)));
+            probe = Task.Factory.StartNew(() => observed.CanAcknowledgeThrough(lease, out _), CancellationToken.None,
+                TaskCreationOptions.LongRunning, TaskScheduler.Default);
+            Assert.True(probe.Wait(TimeSpan.FromSeconds(1)), "Completion gate was held while the session gate was blocked.");
+            Assert.False(probe.Result);
+        }
+        finally
+        {
+            release.Set(); Assert.True(holder.Wait(TimeSpan.FromSeconds(5)));
+            Assert.True(notifier == null || notifier.Wait(TimeSpan.FromSeconds(5)));
+            Assert.True(probe == null || probe.Wait(TimeSpan.FromSeconds(5)));
+        }
+    }
 }

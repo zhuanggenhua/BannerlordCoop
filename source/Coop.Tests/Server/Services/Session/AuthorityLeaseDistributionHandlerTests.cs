@@ -133,12 +133,13 @@ public class AuthorityLeaseDistributionHandlerTests
     {
         var messageBroker = new TestMessageBroker();
         var identity = new SessionIdentity();
-        using var handler = new AuthorityLeaseSnapshotHandler(messageBroker, identity);
+        var snapshotNetwork = new Mock<INetwork>();var roomPeer = CampaignHandoffTestServices.AuthenticateRoomPeer(snapshotNetwork);
+        using var handler = new AuthorityLeaseSnapshotHandler(messageBroker, identity, network: snapshotNetwork.Object);
         var snapshot = new NetworkAuthorityLeaseSnapshot(
             new AuthorityLease("room-a", "authority-a", "controller-a", 1));
 
-        messageBroker.Publish(new object(), snapshot);
-        messageBroker.Publish(new object(), new NetworkAuthorityLeaseSnapshot(
+        messageBroker.Publish(roomPeer, snapshot);
+        messageBroker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(
             new AuthorityLease("room-a", "authority-stale", "controller-stale", 0)));
         GameThread.Run(() => { }, blocking: true);
 
@@ -153,13 +154,14 @@ public class AuthorityLeaseDistributionHandlerTests
     {
         var messageBroker = new TestMessageBroker();
         var identity = new SessionIdentity();
-        using var handler = new AuthorityLeaseSnapshotHandler(messageBroker, identity);
+        var snapshotNetwork = new Mock<INetwork>();var roomPeer = CampaignHandoffTestServices.AuthenticateRoomPeer(snapshotNetwork);
+        using var handler = new AuthorityLeaseSnapshotHandler(messageBroker, identity, network: snapshotNetwork.Object);
         var activeLease = new AuthorityLease("room-a", "authority-a", "controller-a", 1);
-        messageBroker.Publish(this, new NetworkAuthorityLeaseSnapshot(activeLease, "controller-a"));
+        messageBroker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(activeLease, "controller-a"));
 
         var pausedLease = new AuthorityLease("room-a", "authority-paused", string.Empty, 2, isPaused: true);
-        messageBroker.Publish(this, new NetworkAuthorityLeaseSnapshot(pausedLease, "controller-a"));
-        messageBroker.Publish(this, new NetworkAuthorityLeaseSnapshot(activeLease, "controller-a"));
+        messageBroker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(pausedLease, "controller-a"));
+        messageBroker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(activeLease, "controller-a"));
 
         GameThread.Run(() => { }, blocking: true);
         Assert.Equal(pausedLease, identity.CurrentLease);

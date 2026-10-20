@@ -35,3 +35,12 @@ Critical party behavior mapper/party-reference/snapshot failure now marks the cu
 
 
 Snapshot progress is also retained locally: the original server clears a successfully sent lease broadcast and does not normally resend it. Therefore a single deferred snapshot is resumed by the same session receipt's Progressed notification, marshalled once onto GameThread; completion-before-subscription is rechecked, failure stops, and Dispose removes the notification. No extra network resend is needed. The actual queue test proves descendants still see the old source lease and the paused receipt is emitted once after their completion. Redelivery only tests installation/send idempotence.
+
+
+## Peer provenance and service lifetime review repair
+
+The transport already owns the connection identity: CoopClient.IRoomHostPeerProvider checks exact room-peer reference, connected state and transport disposal. MessagePacketHandler's ingress role checks do not guarantee that peer remains current when queued work runs. Snapshot entry, actual game-thread apply, resumed apply, post-clock install, lease commit and ACK now revalidate that existing provider and service lifetime. Missing provider/source fails closed; tests explicitly bind a current real test peer instead of admitting this/null sources through a production fallback. An optional-network test now correctly requires no lease application when authentication is unavailable.
+
+Service disposal invalidates already queued Freeze ACK and lease reconciliation as well as receive callbacks that entered before Dispose. The test uses a real in-flight availability callback around Dispose and the queued valid ACK; it does not directly repopulate private mappings. Prior plain-Dispose ACK behavior already refused via cleared mappings and is not falsely described as the discovered failure. Snapshot tests cover replacement with unchanged room/lease/controller strings, queued initial disposal and pending descendant replacement/disposal. The original Network/Registry/movement algorithms remain unchanged.
+
+The notification-error fallback reads SessionIdentity before acquiring the completion ledger gate, preserving the established session→completion lock order. A bounded two-thread test holds the real session gate, triggers a throwing notification, and proves another completion-state read remains available. The previous production implementation fails that test; no production timeout is extended.

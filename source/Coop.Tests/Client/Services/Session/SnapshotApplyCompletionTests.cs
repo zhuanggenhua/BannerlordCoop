@@ -33,15 +33,15 @@ public class SnapshotApplyCompletionTests
         var clock = new Mock<IMapTimeTrackerInterface>();
         clock.Setup(value => value.TryApplyAuthorityHandoffBaseline(777)).Returns(() => clockThrows
             ? throw new InvalidOperationException("clock failed") : true);
-        var network = new Mock<INetwork>(); var controller = new ControllerIdProvider(); controller.SetControllerId("a");
+        var network = new Mock<INetwork>(); var roomPeer = CampaignHandoffTestServices.AuthenticateRoomPeer(network); var controller = new ControllerIdProvider(); controller.SetControllerId("a");
         using var handler = new AuthorityLeaseSnapshotHandler(broker, identity, movement.Object, clock.Object,
             network.Object, controller, CampaignHandoffTestServices.Drained());
-        broker.Publish(this, new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint));
+        broker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint));
         GameThread.Run(() => { }, blocking: true);
         Assert.Equal(Source, identity.CurrentLease);
         Assert.False(CampaignApplyCompletion.For(identity).CanAcknowledgeThrough(Paused, out var reason));
         Assert.Contains(clockThrows ? "clock failed" : "movement failed", reason);
-        broker.Publish(this, new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint));
+        broker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint));
         GameThread.Run(() => { }, blocking: true);
         clock.Verify(value => value.TryApplyAuthorityHandoffBaseline(777), Times.Once());
         network.Verify(value => value.SendAll(It.IsAny<IMessage>()), Times.Never());
@@ -65,17 +65,17 @@ public class SnapshotApplyCompletionTests
         };
         var movement = new Mock<ICampaignMovementCheckpointService>(); movement.Setup(value => value.TryPrepare(checkpoint, Source, 777, out install)).Returns(true);
         var clock = new Mock<IMapTimeTrackerInterface>(); clock.Setup(value => value.TryApplyAuthorityHandoffBaseline(777)).Returns(true);
-        var network = new Mock<INetwork>(); var controller = new ControllerIdProvider(); controller.SetControllerId("a");
+        var network = new Mock<INetwork>(); var roomPeer = CampaignHandoffTestServices.AuthenticateRoomPeer(network); var controller = new ControllerIdProvider(); controller.SetControllerId("a");
         using var handler = new AuthorityLeaseSnapshotHandler(broker, identity, movement.Object, clock.Object,
             network.Object, controller, CampaignHandoffTestServices.Drained());
         var snapshot = new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint);
-        broker.Publish(this, snapshot);
+        broker.Publish(roomPeer, snapshot);
         GameThread.Run(() => { }, blocking: true); GameThread.Run(() => { }, blocking: true); GameThread.Run(() => { }, blocking: true);
         Assert.True(descendant); Assert.True(descendantSawSource);
         GameThread.Run(() => { }, blocking: true);
         Assert.Equal(Paused, identity.CurrentLease); Assert.Equal(1, installs);
         network.Verify(value => value.SendAll(It.IsAny<NetworkCampaignMovementBaselineApplied>()), Times.Once());
-        broker.Publish(this, snapshot); GameThread.Run(() => { }, blocking: true);
+        broker.Publish(roomPeer, snapshot); GameThread.Run(() => { }, blocking: true);
         Assert.Equal(1, installs);
         clock.Verify(value => value.TryApplyAuthorityHandoffBaseline(777), Times.Once());
         network.Verify(value => value.SendAll(It.IsAny<NetworkCampaignMovementBaselineApplied>()), Times.Once());
@@ -84,13 +84,14 @@ public class SnapshotApplyCompletionTests
     public void InitialLeaseCannotPassUnconfirmedPendingApplyOrLaunderItsFailure()
     {
         using var broker = new MessageBroker(); var identity = new SessionIdentity();
-        using var handler = new AuthorityLeaseSnapshotHandler(broker, identity);
+        var network = new Mock<INetwork>(); var roomPeer = CampaignHandoffTestServices.AuthenticateRoomPeer(network);
+        using var handler = new AuthorityLeaseSnapshotHandler(broker, identity, network: network.Object);
         bool descendantSawUnconfirmed = false;
         GameThread.Run(() =>
         {
             using (CampaignApplyCompletion.For(identity).Observe(typeof(SnapshotApplyCompletionTests)))
                 GameThread.EnqueueSafe(() => GameThread.EnqueueSafe(() => descendantSawUnconfirmed = !identity.IsConfirmed));
-            broker.Publish(this, new NetworkAuthorityLeaseSnapshot(Source, "a"));
+            broker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(Source, "a"));
         }, blocking: true);
         GameThread.Run(() => { }, blocking: true); GameThread.Run(() => { }, blocking: true);
         GameThread.Run(() => { }, blocking: true);
@@ -102,9 +103,10 @@ public class SnapshotApplyCompletionTests
     public void InitialLeaseCannotLaunderAFailedUnconfirmedApply()
     {
         using var broker = new MessageBroker(); var identity = new SessionIdentity();
-        using var handler = new AuthorityLeaseSnapshotHandler(broker, identity);
+        var network = new Mock<INetwork>(); var roomPeer = CampaignHandoffTestServices.AuthenticateRoomPeer(network);
+        using var handler = new AuthorityLeaseSnapshotHandler(broker, identity, network: network.Object);
         CampaignApplyCompletion.For(identity).RecordFailure(default, "initial graph apply failed");
-        broker.Publish(this, new NetworkAuthorityLeaseSnapshot(Source, "a"));
+        broker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(Source, "a"));
         GameThread.Run(() => { }, blocking: true);
         Assert.False(identity.IsConfirmed);
         Assert.False(CampaignApplyCompletion.For(identity).CanAcknowledgeThrough(Source, out var reason));

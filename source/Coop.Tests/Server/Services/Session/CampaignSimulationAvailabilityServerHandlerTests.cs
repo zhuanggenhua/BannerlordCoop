@@ -395,11 +395,12 @@ public class CampaignSimulationAvailabilityServerHandlerTests
 
     private sealed record NestedCriticalApply : ICampaignAuthorityScopedMessage;
     [Theory]
-    [InlineData(false, false, false)]
-    [InlineData(true, false, false)]
-    [InlineData(true, true, false)]
-    [InlineData(true, true, true)]
-    public void TransfersToPreparedGuestAndRequiresFrozenCheckpointBeforeReturnOrAllAwayPause(bool hostReturnsImmediately, bool nestedAck, bool corruptRetainedAck)
+    [InlineData(false, false, false, false)]
+    [InlineData(true, false, false, false)]
+    [InlineData(true, true, false, false)]
+    [InlineData(true, true, true, false)]
+    [InlineData(true, true, false, true)]
+    public void TransfersToPreparedGuestAndRequiresFrozenCheckpointBeforeReturnOrAllAwayPause(bool hostReturnsImmediately, bool nestedAck, bool corruptRetainedAck, bool disposeQueuedAck)
     {
         var previousMode = ModInformation.SessionMode;
         ModInformation.SessionMode = SessionMode.ListenAuthority;
@@ -582,13 +583,54 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                 GameThread.Run(() =>
                 {
                     var source = identity.CurrentLease;
-                    messageBroker.Publish(guestPeer, new NetworkCampaignAuthoritySyncEnvelope(source.RoomId, source.AuthorityId,
-                        source.AuthorityControllerId, source.Epoch, 1, new byte[] { 1 }));
-                    messageBroker.Publish(guestPeer, finalAck);
+                    if (!disposeQueuedAck)
+                    {
+                        messageBroker.Publish(guestPeer, new NetworkCampaignAuthoritySyncEnvelope(source.RoomId, source.AuthorityId,
+                            source.AuthorityControllerId, source.Epoch, 1, new byte[] { 1 }));
+                        messageBroker.Publish(guestPeer, finalAck);
+                    }
+                    else
+                    {
+                        finalDeltaApplied = true;
+                        using var reportEntered = new System.Threading.ManualResetEventSlim();
+                        using var releaseReport = new System.Threading.ManualResetEventSlim();
+                        int reportThread = 0;
+                        connections.Setup(value => value.HasCompletedCampaignSynchronization(guestPeer)).Callback(() =>
+                        {
+                            if (System.Threading.Thread.CurrentThread.ManagedThreadId != reportThread) return;
+                            reportEntered.Set(); Assert.True(releaseReport.Wait(System.TimeSpan.FromSeconds(5)));
+                        }).Returns(true);
+                        // A real already-entered receive callback may finish after Dispose clears peer mappings.
+                        var inFlightReport = System.Threading.Tasks.Task.Factory.StartNew(() =>
+                        {
+                            reportThread = System.Threading.Thread.CurrentThread.ManagedThreadId;
+                            messageBroker.Publish(guestPeer, new NetworkCampaignSimulationAvailabilityReport(
+                                CampaignSimulationAvailability.Unavailable, 3));
+                        }, System.Threading.CancellationToken.None, System.Threading.Tasks.TaskCreationOptions.LongRunning,
+                            System.Threading.Tasks.TaskScheduler.Default);
+                        try
+                        {
+                            Assert.True(reportEntered.Wait(System.TimeSpan.FromSeconds(5)));
+                            messageBroker.Publish(guestPeer, finalAck); // Queued while service is still active.
+                            handler.Dispose();
+                        }
+                        finally
+                        {
+                            releaseReport.Set(); Assert.True(inFlightReport.Wait(System.TimeSpan.FromSeconds(5)));
+                        }
+                    }
                 }, blocking: true);
                 GameThread.Run(() => { }, blocking: true); GameThread.Run(() => { }, blocking: true);
                 GameThread.Run(() => { }, blocking: true);
                 Assert.True(finalDeltaApplied);
+                if (disposeQueuedAck)
+                {
+                    Assert.Equal(3, identity.Epoch); Assert.Equal("guest", identity.AuthorityControllerId);
+                    sessions.Verify(value => value.TryApply(sessionCheckpoint), Times.Never());
+                    network.Verify(value => value.SendAll(It.Is<NetworkAuthorityLeaseSnapshot>(value =>
+                        !value.IsPaused && value.AuthorityControllerId == "host" && value.Epoch == 5)), Times.Never());
+                    return;
+                }
                 // No second Freeze ACK is sent. Existing reconciliation resumes the retained one.
                 if (corruptRetainedAck) finalAck.AllocationCheckpoint.TypeCounters["mutated-after-receive"] = 1;
                 handler.OnAvailabilityTimer(); GameThread.Run(() => { }, blocking: true);
