@@ -1,4 +1,10 @@
-﻿using Coop.Core.Server.Services.Instances;
+﻿using Common;
+using Common.Tests.Utils;
+using Coop.Core.Server;
+using Coop.Core.Server.Services.Instances;
+using Coop.Core.Server.Services.Instances.Handlers;
+using Coop.Tests.Mocks;
+using Missions.Messages;
 using GameInterface.Services.Entity;
 using GameInterface.Services.Missions;
 using GameInterface.Services.Players;
@@ -7,11 +13,13 @@ using LiteNetLib;
 using Moq;
 using System;
 using System.Net;
+using System.Linq;
 using System.Reflection;
 using Xunit;
 
 namespace Coop.Tests.Server.Services.Instances;
 
+[Collection(ModInformationRoleCollection.Name)]
 public class LocalMissionEndpointTests
 {
     [Fact]
@@ -76,6 +84,78 @@ public class LocalMissionEndpointTests
         Assert.False(manager.TryEnterMission(endpoint, "second", out _));
         Assert.True(manager.CompleteInstanceConclusion("second", succeeded: false));
         Assert.True(manager.TryLeaveMission(endpoint, "second", out _));
+    }
+
+    [Fact]
+    public void LocalEntryRepliesLocallyAndIntroducesTheRegisteredRemoteMember()
+    {
+        var previous = ModInformation.SessionMode;
+        ModInformation.SessionMode = SessionMode.ListenAuthority;
+        try
+        {
+            var players = new Mock<IPlayerManager>();
+            var localPlayer = new Player("A", "heroA", "partyA", "clanA", "characterA");
+            players.Setup(value => value.TryGetPlayer("A", out localPlayer)).Returns(true);
+            var controller = new Mock<IControllerIdProvider>();
+            controller.SetupGet(value => value.ControllerId).Returns("A");
+            var manager = new MissionManager(players.Object, controller.Object);
+            var remote = CreatePeer();
+            Assert.True(manager.TryEnterMission(remote, "B", "battle", out var remoteEntry));
+            var broker = new TestMessageBroker();
+            var network = new TestNetwork();
+            using var handler = new ServerMissionMembershipHandler(broker, manager, network, players.Object, null, controller.Object);
+            broker.Publish(new LocalPlayerEndpoint("A"), new NetworkMissionEntered("ignored", "battle"));
+            GameThread.Run(() => { }, blocking: true);
+            var credential = Assert.Single(broker.Messages.GetMessages<NetworkMissionCredentialIssued>());
+            Assert.NotEqual(Guid.Empty, credential.PeerCredential);
+            var introduction = Assert.Single(broker.Messages.GetMessages<NetworkMissionPeerEntered>());
+            Assert.Equal("B", introduction.ControllerId);
+            Assert.Equal(remoteEntry.PeerCredential, introduction.PeerCredential);
+            var remoteIntroduction = Assert.Single(network.GetPeerMessagesFromType<NetworkMissionPeerEntered>(remote));
+            Assert.Equal("A", remoteIntroduction.ControllerId);
+            Assert.Equal(credential.PeerCredential, remoteIntroduction.PeerCredential);
+            Assert.True(manager.TryGetControllers("battle", out var members));
+            Assert.Equal(2, members.Count);
+        }
+        finally { ModInformation.SessionMode = previous; }
+    }
+
+    [Fact]
+    public void LocalDiscoveryRequiresMembershipAndUsesTheIssuedCredential()
+    {
+        var manager = CreateManager();
+        var endpoint = new LocalPlayerEndpoint("A");
+        var request = Guid.NewGuid();
+        Assert.False(manager.TryAuthorizeIntroduction(endpoint, "battle", request, out _));
+        Assert.True(manager.TryEnterMission(endpoint, "battle", out var entry));
+        Assert.True(manager.TryAuthorizeIntroduction(endpoint, "battle", request, out var token));
+        Assert.True(manager.TryAuthorizeIntroduction(endpoint, "battle", request, out var repeated));
+        Assert.Equal(token, repeated);
+        var nat = new NetManager(null);
+        var local = new IPEndPoint(IPAddress.Loopback, 52811);
+        manager.HandleIntroductionRequest(nat.NatPunchModule, local, local, token);
+        Assert.Equal(1, manager.GetDiagnostics().PunchEndpoints);
+        manager.HandleIntroductionRequest(nat.NatPunchModule, local, local, token);
+        Assert.Equal(1, manager.GetDiagnostics().PunchEndpoints);
+        Assert.True(manager.TryLeaveMission(endpoint, "battle", out _));
+        Assert.Equal(0, manager.GetDiagnostics().PunchEndpoints);
+        manager.HandleIntroductionRequest(nat.NatPunchModule, local, local, token);
+        Assert.Equal(0, manager.GetDiagnostics().PunchEndpoints);
+    }
+
+    [Fact]
+    public void LocalRoomControlDispatchesTheConcreteMessageWithoutSendingToAPeer()
+    {
+        var broker = new Common.Messaging.MessageBroker();
+        var server = new Mock<ICoopServer>(MockBehavior.Strict);
+        var controller = new Mock<IControllerIdProvider>();
+        controller.SetupGet(value => value.ControllerId).Returns("A");
+        object receivedSource = null;
+        broker.Subscribe<NetworkMissionEntered>(payload => receivedSource = payload.Who);
+        var room = new LocalMissionRoomNetwork(server.Object, broker, controller.Object, CreateManager());
+        room.SendAll(new NetworkMissionEntered("A", "battle"));
+        Assert.Equal("A", Assert.IsType<LocalPlayerEndpoint>(receivedSource).ControllerId);
+        server.VerifyNoOtherCalls();
     }
 
     private static MissionManager CreateManager(bool registered = true)

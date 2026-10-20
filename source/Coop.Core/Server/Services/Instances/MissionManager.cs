@@ -31,9 +31,11 @@ public interface IMissionManager
 
     /// <summary>Authorize one NAT punch on the requesting campaign session.</summary>
     bool TryAuthorizeIntroduction(NetPeer peer, string controllerId, string instanceId, Guid requestId, out string token);
+    bool TryAuthorizeIntroduction(LocalPlayerEndpoint endpoint, string instanceId, Guid requestId, out string token);
 
     /// <summary>Resolve a relay target only when source and target are current members of the named instance.</summary>
     bool TryGetRelayTarget(NetPeer sourcePeer, string instanceId, string controllerId, out NetPeer peer);
+    bool TryGetRelayTarget(LocalPlayerEndpoint source, string instanceId, string controllerId, out NetPeer peer);
 
     /// <summary>Immediately fence relay traffic tied to a peer before its queued leave or disconnect.</summary>
     void RevokeRelay(NetPeer peer);
@@ -260,15 +262,16 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
     /// <summary>Latest mission punch authorization for one controller's campaign session.</summary>
     private sealed class IntroductionAuthorization
     {
-        public NetPeer Peer { get; }
+        public MissionPlayerEndpoint Endpoint { get; }
+        public NetPeer Peer => Endpoint.Peer;
         public Guid RequestId { get; }
         public string Token { get; }
         public ConnectionToken DiscoveryToken { get; }
         public bool Punched { get; set; }
 
-        public IntroductionAuthorization(NetPeer peer, Guid requestId, ConnectionToken discoveryToken)
+        public IntroductionAuthorization(MissionPlayerEndpoint endpoint, Guid requestId, ConnectionToken discoveryToken)
         {
-            Peer = peer;
+            Endpoint = endpoint;
             RequestId = requestId;
             Token = Guid.NewGuid().ToString("N");
             DiscoveryToken = discoveryToken;
@@ -320,7 +323,7 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
                 authorization.DiscoveryToken.InstanceId != instanceId ||
                 authorization.DiscoveryToken.PeerCredential != peerCredential)
             {
-                authorization = new IntroductionAuthorization(peer, requestId,
+                authorization = new IntroductionAuthorization(new RemotePeerEndpoint(controllerId, peer), requestId,
                     new ConnectionToken(controllerId, instanceId, peerCredential));
                 introductionAuthorizations[controllerId] = authorization;
             }
@@ -328,6 +331,42 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
             token = authorization.Token;
             return true;
         }
+    }
+
+    public bool TryAuthorizeIntroduction(LocalPlayerEndpoint endpoint, string instanceId, Guid requestId, out string token)
+    {
+        token = null;
+        if (!IsRegisteredLocal(endpoint) || requestId == Guid.Empty || string.IsNullOrEmpty(instanceId) ||
+            endpoint.ControllerId.Contains("%") || instanceId.Contains("%") ||
+            endpoint.ControllerId.Length + instanceId.Length + 34 > NatPunchModule.MaxTokenLength)
+            return false;
+        lock (gate)
+        {
+            PruneExpired(DateTime.UtcNow);
+            if (IsConclusionFenced(instanceId) || !byController.TryGetValue(endpoint.ControllerId, out var membership) ||
+                membership.Endpoint is not LocalPlayerEndpoint || membership.Instance.Id != instanceId)
+                return false;
+            if (!introductionAuthorizations.TryGetValue(endpoint.ControllerId, out var authorization) ||
+                authorization.Endpoint is not LocalPlayerEndpoint || authorization.RequestId != requestId ||
+                authorization.DiscoveryToken.InstanceId != instanceId ||
+                authorization.DiscoveryToken.PeerCredential != membership.PeerCredential)
+            {
+                authorization = new IntroductionAuthorization(endpoint, requestId,
+                    new ConnectionToken(endpoint.ControllerId, instanceId, membership.PeerCredential));
+                introductionAuthorizations[endpoint.ControllerId] = authorization;
+            }
+            token = authorization.Token;
+            return true;
+        }
+    }
+
+    private bool IsCurrentIntroduction(IntroductionAuthorization authorization)
+    {
+        if (authorization == null || authorization.Punched) return false;
+        if (authorization.Endpoint is LocalPlayerEndpoint local) return IsRegisteredLocal(local);
+        return !disconnectedPeers.TryGetValue(authorization.Peer, out _) &&
+            playerManager.TryGetPeer(authorization.DiscoveryToken.ControllerId, out var currentPeer) &&
+            ReferenceEquals(currentPeer, authorization.Peer);
     }
 
     public void HandleIntroductionRequest(
@@ -344,18 +383,17 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
             PruneExpired(DateTime.UtcNow);
             // Validation and insertion share the disconnect gate; a retired session cannot repunch.
             var authorization = introductionAuthorizations.Values.FirstOrDefault(candidate => candidate.Token == token);
-            if (authorization == null || authorization.Punched ||
-                disconnectedPeers.TryGetValue(authorization.Peer, out _) ||
-                !playerManager.TryGetPeer(authorization.DiscoveryToken.ControllerId, out var campaignPeer) ||
-                !ReferenceEquals(campaignPeer, authorization.Peer))
+            if (!IsCurrentIntroduction(authorization))
             {
                 Logger.Debug("Ignoring NAT introduction without a current campaign authorization");
                 return;
             }
 
+            var campaignPeer = authorization.Peer;
             var connectionToken = authorization.DiscoveryToken;
             if (connectionToken.PeerCredential != Guid.Empty &&
-                (!byPeer.TryGetValue(campaignPeer, out var membership) ||
+                (!byController.TryGetValue(connectionToken.ControllerId, out var membership) ||
+                 !ReferenceEquals(membership.Peer, campaignPeer) ||
                  membership.ControllerId != connectionToken.ControllerId ||
                  membership.Instance.Id != connectionToken.InstanceId ||
                  membership.PeerCredential != connectionToken.PeerCredential))
@@ -430,6 +468,21 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
             }
 
             peer = targetMembership.Peer;
+            return peer != null;
+        }
+    }
+
+    public bool TryGetRelayTarget(LocalPlayerEndpoint source, string instanceId, string controllerId, out NetPeer peer)
+    {
+        peer = null;
+        if (!IsRegisteredLocal(source) || string.IsNullOrEmpty(instanceId) || string.IsNullOrEmpty(controllerId)) return false;
+        lock (gate)
+        {
+            if (!byController.TryGetValue(source.ControllerId, out var membership) ||
+                membership.Endpoint is not LocalPlayerEndpoint || membership.Instance.Id != instanceId ||
+                !byController.TryGetValue(controllerId, out var target) ||
+                !ReferenceEquals(membership.Instance, target.Instance) || IsRelayRevoked(target)) return false;
+            peer = target.Peer;
             return peer != null;
         }
     }

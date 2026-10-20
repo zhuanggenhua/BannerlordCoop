@@ -66,6 +66,8 @@ public class ServerModule : CommonModule
         builder.RegisterType<ServerContext>().AsSelf().InstancePerLifetimeScope();
         builder.RegisterType<ServerLogic>().As<IServerLogic>().As<ILogic>().InstancePerLifetimeScope();
         builder.RegisterType<CoopServer>().As<ICoopServer>().As<INetwork>().As<INetEventListener>().InstancePerLifetimeScope();
+        if (ModInformation.IsListenAuthority)
+            builder.RegisterType<LocalMissionRoomNetwork>().As<IRelayNetwork>().InstancePerLifetimeScope();
         builder.RegisterType<UdpBindDiagnostics>().As<IUdpBindDiagnostics>().InstancePerDependency();
         builder.RegisterType<SendCoalescer>().As<ISendCoalescer>().InstancePerLifetimeScope();
         builder.RegisterType<CoopSaveManager>().As<ICoopSaveManager>().InstancePerLifetimeScope();
