@@ -82,6 +82,7 @@ export function summarizeMovement(probes, clocks, kinds) {
             const input = inputs[n], end = inputs[n + 1]?.stopwatchTicks ?? Infinity;
             const local = probe.rows.filter(row => row.partyId === input.partyId && row.stopwatchTicks >= input.stopwatchTicks &&
                 row.stopwatchTicks < end);
+            const adopted = local.find(row => row.kind === 'input_exit' && row.observationId === input.observationId && targetMatches(input, row));
             const previousVisual = probe.rows.filter(row => row.kind === kinds.visual && row.partyId === input.partyId &&
                 row.stopwatchTicks < input.stopwatchTicks).at(-1);
             const first = kind => local.find(row => row.kind === kind && (kind === kinds.visual ?
@@ -104,6 +105,7 @@ export function summarizeMovement(probes, clocks, kinds) {
                     row.visualY - priorRemoteVisual.visualY) > 0.00001);
             observations.push({ pid: probe.clock.pid, actor: input.actorController, partyId: input.partyId, inputSeq: input.seq,
                 target: { x: input.targetX, y: input.targetY },
+                localTargetAdoptionMs: adopted ? (adopted.stopwatchTicks - input.stopwatchTicks) * 1000 / clock.frequency : null,
                 localSimulationMs: simulation ? (simulation.stopwatchTicks - input.stopwatchTicks) * 1000 / clock.frequency : null,
                 localVisualStateMs: visual ? (visual.stopwatchTicks - input.stopwatchTicks) * 1000 / clock.frequency : null,
                 localSimulationFrames: simulation ? simulation.engineFrame - input.engineFrame : null,
