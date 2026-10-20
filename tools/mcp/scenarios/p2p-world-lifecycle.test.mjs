@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { captureProcessIdentities, collectSessionLogs, hasCompleteSessionEvidence, stopSession, options, assertSemantic, assertPersistent, assertCycles, assertCycleWindow, assertSchedulerHandoff, assertColdLease, freshSaveName, combineCyclePages } from './p2p-world-lifecycle.mjs';
+import { captureProcessIdentities, collectSessionLogs, hasCompleteSessionEvidence, stopSession, options, assertSemantic, assertPersistent, assertPreHandoffSemantic, completeNaturalDayHandoff, assertCycles, assertCycleWindow, assertSchedulerHandoff, assertColdLease, freshSaveName, combineCyclePages } from './p2p-world-lifecycle.mjs';
 const hash = 'a'.repeat(64);
 const semantic = () => ({campaign:'campaign',ticks:120,partyCount:25,activePartyCount:23,missingPartyIds:0,duplicatePartyIds:[],
     worldIdentityHash:hash,worldRostersHash:hash,activeWorldRostersHash:hash,heroGoldHash:hash,volunteerHash:hash,aliveHeroes:10,
@@ -28,6 +28,22 @@ test('cold equality covers full world hashes, inactive state, time, gold and sam
     for(const edit of [v=>v.ticks++,v=>v.players[0].gold--,v=>v.npcs[0].members[0].Xp++,v=>v.duplicatePartyIds.push('duplicate')]){
         const after=structuredClone(value);edit(after);assert.throws(()=>assertPersistent(value,after));
     }
+});
+test('pre-handoff permits only explicit finite NPC x/y and records every original position',()=>{
+    const left=semantic();Object.assign(left.npcs[0],{x:10,y:20});
+    const right=structuredClone(left);Object.assign(right.npcs[0],{x:13,y:15});
+    const original=structuredClone([left,right]);
+    assert.deepEqual(assertPreHandoffSemantic(left,right),[{index:0,party:'lord_2_4',left:{x:10,y:20},right:{x:13,y:15},dx:3,dy:-5}]);
+    assert.deepEqual([left,right],original);
+    assert.throws(()=>assertPersistent(left,right),'post-handoff/cold full equality still includes NPC positions');
+    for(const change of [v=>delete v.npcs[0].x,v=>v.npcs[0].x=NaN,v=>v.npcs[0].y=Infinity,
+        v=>v.npcs[0].gold=1,v=>v.npcs[0].party='wrong',v=>v.npcs[0].members[0].Number++,
+        v=>v.npcs[0].members[0].Xp++,v=>v.npcs[0].unknown={x:1,y:2},v=>v.unknown=1,
+        v=>v.players[0].gold++,v=>v.players[0].x=1,v=>v.worldIdentityHash='b'.repeat(64)]){
+        const bad=structuredClone(right);change(bad);assert.throws(()=>assertPreHandoffSemantic(left,bad));
+    }
+    const missing=structuredClone(left);delete missing.npcs[0].y;
+    assert.throws(()=>assertPreHandoffSemantic(missing,structuredClone(missing)));
 });
 test('merged dispatches use real due slots across writers rather than execution-time buckets',()=>{
     const result=assertCycles(receipts());assert.equal(result.partyDaily,2);assert.equal(result.daily,2);assert.equal(result.hourly,2);
@@ -75,6 +91,108 @@ test('handoff preserves native debt cursor and membership identity/order as well
     for(const change of [v=>v.scheduler.tickers[0].Index--,v=>v.scheduler.tickers[0].TickDebt=0,
         v=>v.scheduler.tickers[0].orderedIdsHash='b'.repeat(64),v=>v.hourly.next--]){
         const bad=structuredClone(previous);change(bad);assert.throws(()=>assertSchedulerHandoff(previous,[bad]));
+    }
+});
+
+function naturalHandoffFixture() {
+    const tickerNames=['_mobilePartyHourlyTicker','_mobilePartyDailyTicker','_dailyTickPartyTicker','_hourlyTickMobilePartyTicker',
+        '_hourlyTickSettlementTicker','_hourlyTickClanTicker','_dailyTickTownTicker','_dailyTickSettlementTicker',
+        '_dailyTickHeroTicker','_dailyTickClanTicker','_quarterDailyPartyTicker',
+        ...['caravan','garrison','militia','villager','custom','bandit','lord','partiesWithoutPartyComponents','patrol']
+            .map(n=>n==='patrol'?'_patrolPartyPartialHourlyAiEventTicker':'_'+n+(n==='partiesWithoutPartyComponents'?'':'MobileParty')+'PartialHourlyAiEventTicker')];
+    const scheduler={LastGameTimeTicks:124,tickers:[{Name:'daily',Index:5,TickDebt:0.75,count:10,orderedIdsHash:hash}]};
+    const beforeCycles=['a','b'].map(node=>({...receipt(node,[]),hours:100,ticks:100,
+        hourly:{next:101,period:1},daily:{next:120,period:24},simulation:{},scheduler:structuredClone(scheduler)}));
+    const preCycles=structuredClone(beforeCycles);for(const c of preCycles)Object.assign(c,{hours:124,ticks:124,hourly:{next:125,period:1},daily:{next:144,period:24}});
+    preCycles[0].rows=Array.from({length:24},(_,i)=>({...row('a',5,'HourlyTick'),DueTicks:101+i}));
+    preCycles[0].rows.push({...row('a',5,'DailyTick'),DueTicks:120});
+    preCycles[0].tickerAudits=tickerNames.map(Ticker=>({Ticker,Batches:10,Expected:100,Completed:100,ExpectedHash:hash,CompletedHash:hash,Mismatches:0,LeaseKnown:true,LocalWriter:true}));
+    preCycles[0].simulation=Object.fromEntries(['MobilePartyAi.Tick.completed','Campaign.RealTick.completed','Campaign.Tick.completed','Campaign.LateAITickAux.completed','Campaign.WaitAsyncTasks.completed'].map(n=>[n,5]));
+    preCycles[0].effects=[{Kind:'ClanFinance',Ticks:120,GoldBefore:100,GoldAfter:100,Known:true,LocalWriter:true,Error:null,Entity:'clan'},
+        {Kind:'Wage',Ticks:120,Wage:0,Known:true,LocalWriter:true,Error:null,Entity:'clan'}];
+    const world={campaign:'campaign',unregisteredParties:0,partyIdentityHash:hash,rosterCountsHash:hash,rosterXpHash:hash,volunteerHash:hash,heroGoldHash:hash,nextHandle:100,ticks:124};
+    const players=initial.map(v=>({controllerId:v.controller,heroId:v.mainHero,heroStringId:v.mainHero,partyId:v.mainParty,partyStringId:v.mainParty,
+        clanId:'clan-'+v.controller,characterId:'char-'+v.controller,gold:100,troops:2,wounded:0,settlementId:null,x:5,y:6,
+        active:true,registeredPlayers:2,heroRegistrations:1,partyRegistrations:1,clanRegistrations:1}));
+    const sem=semantic();Object.assign(sem,{ticks:124});Object.assign(sem.npcs[0],{x:10,y:20,gold:100});
+    const pre={worlds:[structuredClone(world),structuredClone(world)],players:[structuredClone(players),structuredClone(players)],semantics:[structuredClone(sem),structuredClone(sem)],states:states('room',3)};
+    pre.semantics[1].npcs[0].x=13;
+    const post=structuredClone(pre);post.semantics[1].npcs[0].x=10;
+    post.states=initial.map(v=>({...v,localAuthority:v.controller==='b',frozen:false,lease:{authorityControllerId:'b',roomId:'room',epoch:4,authorityId:'world',isPaused:false}}));
+    const tailCycles=structuredClone(preCycles);tailCycles[0].simulation['Campaign.LateAITickAux.completed']++;
+    const events=[],records=[];let cycleReads=0,modeReads=0;
+    const fixture={pre,post,preCycles,tailCycles,events,records,beforeCycles,
+        modes:[['Pause','Pause'],['Pause','Pause']],confirmed:structuredClone(post.states)};
+    fixture.args={node:'a',nextController:'b',initial,beforeCycles,
+        pause:async()=>{events.push('pause');},readPreSnapshot:async()=>{events.push('pre');return fixture.pre;},
+        readTimeModes:async()=>{events.push('modes');return fixture.modes[modeReads++];},
+        readCycles:async()=>{events.push(cycleReads?'tail-cycles':'pre-cycles');return cycleReads++?fixture.tailCycles:fixture.preCycles;},
+        handoff:async()=>{events.push('handoff');},confirmWriter:async()=>{events.push('confirmed');return fixture.confirmed;},
+        readStrictSnapshot:async ids=>{events.push('strict-post');assert.deepEqual(ids,fixture.pre.semantics[0].sampledNpcIds);return fixture.post;},
+        record:async r=>{events.push(r.phase);records.push(structuredClone(r));}};
+    return fixture;
+}
+test('natural-day uses one confirmed handoff then full strict post snapshot and old-writer tail collector',async()=>{
+    const f=naturalHandoffFixture(),result=await completeNaturalDayHandoff(f.args);
+    assert.deepEqual(f.events,['pause','pre','modes','pre-cycles','native_day_pre_handoff','handoff','confirmed','modes','strict-post','tail-cycles','native_day_post_handoff']);
+    assert.equal(f.events.filter(x=>x==='handoff').length,1);
+    assert.equal(result.sealedWriter.simulation['Campaign.LateAITickAux.completed'],6);
+    assert.equal(result.preCoverage.hourly,24);assert.equal(result.coverage.daily,1);
+    assert.equal(f.records[0].pre.semantics[1].npcs[0].x,13);assert.equal(f.records[1].post.semantics[1].npcs[0].x,10);
+});
+test('return handoff seals B collector rather than assuming the room host is the old writer',async()=>{
+    const f=naturalHandoffFixture(),swap=n=>n==='a'?'b':'a';
+    for(const group of [f.beforeCycles,f.preCycles,f.tailCycles])for(const c of group){
+        c.node=swap(c.node);c.instance=swap(c.instance);
+        for(const r of c.rows){r.Node=swap(r.Node);r.WriterController=swap(r.WriterController);r.Epoch=5;}
+    }
+    const assignLease=(pair,node,epoch)=>pair.forEach(s=>{s.localAuthority=s.controller===node;s.lease={authorityControllerId:node,roomId:'room',epoch,authorityId:'world',isPaused:false};});
+    assignLease(f.pre.states,'b',5);assignLease(f.post.states,'a',6);f.confirmed=structuredClone(f.post.states);
+    f.args.node='b';f.args.nextController='a';
+    const result=await completeNaturalDayHandoff(f.args);
+    assert.equal(result.sealedWriter.node,'b');assert.equal(result.coverage.hourly,24);
+    assert.equal(f.events.filter(x=>x==='handoff').length,1);
+});
+test('pre-handoff critical and cycle failures cannot be repaired by checkpoint or trigger a mutation',async()=>{
+    for(const change of [f=>f.pre.semantics[1].players[0].gold++,f=>f.pre.semantics[1].npcs[0].members[0].Number++,
+        f=>f.pre.semantics[1].npcs[0].members[0].Xp++,f=>f.pre.semantics[1].npcs[0].party='wrong',
+        f=>f.pre.semantics[1].npcs[0].unknown={x:1},f=>f.pre.worlds[1].rosterXpHash='b'.repeat(64),
+        f=>f.pre.players[1][0].gold++,f=>f.preCycles[0].overflowed=true,f=>f.preCycles[0].rows.shift(),
+        f=>f.preCycles[0].simulation['Campaign.Tick.failed']=1,f=>delete f.preCycles[0].simulation['Campaign.LateAITickAux.completed'],
+        f=>f.preCycles[0].tickerAudits[0].Mismatches=1,f=>f.modes[0][0]='Play_2x']){
+        const f=naturalHandoffFixture();change(f);await assert.rejects(completeNaturalDayHandoff(f.args));
+        assert.equal(f.events.includes('handoff'),false);assert.equal(f.events.includes('strict-post'),false);
+    }
+});
+test('post-handoff exact coordinates, resource constancy, Pause and clock are mandatory',async()=>{
+    for(const change of [f=>f.post.semantics[1].npcs[0].x++,f=>f.post.semantics[1].npcs[0].y++,
+        f=>f.post.semantics.forEach(v=>v.npcs[0].gold++),f=>f.post.semantics.forEach(v=>v.npcs[0].members[0].Xp++),
+        f=>f.post.worlds.forEach(v=>v.ticks++),f=>f.post.semantics.forEach(v=>v.ticks++),
+        f=>f.modes[1][1]='Play_2x',f=>f.confirmed.forEach(v=>v.lease.epoch=3),
+        f=>f.confirmed.forEach(v=>v.lease.roomId='unrelated-room'),
+        f=>f.confirmed.forEach(v=>v.lease.authorityControllerId='a')]){
+        const f=naturalHandoffFixture();change(f);await assert.rejects(completeNaturalDayHandoff(f.args));
+        assert.equal(f.events.filter(x=>x==='handoff').length,1);assert.equal(f.events.includes('native_day_post_handoff'),false);
+    }
+});
+test('old collector is revalidated after barrier; tail exceptions, duplicates, lost coverage and phase reject',async()=>{
+    for(const change of [f=>f.tailCycles[0].simulation['Campaign.LateAITickAux.failed']=1,
+        f=>f.tailCycles[0].overflowed=true,f=>f.tailCycles[0].rows.push({...f.tailCycles[0].rows[0]}),
+        f=>f.tailCycles[0].tickerAudits[0].Mismatches++,f=>f.tailCycles[0].rows.shift(),f=>f.tailCycles[0].failedRealTicks++,
+        f=>f.tailCycles[0].simulation['Campaign.LateAITickAux.completed']=0,
+        f=>f.tailCycles[1].simulation['Campaign.Tick.completed']=1,
+        f=>f.tailCycles[1].scheduler.tickers[0].Index++,f=>f.tailCycles[1].hourly.next++]){
+        const f=naturalHandoffFixture();change(f);await assert.rejects(completeNaturalDayHandoff(f.args));
+        assert.equal(f.events.includes('strict-post'),true);assert.equal(f.events.includes('tail-cycles'),true);
+        assert.equal(f.events.includes('native_day_post_handoff'),false);
+    }
+});
+test('uncertain mutation and confirmation failures preserve failure and never retry yield/auto',async()=>{
+    for(const step of ['handoff','confirmed']){
+        const f=naturalHandoffFixture(),original=new Error('uncertain '+step);
+        f.args[step==='handoff'?'handoff':'confirmWriter']=async()=>{f.events.push(step);throw original;};
+        await assert.rejects(completeNaturalDayHandoff(f.args),error=>error===original);
+        assert.equal(f.events.filter(x=>x==='handoff').length,1);assert.equal(f.events.includes('strict-post'),false);
     }
 });
 test('cold start needs a fresh room, epoch or authority fence',()=>{

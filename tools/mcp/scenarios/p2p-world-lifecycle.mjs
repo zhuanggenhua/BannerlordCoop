@@ -14,8 +14,9 @@ export const HELP = `Usage: node tools/mcp/scenarios/p2p-world-lifecycle.mjs --n
   --sdk-root <node_modules> --record <new evidence.jsonl>
   [--profile local] [--save P1B_DirectIP_Recruit] [--day-timeout-seconds 900]
 Coordinator/exclusive game lock only. No deployment. Natural mode advances each
-writer through24 native hours with ordinary Play_2x (the actual public enum),
-then merges completed native Hourly/Daily/DailyTickParty receipts across A/B.
+writer through24 native hours with ordinary Play_2x (the actual public enum).
+At day end, ordinary Pause checks critical state before one original handoff;
+the confirmed barrier then requires exact NPC positions and seals cycle tails.
 Cold mode saves a unique native save+sidecar while A is writer and paused,
 stops both process trees, loads that exact save into new processes and rejoins B.
 Compares handle-free ALL-MobileParty count/XP hashes, players and24 NPC details.
@@ -24,7 +25,7 @@ private IPC, save-byte edits, mutation retries or automatic acceptance relaxatio
 --help/import do not load SDK, connect or launch games.`;
 const INSTANCES = ['server', 'client1'];
 const REQUIRED = ['coop.debug.authority.state', 'coop.debug.authority.world_state', 'coop.debug.authority.semantic_state',
-    'coop.debug.authority.cycles', 'coop.debug.authority.availability', 'coop.debug.players.party_state'];
+    'coop.debug.authority.cycles', 'coop.debug.authority.availability', 'coop.debug.players.party_state', 'coop.debug.get_time_mode'];
 export function options(argv) {
     const result = { profile: 'local', save: 'P1B_DirectIP_Recruit', 'day-timeout-seconds': 900 };
     const seen = new Set(), allowed = new Set(['repo','server','config','sdk-root','record','profile','save','day-timeout-seconds']);
@@ -54,6 +55,19 @@ export function assertSemantic(value) {
 export function assertPersistent(before, after) {
     assertSemantic(before); assertSemantic(after);
     assert.deepEqual(after, before, 'Cold restart changed handle-free semantic state (no inactive-party or clock tolerance)');
+}
+export function assertPreHandoffSemantic(left, right) {
+    assertSemantic(left); assertSemantic(right);
+    const withoutPredictedPositions = value => ({...value,npcs:value.npcs.map(npc=>{
+        assert.ok(Object.hasOwn(npc,'x') && Object.hasOwn(npc,'y') && Number.isFinite(npc.x) && Number.isFinite(npc.y),
+            'Pre-handoff NPC position missing/nonfinite');
+        const {x,y,...critical}=npc;return critical;
+    })});
+    assert.deepEqual(withoutPredictedPositions(right),withoutPredictedPositions(left),
+        'Pre-handoff non-position semantic mismatch');
+    return left.npcs.map((npc,index)=>({index,party:npc.party,
+        left:{x:npc.x,y:npc.y},right:{x:right.npcs[index].x,y:right.npcs[index].y},
+        dx:right.npcs[index].x-npc.x,dy:right.npcs[index].y-npc.y}));
 }
 export function assertColdLease(before, after, initial) {
     assertWriter(after, initial[0].controller, initial);
@@ -159,6 +173,45 @@ export function assertSchedulerHandoff(previous, next) {
         assert.deepEqual(receipt.daily,previous.daily,'Handoff lost daily phase');
     }
 }
+export async function completeNaturalDayHandoff({node,nextController,initial,beforeCycles,
+    pause,readPreSnapshot,readCycles,handoff,confirmWriter,readStrictSnapshot,readTimeModes,record}) {
+    const assertPausedModes = modes => {
+        assert.equal(modes.length,2);assert.deepEqual(modes,['Pause','Pause'],'Natural handoff resumed world time');
+    };
+    await pause();
+    const pre=await readPreSnapshot();assertWriter(pre.states,node,initial);
+    assertWorld(pre.worlds);assertPlayers(pre.players);assertPreHandoffSemantic(...pre.semantics);
+    assertPausedModes(await readTimeModes());
+    const preCycles=assertCycles(await readCycles());
+    const preCoverage=assertCycleWindow(beforeCycles,preCycles.receipts,node);
+    await record({phase:'native_day_pre_handoff',node,nextController,pre,preCycles,preCoverage});
+    await handoff(); // Mutation exactly once; read-only confirmation must not retry it.
+    const confirmed=await confirmWriter();assertWriter(confirmed,nextController,initial);
+    assert.ok(epoch(confirmed[0])>epoch(pre.states[0]),'Natural handoff did not advance Epoch');
+    assert.equal(field(confirmed[0].lease,'roomId'),field(pre.states[0].lease,'roomId'),'Natural handoff changed room');
+    assertPausedModes(await readTimeModes());
+    const post=await readStrictSnapshot(pre.semantics[0].sampledNpcIds);
+    assertWriter(post.states,nextController,initial);
+    assertWorld(post.worlds);assertPlayers(post.players);post.semantics.forEach(assertSemantic);
+    assert.deepEqual(post.semantics[1],post.semantics[0],'Live semantic world mismatch');
+    for(let i=0;i<2;i++) {
+        for(const key of ['roomId','authorityId','epoch'])
+            assert.equal(field(post.states[i].lease,key),field(confirmed[i].lease,key),'Confirmed handoff lease changed');
+        assert.equal(post.worlds[i].ticks,pre.worlds[i].ticks,'Natural handoff advanced paused world clock');
+        assert.equal(post.semantics[i].ticks,pre.semantics[i].ticks,'Natural handoff advanced semantic clock');
+        assertWorld([pre.worlds[i],post.worlds[i]]);
+        assertPlayers([pre.players[i],post.players[i]]);
+        assertPreHandoffSemantic(pre.semantics[i],post.semantics[i]);
+    }
+    // Re-read the original node's collector after the barrier drained its pending AI.
+    // Keep full-history failures/duplicates and the complete original day window strict.
+    const cycles=assertCycles(await readCycles());
+    const coverage=assertCycleWindow(beforeCycles,cycles.receipts,node);
+    const sealedWriter=cycles.receipts.find(receipt=>receipt.node===node);
+    assertSchedulerHandoff(sealedWriter,cycles.receipts);
+    await record({phase:'native_day_post_handoff',node,nextController,confirmed,post,cycles,coverage});
+    return {pre,preCycles,preCoverage,confirmed,post,cycles,coverage,sealedWriter};
+}
 export function combineCyclePages(pages) {
     assert.ok(pages.length > 0); const first=pages[0], rows=[];
     assert.ok(first.totalRows <= 32768 && first.totalRows >= 0);
@@ -258,7 +311,7 @@ export async function run(config) {
         startedUtc:new Date().toISOString(),sessions:[],features:[],screenshots:[],passed:false,failed:null};
     const client = new Client({name:'codex-world-lifecycle',version:'1.0.0'});
     const transport = new StdioClientTransport({command:config.server,args:['--config',config.config],cwd:config.repo,stderr:'inherit',maxBufferSize:16*1024*1024});
-    let session, initial, callId = 0, readDeadline, lastWriterCycles;
+    let session, initial, callId = 0, readDeadline, finalNaturalHandoff;
     const emit = entry => appendFile(config.record,JSON.stringify({utc:new Date().toISOString(),...entry})+'\n');
     const save = () => writeFile(summaryPath,JSON.stringify(summary,null,2)+'\n');
     async function call(name,args,mutation=false) {
@@ -306,6 +359,20 @@ export async function run(config) {
         });
     }
     async function pause(label,npcIds) { await command('server','coop.debug.set_time_mode',['Pause','force-live-test'],true);return snapshot(label,npcIds); }
+    async function preHandoffSnapshot(label) {
+        return poll(label,async()=>{
+            const worlds=await Promise.all(INSTANCES.map(n=>command(n,'coop.debug.authority.world_state').then(jsonOutput)));assertWorld(worlds);
+            const players=[];for(const n of INSTANCES){const rows=[];for(const controller of controllers)rows.push(jsonOutput(await command(n,'coop.debug.players.party_state',[controller])));players.push(rows);}assertPlayers(players);
+            const left=jsonOutput(await command('server','coop.debug.authority.semantic_state'));assertSemantic(left);
+            const right=jsonOutput(await command('client1','coop.debug.authority.semantic_state',[left.sampledNpcIds.join(',')]));
+            const predictedNpcPositions=assertPreHandoffSemantic(left,right);
+            const states=await both();assertActors(states,initial);return {worlds,players,semantics:[left,right],states,predictedNpcPositions};
+        });
+    }
+    const pausedTimeModes = () => poll('natural handoff both time modes Pause',async()=>{
+        const modes=await Promise.all(INSTANCES.map(n=>command(n,'coop.debug.get_time_mode').then(value=>value.trim())));
+        assert.deepEqual(modes,['Pause','Pause']);return modes;
+    });
     async function collectLogs(archived=false) {
         return collectSessionLogs(session,(instance,cursor)=>call('read_logs',{run_id:session.runId,instance,cursor,max_bytes:65536}),
             async(instance,text)=>{const path=config.record+'.'+session.runId+'.'+instance+'.log';await writeFile(path,text);
@@ -358,7 +425,7 @@ export async function run(config) {
         }
         return assertCycles(receipts);
     }
-    async function naturalDay(instance) {
+    async function naturalDay(instance,nextController,availability) {
         const node=controllers[INSTANCES.indexOf(instance)],other=INSTANCES.find(n=>n!==instance);await awaitWriter(node);
         const before={writer:await state(instance),observer:await state(other),snapshot:await snapshot('natural-day before state'),cycles:await cycleEvidence()};await command('server','coop.debug.set_time_mode',['Play_2x','force-live-test'],true);
         const deadline=Date.now()+config['day-timeout-seconds']*1000;let values,lastLogs=Date.now();
@@ -370,19 +437,27 @@ export async function run(config) {
         const after={writer:values[INSTANCES.indexOf(instance)],observer:values[INSTANCES.indexOf(other)]};
         assert.ok(after.writer.hours>=before.writer.hours+24,'Natural24h deadline expired');assert.equal(epoch(after.writer),epoch(before.writer));
         assert.ok(after.writer.worldTicks>before.writer.worldTicks);assert.equal(after.observer.worldTicks,before.observer.worldTicks);
-        const paused=await pause('natural-day critical equality');const cycles=await cycleEvidence();
-        const coverage=assertCycleWindow(before.cycles.receipts,cycles.receipts,node);
-        lastWriterCycles=cycles.receipts[INSTANCES.indexOf(instance)];
-        return {before,after,paused,cycles,coverage};
+        const handoff=await completeNaturalDayHandoff({node,nextController,initial,beforeCycles:before.cycles.receipts,
+            pause:()=>command('server','coop.debug.set_time_mode',['Pause','force-live-test'],true),
+            readPreSnapshot:()=>preHandoffSnapshot('natural-day pre-handoff critical equality'),
+            readCycles:async()=>(await cycleEvidence()).receipts,
+            handoff:()=>command('server','coop.debug.authority.availability',[availability],true),
+            confirmWriter:()=>awaitWriter(nextController),readTimeModes:pausedTimeModes,
+            readStrictSnapshot:npcIds=>snapshot('natural-day confirmed handoff exact equality',npcIds),record:emit});
+        finalNaturalHandoff=handoff;
+        return {before,after,...handoff};
     }
     async function saves() {const rows=[];let offset=0;for(let page=0;page<8;page++){const r=await call('list_saves',{profile:config.profile,offset});const data=r.result??r;assert.ok(Array.isArray(data.saves));rows.push(...data.saves);assert.equal(data.truncated,false,'Save catalog truncated; cannot prove exact existing-name absence');if(data.nextOffset===offset)return rows;assert.ok(data.nextOffset>offset);offset=data.nextOffset;}throw new Error('Save catalog page budget exhausted');}
     try {
         await client.connect(transport);await start(config.save);
         await feature('exact-two-process-baseline',()=>pause('baseline exact critical equality'));
         if(config.mode==='natural') {
-            await feature('A-native-day',()=>naturalDay('server'));
-            await feature('A-to-B-native-day',async()=>{await command('server','coop.debug.authority.availability',['yield'],true);await awaitWriter(controllers[1]);const handoff=await cycleEvidence();assertSchedulerHandoff(lastWriterCycles,handoff.receipts);return naturalDay('client1');});
-            await feature('B-to-A-cycle-uniqueness',async()=>{await command('server','coop.debug.authority.availability',['auto'],true);await awaitWriter(controllers[0]);const snapshot=await pause('returned A'),cycles=await cycleEvidence();assertSchedulerHandoff(lastWriterCycles,cycles.receipts);return {snapshot,cycles};});
+            await feature('A-native-day',()=>naturalDay('server',controllers[1],'yield'));
+            await feature('A-to-B-native-day',()=>naturalDay('client1',controllers[0],'auto'));
+            await feature('B-to-A-cycle-uniqueness',async()=>{
+                await awaitWriter(controllers[0]);const state=await snapshot('returned A'),cycles=await cycleEvidence();
+                assertSchedulerHandoff(finalNaturalHandoff.sealedWriter,cycles.receipts);return {snapshot:state,cycles};
+            });
         } else {
             const name=freshSaveName();summary.generatedSave=name;assert.ok(!(await saves()).some(row=>row.name===name),'Generated basename already exists; no save will be overwritten');
             let baseline;
