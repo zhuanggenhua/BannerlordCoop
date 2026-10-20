@@ -1,5 +1,4 @@
-﻿using GameInterface.Policies;
-using GameInterface.Services.CampaignAuthority;
+﻿using GameInterface.Services.CampaignAuthority;
 using HarmonyLib;
 using TaleWorlds.CampaignSystem.Party;
 
@@ -12,9 +11,6 @@ internal class MobilePartyAIDisablePatches
     [HarmonyPrefix]
     private static bool TickPrefix(MobilePartyAi __instance)
     {
-        // Run original if we called it
-        if (CallOriginalPolicy.IsOriginalAllowed()) return true;
-
         return IsTickAuthority(__instance._mobileParty);
     }
 

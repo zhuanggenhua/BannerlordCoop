@@ -18,6 +18,8 @@ internal class CampaignRobustnessPatches
     [HarmonyPrefix]
     internal static bool Prefix_RealTick(Campaign __instance, float realDt)
     {
+        if (!CampaignSimulationAuthorityPolicy.CanEnterWorldCallback()) return false;
+
         bool hasAuthorityContext = global::GameInterface.ContainerProvider.TryResolve<
             global::GameInterface.Services.CampaignAuthority.ICampaignAuthorityContext>(out var authorityContext);
         if (!hasAuthorityContext)

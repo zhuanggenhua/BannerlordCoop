@@ -1,4 +1,5 @@
 ﻿using Common;
+using Common.Util;
 using GameInterface.Services.MobileParties.Extensions;
 using GameInterface.Services.Players;
 using System;
@@ -18,6 +19,7 @@ internal static class CampaignSimulationAuthorityPolicy
     /// </summary>
     internal static bool CanRunWorldSimulation()
     {
+        if (!CanEnterWorldCallback()) return false;
         bool hasAuthorityContext = ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authorityContext);
         if (hasAuthorityContext)
         {
@@ -41,6 +43,7 @@ internal static class CampaignSimulationAuthorityPolicy
     /// </summary>
     internal static bool CanTickParty(MobileParty party)
     {
+        if (!CanEnterWorldCallback()) return false;
         bool hasAuthorityContext = ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authorityContext);
         if (hasAuthorityContext)
         {
@@ -59,6 +62,11 @@ internal static class CampaignSimulationAuthorityPolicy
             localAuthority: false,
             legacyPartyControl: party.IsControlledByThisInstance());
     }
+
+    internal static bool CanEnterWorldCallback() =>
+        !AllowedThread.IsThisThreadAllowed() &&
+        !CampaignExecutionScope.IsWorldWriteRestricted &&
+        CampaignExecutionScope.Current != CampaignExecutionPhase.Bootstrap;
 
     internal static bool ShouldRunWorldSimulation(
         bool authorityKnown,
