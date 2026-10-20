@@ -101,7 +101,7 @@ internal class MobilePartyBehaviorHandler : IHandler
         MessagePayload<NetworkCampaignAuthorityPartyBehaviorDelta> payload)
     {
         if (!wireMapper.TryFromNetwork(payload.What.BehaviorUpdateData, out var data))
-            return;
+        { MessageApplyScope.Fail("Authority party movement wire references could not be resolved."); return; }
 
         messageBroker.Publish(
             payload.Who,
@@ -115,7 +115,7 @@ internal class MobilePartyBehaviorHandler : IHandler
         Action apply = () =>
         {
             if (!objectManager.TryGetObjectWithLogging(data.MobilePartyId, out MobileParty party))
-                return;
+            { MessageApplyScope.Fail("Authority party movement is missing party " + data.MobilePartyId); return; }
 
             bool isSelfEcho = party.IsControlledByThisInstance() &&
                 !string.IsNullOrEmpty(data.OriginControllerId) &&
@@ -146,7 +146,7 @@ internal class MobilePartyBehaviorHandler : IHandler
                         party,
                         data,
                         out interactablePoint))
-                    return;
+                { MessageApplyScope.Fail("Authority party movement snapshot could not be applied."); return; }
 
                 if (ModInformation.IsClient && data.ForcePosition && !obj.What.IsAuthorityReplay)
                     ApplyForcedPosition(party, data.PartyPosition, data.IsCurrentlyAtSea);

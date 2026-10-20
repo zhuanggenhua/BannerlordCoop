@@ -140,4 +140,11 @@ public class CampaignApplyCompletionTests : IDisposable
         Assert.Contains("source lease changed", reason);
         GC.KeepAlive((Action<MessagePayload<Result>>)Handle);
     }
+    [Fact]
+    public void ExplicitCheckpointSourceMustBeConfirmedAndExact()
+    {
+        var other = new AuthorityLease("room", "other", "a", 4);
+        Assert.Throws<InvalidOperationException>(() => Completion.ObserveSource(typeof(Result), other));
+        Assert.Equal(CampaignApplyStatus.Faulted, Completion.GetStatusThrough(other, out _));
+    }
 }

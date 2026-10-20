@@ -4,6 +4,7 @@ using Common.Messaging;
 using Common.Network.Messages;
 using Common.Network.Session;
 using Common.Session;
+using Common.Serialization;
 using Common.Tests.Utils;
 using Coop.Core.Common.Session;
 using Coop.Core.Server.Connections;
@@ -392,16 +393,19 @@ public class CampaignSimulationAvailabilityServerHandlerTests
         }
     }
 
+    private sealed record NestedCriticalApply : ICampaignAuthorityScopedMessage;
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void TransfersToPreparedGuestAndRequiresFrozenCheckpointBeforeReturnOrAllAwayPause(bool hostReturnsImmediately)
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(true, true, true)]
+    public void TransfersToPreparedGuestAndRequiresFrozenCheckpointBeforeReturnOrAllAwayPause(bool hostReturnsImmediately, bool nestedAck, bool corruptRetainedAck)
     {
         var previousMode = ModInformation.SessionMode;
         ModInformation.SessionMode = SessionMode.ListenAuthority;
         try
         {
-            var messageBroker = new TestMessageBroker();
+            using var messageBroker = new MessageBroker();
             var identity = new SessionIdentity();
             Assert.True(identity.TryApply(new AuthorityLease("room-a", "authority-a", "host", 1), "host"));
             var coordinator = new CampaignAuthorityAvailabilityCoordinator(
@@ -560,9 +564,51 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             GameThread.EnqueueSafe(() => finalDeltaApplied = true);
             sessions.Setup(value => value.TryApply(sessionCheckpoint))
                 .Callback(() => Assert.True(finalDeltaApplied)).Returns(true);
-            messageBroker.Publish(guestPeer, freezeRequest.ToAcknowledged(appliedBarrier.AllocationCheckpoint,
-                rosters, new CampaignClockCheckpoint(999), sessionCheckpoint, CampaignHandoffTestServices.Checkpoint()));
-            GameThread.Run(() => { }, blocking: true);
+            var finalAck = freezeRequest.ToAcknowledged(appliedBarrier.AllocationCheckpoint,
+                rosters, new CampaignClockCheckpoint(999), sessionCheckpoint, CampaignHandoffTestServices.Checkpoint());
+            if (nestedAck)
+            {
+                // True receive path: envelope dispatch queues a second-frame descendant before the ACK.
+                var serializer = new Mock<ICommonSerializer>();
+                serializer.Setup(value => value.Deserialize<IMessage>(It.IsAny<byte[]>())).Returns(new NestedCriticalApply());
+                using var relay = new CampaignAuthoritySyncRelayServerHandler(messageBroker, connections.Object,
+                    playerManager.Object, network.Object, identity, serializer.Object);
+                void Apply(MessagePayload<NestedCriticalApply> _)
+                {
+                    GameThread.EnqueueSafe(() => GameThread.EnqueueSafe(() => finalDeltaApplied = true));
+                }
+                messageBroker.Subscribe<NestedCriticalApply>(Apply);
+                finalDeltaApplied = false;
+                GameThread.Run(() =>
+                {
+                    var source = identity.CurrentLease;
+                    messageBroker.Publish(guestPeer, new NetworkCampaignAuthoritySyncEnvelope(source.RoomId, source.AuthorityId,
+                        source.AuthorityControllerId, source.Epoch, 1, new byte[] { 1 }));
+                    messageBroker.Publish(guestPeer, finalAck);
+                }, blocking: true);
+                GameThread.Run(() => { }, blocking: true); GameThread.Run(() => { }, blocking: true);
+                GameThread.Run(() => { }, blocking: true);
+                Assert.True(finalDeltaApplied);
+                // No second Freeze ACK is sent. Existing reconciliation resumes the retained one.
+                if (corruptRetainedAck) finalAck.AllocationCheckpoint.TypeCounters["mutated-after-receive"] = 1;
+                handler.OnAvailabilityTimer(); GameThread.Run(() => { }, blocking: true);
+                if (corruptRetainedAck)
+                {
+                    Assert.Equal(3, identity.Epoch); Assert.Equal("guest", identity.AuthorityControllerId);
+                    Assert.Equal(CampaignApplyStatus.Faulted, CampaignApplyCompletion.For(identity).GetStatusThrough(identity.CurrentLease, out _));
+                    sessions.Verify(value => value.TryApply(sessionCheckpoint), Times.Never());
+                    network.Verify(value => value.SendAll(It.Is<NetworkAuthorityLeaseSnapshot>(value =>
+                        !value.IsPaused && value.AuthorityControllerId == "host" && value.Epoch == 5)), Times.Never());
+                    return;
+                }
+                sessions.Verify(value => value.TryApply(sessionCheckpoint), Times.Once());
+                System.GC.KeepAlive((System.Action<MessagePayload<NestedCriticalApply>>)Apply);
+            }
+            else
+            {
+                messageBroker.Publish(guestPeer, finalAck);
+                GameThread.Run(() => { }, blocking: true);
+            }
 
             if (!hostReturnsImmediately)
             {

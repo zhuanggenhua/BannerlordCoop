@@ -28,6 +28,49 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
     private readonly IControllerIdProvider controller;
     private readonly ICampaignAsyncTaskDrain asyncTasks;
 
+    private sealed class Installation
+    {
+        internal AuthorityLease Source, Target;
+        internal long Ticks; internal string Hash;
+        internal bool Installed, AckAttempted;
+    }
+    private Installation installation;
+    private sealed class DeferredSnapshot
+    {
+        internal NetworkAuthorityLeaseSnapshot Snapshot; internal NetPeer Peer;
+    }
+    private DeferredSnapshot deferredSnapshot;
+    private int continuationQueued, disposed;
+
+    private void DeferSnapshot(NetworkAuthorityLeaseSnapshot snapshot, NetPeer peer)
+    {
+        Volatile.Write(ref deferredSnapshot, new DeferredSnapshot { Snapshot = snapshot, Peer = peer });
+        if (CampaignApplyCompletion.For(sessionIdentity).GetStatusThrough(snapshot.ToLease(), out _) != CampaignApplyStatus.Pending)
+            OnApplyProgressed(); // Close the completion-before-subscription race.
+    }
+    private void OnApplyProgressed()
+    {
+        if (Volatile.Read(ref disposed) != 0 || Volatile.Read(ref deferredSnapshot) == null ||
+            Interlocked.Exchange(ref continuationQueued, 1) != 0) return;
+        GameThread.EnqueueSafe(() =>
+        {
+            Interlocked.Exchange(ref continuationQueued, 0);
+            if (Volatile.Read(ref disposed) != 0) return;
+            var pending = Interlocked.Exchange(ref deferredSnapshot, null);
+            if (pending != null) ApplySnapshotSafely(pending.Snapshot, pending.Peer);
+        }, context: nameof(AuthorityLeaseSnapshotHandler));
+    }
+    private void ApplySnapshotSafely(NetworkAuthorityLeaseSnapshot snapshot, NetPeer peer)
+    {
+        try { ApplySnapshotOnGameThread(snapshot, peer); }
+        catch (System.Exception ex)
+        {
+            CampaignApplyCompletion.For(sessionIdentity).RecordFailure(snapshot.MovementCheckpoint?.SourceLease ?? default,
+                "Paused lease checkpoint installation threw: " + ex);
+            throw;
+        }
+    }
+
     public AuthorityLeaseSnapshotHandler(IMessageBroker messageBroker, ISessionIdentity sessionIdentity,
         ICampaignMovementCheckpointService movement = null, IMapTimeTrackerInterface clock = null,
         INetwork network = null, IControllerIdProvider controller = null, ICampaignAsyncTaskDrain asyncTasks = null)
@@ -40,11 +83,15 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
         this.network = network;
         this.controller = controller;
         this.asyncTasks = asyncTasks;
+        CampaignApplyCompletion.For(sessionIdentity).Progressed += OnApplyProgressed;
         messageBroker.Subscribe<NetworkAuthorityLeaseSnapshot>(Handle_AuthorityLeaseSnapshot);
     }
 
     public void Dispose()
     {
+        Interlocked.Exchange(ref disposed, 1);
+        Interlocked.Exchange(ref deferredSnapshot, null);
+        CampaignApplyCompletion.For(sessionIdentity).Progressed -= OnApplyProgressed;
         messageBroker.Unsubscribe<NetworkAuthorityLeaseSnapshot>(Handle_AuthorityLeaseSnapshot);
     }
 
@@ -53,7 +100,7 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
         var snapshot = payload.What;
         var peer = payload.Who as NetPeer;
         LogMovementAckStage("snapshot-ingress", snapshot, peer);
-        GameThread.EnqueueSafe(() => ApplySnapshotOnGameThread(snapshot, peer), context: nameof(AuthorityLeaseSnapshotHandler));
+        GameThread.EnqueueSafe(() => ApplySnapshotSafely(snapshot, peer), context: nameof(AuthorityLeaseSnapshotHandler));
         LogMovementAckStage("snapshot-queued", snapshot, peer);
     }
 
@@ -61,48 +108,61 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
     {
         var lease = snapshot.ToLease();
         LogMovementAckStage("snapshot-game-thread", snapshot, peer);
+        var completion = CampaignApplyCompletion.For(sessionIdentity);
+        if (!lease.IsValid || (sessionIdentity.TryGetConfirmedLease(out var known) &&
+            (known.RoomId != lease.RoomId || lease.Epoch < known.Epoch || (known.Epoch == lease.Epoch && known != lease))) ||
+            (sessionIdentity.RoomHostControllerId?.Length > 0 && sessionIdentity.RoomHostControllerId != snapshot.RoomHostControllerId)) return;
+        var status = completion.GetStatusThrough(lease, out var applyReason);
+        if (status != CampaignApplyStatus.Ready)
+        {
+            Logger.Warning("Deferred/refused lease snapshot at epoch {Epoch}: {ApplyReason}", lease.Epoch, applyReason);
+            if (status == CampaignApplyStatus.Pending) DeferSnapshot(snapshot, peer);
+            return;
+        }
         if (lease.IsPaused && movement != null)
         {
-            // Reject stale identity before preparing or installing any received campaign state.
-            if (sessionIdentity.TryGetConfirmedLease(out var current) &&
-                (current.RoomId != lease.RoomId || lease.Epoch < current.Epoch ||
-                 (lease.Epoch == current.Epoch && lease != current) ||
-                 (lease.Epoch > current.Epoch && (current.IsPaused || lease.AuthorityId == current.AuthorityId ||
-                     snapshot.MovementCheckpoint?.SourceLease != current))))
+            var checkpoint = snapshot.MovementCheckpoint;
+            if (RejectMovementAck(checkpoint == null, "checkpoint-missing", snapshot, peer) ||
+                RejectMovementAck(!checkpoint.Precedes(lease), "checkpoint-source-lease", snapshot, peer)) return;
+            if (!sessionIdentity.TryGetConfirmedLease(out var current) ||
+                (current != checkpoint.SourceLease && current != lease) ||
+                (sessionIdentity.RoomHostControllerId?.Length > 0 && sessionIdentity.RoomHostControllerId != snapshot.RoomHostControllerId))
             {
                 LogMovementAckStage("snapshot-rejected-stale-or-conflicting-lease", snapshot, peer);
                 return;
             }
-            if (sessionIdentity.RoomHostControllerId != null && sessionIdentity.RoomHostControllerId.Length > 0 &&
-                sessionIdentity.RoomHostControllerId != snapshot.RoomHostControllerId)
+            if (installation != null && installation.Target == lease &&
+                (installation.Source != checkpoint.SourceLease || installation.Ticks != checkpoint.Ticks || installation.Hash != checkpoint.Sha256))
             {
-                LogMovementAckStage("snapshot-rejected-room-host", snapshot, peer);
+                completion.RecordFailure(checkpoint.SourceLease, "Conflicting final movement snapshot for the same paused lease.");
                 return;
             }
-            if (!CampaignApplyCompletion.For(sessionIdentity).CanAcknowledgeThrough(lease, out var applyReason))
+            if (installation == null || installation.Target != lease)
             {
-                Logger.Warning("Refused paused lease movement receipt at epoch {Epoch}: {ApplyReason}", lease.Epoch, applyReason);
+                if (current != checkpoint.SourceLease) return;
+                installation = new Installation { Source = checkpoint.SourceLease, Target = lease, Ticks = checkpoint.Ticks, Hash = checkpoint.Sha256 };
+            }
+            if (!installation.Installed)
+            {
+                if (RejectMovementAck(asyncTasks == null, "async-drain-unavailable", snapshot, peer) ||
+                    RejectMovementAck(!asyncTasks.TryDrain(), "async-drain-incomplete", snapshot, peer)) return;
+                System.Func<bool> install = null;
+                if (RejectMovementAck(!movement.TryPrepare(checkpoint, checkpoint.SourceLease, checkpoint.Ticks, out install), "movement-prepare", snapshot, peer) ||
+                    RejectMovementAck(clock == null, "clock-unavailable", snapshot, peer)) return;
+                using (completion.ObserveSource(typeof(NetworkAuthorityLeaseSnapshot), checkpoint.SourceLease))
+                using (CampaignExecutionScope.Enter(CampaignExecutionPhase.CheckpointInstall))
+                {
+                    if (RejectMovementAck(!clock.TryApplyAuthorityHandoffBaseline(checkpoint.Ticks), "clock-baseline", snapshot, peer) ||
+                        RejectMovementAck(!install(), "movement-install", snapshot, peer)) return;
+                    installation.Installed = true;
+                }
+            }
+            if (!completion.CanAcknowledgeThrough(lease, out applyReason))
+            {
+                Logger.Warning("Deferred paused lease commit at epoch {Epoch}: {ApplyReason}", lease.Epoch, applyReason);
+                if (completion.GetStatusThrough(lease, out _) == CampaignApplyStatus.Pending) DeferSnapshot(snapshot, peer);
                 return;
             }
-            if (RejectMovementAck(asyncTasks == null, "async-drain-unavailable", snapshot, peer) ||
-                RejectMovementAck(!asyncTasks.TryDrain(), "async-drain-incomplete", snapshot, peer)) return;
-            var checkpoint = snapshot.MovementCheckpoint;
-            System.Func<bool> install = null;
-            if (RejectMovementAck(checkpoint == null, "checkpoint-missing", snapshot, peer) ||
-                RejectMovementAck(!checkpoint.Precedes(lease), "checkpoint-source-lease", snapshot, peer) ||
-                RejectMovementAck(!movement.TryPrepare(checkpoint, checkpoint.SourceLease, checkpoint.Ticks, out install), "movement-prepare", snapshot, peer) ||
-                RejectMovementAck(clock == null, "clock-unavailable", snapshot, peer) ||
-                RejectMovementAck(!clock.TryApplyAuthorityHandoffBaseline(checkpoint.Ticks), "clock-baseline", snapshot, peer) ||
-                RejectMovementAck(!install(), "movement-install", snapshot, peer))
-            {
-                Logger.Warning("Rejected paused lease epoch {Epoch}; final movement baseline is missing or incomplete", lease.Epoch);
-                return;
-            }
-        }
-        if (lease.IsPaused && !CampaignApplyCompletion.For(sessionIdentity).CanAcknowledgeThrough(lease, out var finalApplyReason))
-        {
-            Logger.Warning("Refused paused lease commit at epoch {Epoch}: {ApplyReason}", lease.Epoch, finalApplyReason);
-            return;
         }
         if (!sessionIdentity.TryApply(lease, snapshot.RoomHostControllerId))
         {
@@ -117,6 +177,8 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
 
         if (lease.IsPaused && movement != null && network != null && controller != null)
         {
+            if (installation.AckAttempted) return;
+            installation.AckAttempted = true;
             LogMovementAckStage("send-call-delivery-unconfirmed", snapshot, peer);
             network.SendAll(new NetworkCampaignMovementBaselineApplied(lease, controller.ControllerId, snapshot.MovementCheckpoint));
             LogMovementAckStage("send-returned-delivery-unconfirmed", snapshot, peer);
@@ -141,7 +203,7 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
         {
             LogMovementAckStage("snapshot-rejected-" + reason, snapshot, peer);
             if (reason == "clock-baseline" || reason == "movement-install")
-                CampaignApplyCompletion.For(sessionIdentity).RecordFailure(sessionIdentity.CurrentLease,
+                CampaignApplyCompletion.For(sessionIdentity).RecordFailure(snapshot.MovementCheckpoint?.SourceLease ?? default,
                     "Paused lease checkpoint installation refused at " + reason);
         }
         return rejected;
