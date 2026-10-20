@@ -28,6 +28,72 @@ namespace Coop.Tests.Server.Services.Session;
 [Collection(ModInformationRoleCollection.Name)]
 public class CampaignSimulationAvailabilityServerHandlerTests
 {
+    [Theory]
+    [InlineData(false, false, "peer-not-synchronized")]
+    [InlineData(true, false, "peer-player-unmapped")]
+    [InlineData(true, true, "no-pending-freeze")]
+    public void AckDiagnosticRejectionKeepsOriginalShortCircuitAndDoesNotDrain(bool synchronized, bool mapped, string stage)
+    {
+        var previous = ModInformation.SessionMode;ModInformation.SessionMode = SessionMode.ListenAuthority;
+        var logs = new System.Collections.Concurrent.ConcurrentQueue<string>();
+        System.Action<string> capture = logs.Enqueue;
+        Common.Logging.OutputSinkManager.AddLogCallback(capture);
+        try
+        {
+            using var broker = new TestMessageBroker();
+            var identity = new SessionIdentity();
+            var lease = new AuthorityLease("diagnostic-room", "authority", "guest", 5);
+            Assert.True(identity.TryApply(lease, "host"));
+            var peer = new TestNetwork().CreatePeer();
+            var calls = new System.Collections.Generic.List<string>();
+            var connections = new Mock<IConnectionCollection>();
+            connections.Setup(value => value.HasCompletedCampaignSynchronization(peer)).Callback(() => calls.Add("synchronized")).Returns(synchronized);
+            var player = new Player("guest", "hero", "party", "clan", "character");
+            var players = new Mock<IPlayerManager>();
+            players.Setup(value => value.TryGetPlayer(peer, out player)).Callback(() => calls.Add("player")).Returns(mapped);
+            var drain = new Mock<ICampaignAsyncTaskDrain>(MockBehavior.Strict);
+            var controller = new ControllerIdProvider();controller.SetControllerId("host");
+            using var handler = new CampaignSimulationAvailabilityServerHandler(broker,
+                new CampaignAuthorityAvailabilityCoordinator(identity, new CampaignAuthorityCandidateSelector()),
+                connections.Object, players.Object, controller, Mock.Of<INetwork>(), identity, asyncTasks: drain.Object);
+            broker.Publish(peer, new NetworkCampaignAuthorityFreezeRequest(lease, "host", 987662).ToAcknowledged());
+            GameThread.Run(() => { }, blocking: true);
+            Assert.Equal(synchronized ? new[] { "synchronized", "player" } : new[] { "synchronized" }, calls);
+            Assert.Equal(lease, identity.CurrentLease);
+            drain.Verify(value => value.TryDrain(), Times.Never);
+            Assert.Contains(logs, text => text.StartsWith("Freeze ACK receive stage") && text.Contains("ingress") && text.Contains("987662"));
+            Assert.Contains(logs, text => text.Contains("game-thread") && text.Contains("987662"));
+            Assert.Contains(logs, text => text.Contains("rejected-" + stage) && text.Contains("987662"));
+            Assert.DoesNotContain(logs, text => text.Contains("qualified-current-peer") && text.Contains("987662"));
+        }
+        finally { Common.Logging.OutputSinkManager.RemoveLogCallback(capture);ModInformation.SessionMode = previous; }
+    }
+
+    [Fact]
+    public void AckGateExceptionStillEscapesTheOriginalApplyMethodUnchanged()
+    {
+        var previous = ModInformation.SessionMode;ModInformation.SessionMode = SessionMode.ListenAuthority;
+        try
+        {
+            using var broker = new TestMessageBroker();
+            var identity = new SessionIdentity();
+            var peer = new TestNetwork().CreatePeer();
+            var failure = new System.InvalidOperationException("original-ack-gate-failure");
+            var connections = new Mock<IConnectionCollection>();
+            connections.Setup(value => value.HasCompletedCampaignSynchronization(peer)).Throws(failure);
+            var controller = new ControllerIdProvider();controller.SetControllerId("host");
+            using var handler = new CampaignSimulationAvailabilityServerHandler(broker,
+                new CampaignAuthorityAvailabilityCoordinator(identity, new CampaignAuthorityCandidateSelector()),
+                connections.Object, Mock.Of<IPlayerManager>(), controller, Mock.Of<INetwork>(), identity);
+            var method = typeof(CampaignSimulationAvailabilityServerHandler).GetMethod("ApplyFreezeAcknowledgement",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+            var thrown = Assert.Throws<System.Reflection.TargetInvocationException>(() => method.Invoke(handler,
+                new object[] { peer, default(NetworkCampaignAuthorityFreezeAcknowledged) }));
+            Assert.Same(failure, thrown.InnerException);
+        }
+        finally { ModInformation.SessionMode = previous; }
+    }
+
     [Fact]
     public void FailedHostNavigationPreparationCannotCommitPauseOrFlush()
     {

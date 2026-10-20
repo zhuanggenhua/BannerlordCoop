@@ -22,6 +22,7 @@ using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Runtime.CompilerServices;
 using Coop.Core.Server.States.Messages;
 
 namespace Coop.Core.Server.Services.Session;
@@ -720,63 +721,105 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
 
     private void Handle_FreezeAcknowledged(MessagePayload<NetworkCampaignAuthorityFreezeAcknowledged> payload)
     {
-        if (payload.Who is not NetPeer peer) return;
+        if (payload.Who is not NetPeer peer)
+        {
+            LogFreezeAckStage("ingress-rejected-non-peer", null, payload.What);
+            return;
+        }
+        LogFreezeAckStage("ingress", peer, payload.What);
         GameThread.EnqueueSafe(() => ApplyFreezeAcknowledgement(peer, payload.What),
             context: nameof(CampaignSimulationAvailabilityServerHandler));
     }
 
     private void ApplyFreezeAcknowledgement(NetPeer peer, NetworkCampaignAuthorityFreezeAcknowledged ack)
     {
-        if (!ModInformation.IsListenAuthority || network == null || sessionIdentity == null ||
-            !connections.HasCompletedCampaignSynchronization(peer) || !playerManager.TryGetPlayer(peer, out var player)) return;
+        LogFreezeAckStage("game-thread", peer, ack);
+        Player player = null;
+        if (RejectFreezeAck(!ModInformation.IsListenAuthority, "session-mode", peer, ack) ||
+            RejectFreezeAck(network == null, "network-unavailable", peer, ack) ||
+            RejectFreezeAck(sessionIdentity == null, "identity-unavailable", peer, ack) ||
+            RejectFreezeAck(!connections.HasCompletedCampaignSynchronization(peer), "peer-not-synchronized", peer, ack) ||
+            RejectFreezeAck(!playerManager.TryGetPlayer(peer, out player), "peer-player-unmapped", peer, ack)) return;
         lock (selectionGate)
         lock (leaseGate)
         {
-            if (!hasPendingFreeze || !sessionIdentity.TryGetConfirmedLease(out var lease) || lease != pendingFreezeLease ||
-                ack.HandoffSequence != pendingFreezeSequence || ack.Epoch != lease.Epoch ||
-                !string.Equals(ack.RoomId, lease.RoomId, StringComparison.Ordinal) ||
-                !string.Equals(ack.AuthorityId, lease.AuthorityId, StringComparison.Ordinal) ||
-                !string.Equals(ack.AuthorityControllerId, lease.AuthorityControllerId, StringComparison.Ordinal) ||
-                !string.Equals(ack.CandidateControllerId, pendingFreezeCandidateControllerId, StringComparison.Ordinal) ||
-                !string.Equals(player.ControllerId, lease.AuthorityControllerId, StringComparison.Ordinal) ||
-                !TryGetSynchronizedPeer(player.ControllerId, out var currentPeer) || currentPeer != peer) return;
+            AuthorityLease lease = default;
+            NetPeer currentPeer = null;
+            if (RejectFreezeAck(!hasPendingFreeze, "no-pending-freeze", peer, ack) ||
+                RejectFreezeAck(!sessionIdentity.TryGetConfirmedLease(out lease), "lease-unconfirmed", peer, ack) ||
+                RejectFreezeAck(lease != pendingFreezeLease, "pending-lease-mismatch", peer, ack) ||
+                RejectFreezeAck(ack.HandoffSequence != pendingFreezeSequence, "sequence-mismatch", peer, ack) ||
+                RejectFreezeAck(ack.Epoch != lease.Epoch, "epoch-mismatch", peer, ack) ||
+                RejectFreezeAck(!string.Equals(ack.RoomId, lease.RoomId, StringComparison.Ordinal), "room-mismatch", peer, ack) ||
+                RejectFreezeAck(!string.Equals(ack.AuthorityId, lease.AuthorityId, StringComparison.Ordinal), "authority-mismatch", peer, ack) ||
+                RejectFreezeAck(!string.Equals(ack.AuthorityControllerId, lease.AuthorityControllerId, StringComparison.Ordinal), "writer-mismatch", peer, ack) ||
+                RejectFreezeAck(!string.Equals(ack.CandidateControllerId, pendingFreezeCandidateControllerId, StringComparison.Ordinal), "candidate-mismatch", peer, ack) ||
+                RejectFreezeAck(!string.Equals(player.ControllerId, lease.AuthorityControllerId, StringComparison.Ordinal), "player-writer-mismatch", peer, ack) ||
+                RejectFreezeAck(!TryGetSynchronizedPeer(player.ControllerId, out currentPeer), "current-peer-unavailable", peer, ack) ||
+                RejectFreezeAck(currentPeer != peer, "current-peer-mismatch", peer, ack)) return;
+            LogFreezeAckStage("qualified-current-peer", peer, ack);
 
             var selection = coordinator.Select();
             string candidate = selection.IsPaused ? sessionIdentity.RoomHostControllerId : selection.ControllerId;
             if (!string.Equals(candidate, pendingFreezeCandidateControllerId, StringComparison.Ordinal))
             {
+                LogFreezeAckStage("selection-changed-cancel", peer, ack);
                 CancelPendingFreeze(lease);
                 return;
             }
 
             // Earlier remote world deltas have already applied in this same game-thread FIFO.
-            if (asyncTasks == null || !asyncTasks.TryDrain()) return;
+            if (RejectFreezeAck(asyncTasks == null, "async-drain-unavailable", peer, ack) ||
+                RejectFreezeAck(!asyncTasks.TryDrain(), "async-drain-incomplete", peer, ack)) return;
             Func<bool> installMovement = null;
-            if (movement != null && (ack.MovementCheckpoint == null || ack.ClockCheckpoint == null ||
-                !movement.TryPrepare(ack.MovementCheckpoint, lease, ack.ClockCheckpoint.Ticks, out installMovement))) return;
-            if (ack.AllocationCheckpoint == null || ack.RosterCheckpoint == null || ack.SessionCheckpoint == null ||
-                ack.SchedulerCheckpoint == null ||
-                ack.ClockCheckpoint == null || ack.ClockCheckpoint.Ticks < 0 ||
-                objectManager == null || !objectManager.TryApplyAllocationCheckpoint(ack.AllocationCheckpoint) ||
-                rosterCheckpointService == null || !rosterCheckpointService.TryApply(ack.RosterCheckpoint) ||
-                sessionCheckpointService == null || !sessionCheckpointService.TryApply(ack.SessionCheckpoint) ||
-                schedulerCheckpointService == null || !schedulerCheckpointService.TryApply(ack.SchedulerCheckpoint) ||
-                mapTimeTracker == null || !mapTimeTracker.TryApplyAuthorityHandoffBaseline(ack.ClockCheckpoint.Ticks))
+            if (movement != null && (RejectFreezeAck(ack.MovementCheckpoint == null, "movement-missing", peer, ack) ||
+                RejectFreezeAck(ack.ClockCheckpoint == null, "movement-clock-missing", peer, ack) ||
+                RejectFreezeAck(!movement.TryPrepare(ack.MovementCheckpoint, lease, ack.ClockCheckpoint.Ticks, out installMovement), "movement-prepare", peer, ack))) return;
+            if (RejectFreezeAck(ack.AllocationCheckpoint == null, "allocation-missing", peer, ack) ||
+                RejectFreezeAck(ack.RosterCheckpoint == null, "roster-missing", peer, ack) ||
+                RejectFreezeAck(ack.SessionCheckpoint == null, "session-missing", peer, ack) ||
+                RejectFreezeAck(ack.SchedulerCheckpoint == null, "scheduler-missing", peer, ack) ||
+                RejectFreezeAck(ack.ClockCheckpoint == null, "clock-missing", peer, ack) ||
+                RejectFreezeAck(ack.ClockCheckpoint.Ticks < 0, "clock-negative", peer, ack) ||
+                RejectFreezeAck(objectManager == null, "allocation-service-unavailable", peer, ack) ||
+                RejectFreezeAck(!objectManager.TryApplyAllocationCheckpoint(ack.AllocationCheckpoint), "allocation-apply", peer, ack) ||
+                RejectFreezeAck(rosterCheckpointService == null, "roster-service-unavailable", peer, ack) ||
+                RejectFreezeAck(!rosterCheckpointService.TryApply(ack.RosterCheckpoint), "roster-apply", peer, ack) ||
+                RejectFreezeAck(sessionCheckpointService == null, "session-service-unavailable", peer, ack) ||
+                RejectFreezeAck(!sessionCheckpointService.TryApply(ack.SessionCheckpoint), "session-apply", peer, ack) ||
+                RejectFreezeAck(schedulerCheckpointService == null, "scheduler-service-unavailable", peer, ack) ||
+                RejectFreezeAck(!schedulerCheckpointService.TryApply(ack.SchedulerCheckpoint), "scheduler-apply", peer, ack) ||
+                RejectFreezeAck(mapTimeTracker == null, "clock-service-unavailable", peer, ack) ||
+                RejectFreezeAck(!mapTimeTracker.TryApplyAuthorityHandoffBaseline(ack.ClockCheckpoint.Ticks), "clock-apply", peer, ack))
             {
                 Logger.Error("Rejected frozen campaign checkpoint {HandoffSequence} from {ControllerId}; no replacement authority was activated",
                     ack.HandoffSequence, player.ControllerId);
                 return;
             }
 
-            if (installMovement != null && !installMovement()) return;
+            if (installMovement != null && RejectFreezeAck(!installMovement(), "movement-install", peer, ack)) return;
             finalMovementCheckpoint = ack.MovementCheckpoint;
-            if (!TryCommitLease(lease, string.Empty, isPaused: true)) return;
+            if (RejectFreezeAck(!TryCommitLease(lease, string.Empty, isPaused: true), "paused-lease-commit", peer, ack)) return;
             hasPendingFreeze = false;
             ResetPendingBarrier();
             Logger.Information("Applied final frozen campaign checkpoint {HandoffSequence} from {ControllerId}; reconciling the next writer",
                 ack.HandoffSequence, player.ControllerId);
             ReconcileLease(coordinator.Select());
         }
+    }
+
+    private static bool RejectFreezeAck(bool rejected, string stage, NetPeer peer,
+        NetworkCampaignAuthorityFreezeAcknowledged ack)
+    {
+        if (rejected) LogFreezeAckStage("rejected-" + stage, peer, ack);
+        return rejected;
+    }
+
+    private static void LogFreezeAckStage(string stage, NetPeer peer, NetworkCampaignAuthorityFreezeAcknowledged ack)
+    {
+        Logger.Information("Freeze ACK receive stage {Stage} handoff {HandoffSequence} room {RoomId} authority {AuthorityId} writer {WriterControllerId} epoch {Epoch} candidate {CandidateControllerId} peerId {PeerId} peerRef {PeerReference} endpoint {Endpoint} state {PeerState}",
+            stage, ack.HandoffSequence, ack.RoomId, ack.AuthorityId, ack.AuthorityControllerId, ack.Epoch,
+            ack.CandidateControllerId, peer?.Id, peer == null ? 0 : RuntimeHelpers.GetHashCode(peer), peer?.ToString(), peer?.ConnectionState);
     }
 
     private void ResetPendingBarrier()

@@ -87,6 +87,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
             return;
         }
 
+        string stage = "freeze";
         try
         {
             if (sessionIdentity.IsLocallyFrozen(lease))
@@ -140,17 +141,35 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
                 Logger.Warning("Could not capture final movement for freeze {HandoffSequence}; authority remains frozen", request.HandoffSequence);
                 return;
             }
-            network.SendAll(request.ToAcknowledged(objectManager.CaptureAllocationCheckpoint(), rosterCheckpoint,
-                new CampaignClockCheckpoint(ticks), sessionCheckpoint, schedulerCheckpoint, movementCheckpoint));
+            stage = "allocation-capture";
+            var ack = request.ToAcknowledged(objectManager.CaptureAllocationCheckpoint(), rosterCheckpoint,
+                new CampaignClockCheckpoint(ticks), sessionCheckpoint, schedulerCheckpoint, movementCheckpoint);
+            stage = "send-call";
+            LogAckSendStage(stage, request, ticks, movementCheckpoint);
+            network.SendAll(ack);
+            stage = "send-call-returned";
+            LogAckSendStage(stage, request, ticks, movementCheckpoint);
+            stage = "flush-call";
             network.FlushPendingMessages();
-            Logger.Information("Froze local campaign writes and acknowledged handoff {HandoffSequence} at epoch {Epoch} to controller {CandidateControllerId}",
+            stage = "flush-call-returned-delivery-unconfirmed";
+            LogAckSendStage(stage, request, ticks, movementCheckpoint);
+            Logger.Information("Froze local campaign writes and completed freeze ACK send/flush calls for handoff {HandoffSequence} at epoch {Epoch} to controller {CandidateControllerId}; delivery is unconfirmed",
                 request.HandoffSequence, request.Epoch, request.CandidateControllerId);
         }
         catch (System.Exception ex)
         {
-            Logger.Error(ex, "Failed to acknowledge campaign authority freeze {HandoffSequence}",
-                request.HandoffSequence);
+            Logger.Error(ex, "Failed to acknowledge campaign authority freeze {HandoffSequence} at stage {Stage} room {RoomId} authority {AuthorityId} epoch {Epoch}",
+                request.HandoffSequence, stage, request.RoomId, request.AuthorityId, request.Epoch);
         }
+    }
+
+    private void LogAckSendStage(string stage, NetworkCampaignAuthorityFreezeRequest request, long ticks,
+        CampaignMovementCheckpoint movementCheckpoint)
+    {
+        string peers = network is CoopClient client ? client.DescribeRoomPeers() : "Unavailable(non-CoopClient transport)";
+        Logger.Information("Freeze ACK send stage {Stage} handoff {HandoffSequence} room {RoomId} authority {AuthorityId} writer {WriterControllerId} epoch {Epoch} candidate {CandidateControllerId} ticks {Ticks} movementParties {MovementParties} movementHash {MovementHash} roomPeers {RoomPeers}; transport snapshot only, delivery unconfirmed",
+            stage, request.HandoffSequence, request.RoomId, request.AuthorityId, request.AuthorityControllerId,
+            request.Epoch, request.CandidateControllerId, ticks, movementCheckpoint?.PartyCount, movementCheckpoint?.Sha256, peers);
     }
 
     private void Handle_FreezeCanceled(MessagePayload<NetworkCampaignAuthorityFreezeCanceled> payload)

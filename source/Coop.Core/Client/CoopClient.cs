@@ -14,10 +14,12 @@ using LiteNetLib;
 using Serilog;
 using System;
 using System.IO;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
+using System.Runtime.CompilerServices;
 using System.Threading;
 
 namespace Coop.Core.Client;
@@ -46,6 +48,18 @@ public class CoopClient : CoopNetworkBase, ICoopClient, IRoomHostPeerProvider
     private readonly object roomHostPeerGate = new();
     private NetPeer roomHostPeer;
     private bool roomHostPeerDisposed;
+
+    // A diagnostic snapshot, not the recipients of a subsequent send or a delivery receipt.
+    public string DescribeRoomPeers()
+    {
+        lock (roomHostPeerGate)
+            if (roomHostPeerDisposed) return "Unavailable(disposed CoopClient transport)";
+        var peers = new List<NetPeer>();
+        netManager.GetPeersNonAlloc(peers, ConnectionState.Connected);
+        return $"connected={peers.Count}; transportRef={RuntimeHelpers.GetHashCode(netManager)}; peers=[" +
+            string.Join(", ", peers.Select(peer =>
+                $"id={peer.Id} ref={RuntimeHelpers.GetHashCode(peer)} endpoint={peer} state={peer.ConnectionState}")) + "]";
+    }
 
     public bool IsCurrentRoomHostPeer(NetPeer peer)
     {

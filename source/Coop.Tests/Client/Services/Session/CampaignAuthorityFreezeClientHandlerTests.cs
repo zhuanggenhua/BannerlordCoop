@@ -28,6 +28,69 @@ namespace Coop.Tests.Client.Services.Session;
 
 public class CampaignAuthorityFreezeClientHandlerTests
 {
+    [Theory]
+    [InlineData("none")]
+    [InlineData("send")]
+    [InlineData("final-flush")]
+    public void AckDiagnosticsDistinguishCallsFromDeliveryAndRetainOriginalFailureHandling(string failureStage)
+    {
+        const long sequence = 987661;
+        var logs = new ConcurrentQueue<string>();
+        Action<string> capture = logs.Enqueue;
+        OutputSinkManager.AddLogCallback(capture);
+        try
+        {
+            using var broker = new TestMessageBroker();
+            var identity = new SessionIdentity();
+            var lease = new AuthorityLease("diagnostic-room", "writer-lease", "writer", 5);
+            Assert.True(identity.TryApply(lease, "host"));
+            var controller = new ControllerIdProvider();controller.SetControllerId("writer");
+            var failure = new InvalidOperationException("original-ack-transport-failure-987661");
+            int sends = 0, flushes = 0;
+            var network = new Mock<INetwork>();
+            network.Setup(value => value.SendAll(It.IsAny<IMessage>())).Callback(() =>
+            {
+                Assert.True(identity.IsLocallyFrozen(lease));sends++;
+                if (failureStage == "send") throw failure;
+            });
+            network.Setup(value => value.FlushPendingMessages()).Callback(() =>
+            {
+                flushes++;
+                if (failureStage == "final-flush" && flushes == 2) throw failure;
+            });
+            var rosters = new Mock<ICampaignRosterCheckpointService>();
+            var roster = new CampaignRosterCheckpoint(Array.Empty<CampaignRosterState>());
+            rosters.Setup(value => value.TryCapture(out roster)).Returns(true);
+            var clock = new Mock<IMapTimeTrackerInterface>();long ticks = 888;
+            clock.Setup(value => value.TryGetCurrentTicks(out ticks)).Returns(true);
+            var sessions = new Mock<ICampaignSessionCheckpointService>();
+            var session = new CampaignSessionCheckpoint("campaign", "{}");
+            sessions.Setup(value => value.TryCapture(out session)).Returns(true);
+            var objects = Mock.Of<IObjectManager>(value => value.CaptureAllocationCheckpoint() ==
+                new RegistryAllocationCheckpoint(444, new Dictionary<string,int>()));
+            using var handler = new CampaignAuthorityFreezeClientHandler(broker, network.Object, identity, controller,
+                objects, rosters.Object, clock.Object, sessions.Object, CampaignHandoffTestServices.Scheduler(),
+                CampaignHandoffTestServices.Drained());
+            broker.Publish(this, new NetworkCampaignAuthorityFreezeRequest(lease, "host", sequence));
+            GameThread.Run(() => { }, blocking: true);
+            Assert.Equal(1, sends);Assert.Equal(failureStage == "send" ? 1 : 2, flushes);
+            Assert.True(identity.IsLocallyFrozen(lease));Assert.Equal(lease, identity.CurrentLease);
+            var stages = logs.ToArray();
+            Assert.Contains(stages, text => text.StartsWith("Freeze ACK send stage") && text.Contains("send-call") && text.Contains("987661") && text.Contains("Unavailable(non-CoopClient transport)"));
+            if (failureStage == "none")
+            {
+                Assert.Contains(stages, text => text.StartsWith("Freeze ACK send stage") && text.Contains("flush-call-returned-delivery-unconfirmed") && text.Contains("987661"));
+                Assert.DoesNotContain(stages, text => text.Contains("Failed to acknowledge campaign authority freeze 987661"));
+            }
+            else
+            {
+                Assert.Contains(stages, text => text.Contains("Failed to acknowledge campaign authority freeze 987661") && text.Contains(failure.Message));
+                Assert.DoesNotContain(stages, text => text.Contains("flush-call-returned-delivery-unconfirmed") && text.Contains("987661"));
+            }
+        }
+        finally { OutputSinkManager.RemoveLogCallback(capture); }
+    }
+
     private readonly ITestOutputHelper output;
 
     public CampaignAuthorityFreezeClientHandlerTests(ITestOutputHelper output) => this.output = output;

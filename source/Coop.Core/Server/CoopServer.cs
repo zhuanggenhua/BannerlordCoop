@@ -15,12 +15,14 @@ using Coop.Core.Server.Services.Session.Messages;
 using Coop.Core.Server.Services.Shutdown;
 using Coop.Core.Server.Services.Time;
 using GameInterface.Services.Entity;
+using GameInterface.Services.Players;
 using LiteNetLib;
 using LiteNetLib.Utils;
 using Serilog;
 using System;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using System.Threading;
 
 namespace Coop.Core.Server;
@@ -49,6 +51,7 @@ public class CoopServer : CoopNetworkBase, ICoopServer
     private readonly IServerAdmissionGate admissionGate;
     private readonly IJoinPeerTerminator peerTerminator;
     private readonly ISessionIdentity sessionIdentity;
+    private readonly IPlayerManager playerManager;
     // Buffers per-change sends and merges them into one send per key. Drained each tick in Update.
     private readonly ISendCoalescer coalescer;
     // Lazy breaks the construction cycle: the manager depends on ITimeControlInterface, which depends
@@ -78,7 +81,8 @@ public class CoopServer : CoopNetworkBase, ICoopServer
         CancellationTokenSource sessionCancellation,
         ICampaignAuthorityContext campaignAuthorityContext = null,
         ICampaignAuthorityMessageSender authorityMessageSender = null,
-        ISessionIdentity sessionIdentity = null)
+        ISessionIdentity sessionIdentity = null,
+        IPlayerManager playerManager = null)
         : base(configuration, serializer, reliableMessageBatcher, sessionCancellation, campaignAuthorityContext, authorityMessageSender)
     {
         // Dependancy assignment
@@ -89,6 +93,7 @@ public class CoopServer : CoopNetworkBase, ICoopServer
         this.admissionGate = admissionGate;
         this.peerTerminator = peerTerminator;
         this.sessionIdentity = sessionIdentity;
+        this.playerManager = playerManager;
         this.missionManager = missionManager;
         this.overloadedPeerManager = overloadedPeerManager;
         this.coalescer = coalescer;
@@ -230,6 +235,15 @@ public class CoopServer : CoopNetworkBase, ICoopServer
 
     public override void OnPeerDisconnected(NetPeer peer, DisconnectInfo disconnectInfo)
     {
+        string controller = "Unavailable";
+        if (peer != null && playerManager != null && playerManager.TryGetPlayer(peer, out var player))
+            controller = player.ControllerId;
+        var lease = sessionIdentity?.CurrentLease ?? default;
+        Logger.Information("Room peer disconnected before publish: reason {Reason} socketError {SocketError} peerId {PeerId} peerRef {PeerReference} endpoint {Endpoint} state {PeerState} controller {ControllerId} room {RoomId} authority {AuthorityId} writer {WriterControllerId} epoch {Epoch} paused {Paused} transportRef {TransportReference}",
+            disconnectInfo.Reason, disconnectInfo.SocketErrorCode, peer?.Id,
+            peer == null ? 0 : RuntimeHelpers.GetHashCode(peer), peer?.ToString(), peer?.ConnectionState,
+            controller, lease.RoomId, lease.AuthorityId, lease.AuthorityControllerId, lease.Epoch, lease.IsPaused,
+            RuntimeHelpers.GetHashCode(netManager));
         PlayerDisconnected message = new PlayerDisconnected(peer, disconnectInfo);
         messageBroker.Publish(this, message);
     }
