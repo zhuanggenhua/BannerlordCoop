@@ -2,6 +2,7 @@
 using Common.Logging;
 using Common.Messaging;
 using GameInterface;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Clans.Extensions;
 using GameInterface.Services.Kingdoms.Extentions;
 using GameInterface.Services.Kingdoms.Messages;
@@ -24,8 +25,8 @@ namespace GameInterface.Services.Kingdoms.Patches
     /// keyed off the player clan / main hero, which do not meaningfully exist on the dedicated
     /// host, so this patch:
     /// <list type="bullet">
-    /// <item>allows RegisterEvents only on the server, so clients never propose (they receive
-    /// decisions through the existing AddDecision sync);</item>
+    /// <item>retains native subscriptions on all candidates; runtime lease/phase gates prevent
+    /// observers and replay from proposing (they receive existing AddDecision sync);</item>
     /// <item>replaces DailyTickClan with a proposer that drops every player-clan/main-hero
     /// dependency and only proposes war/peace/policy decisions;</item>
     /// <item>replaces HourlyTick with a server authoritative sweep over every kingdom.</item>
@@ -39,14 +40,6 @@ namespace GameInterface.Services.Kingdoms.Patches
         private static readonly ILogger Logger = LogManager.GetLogger<CoopKingdomDecisionProposalBehaviorPatch>();
 
         /// <summary>
-        /// Vanilla RegisterEvents subscribes both the proposer and the player-keyed sweep.
-        /// Allow it only on the server; clients stay fully unsubscribed.
-        /// </summary>
-        [HarmonyPatch(nameof(KingdomDecisionProposalBehavior.RegisterEvents))]
-        [HarmonyPrefix]
-        public static bool RegisterEventsPrefix() => ModInformation.IsServer;
-
-        /// <summary>
         /// Replacement for the per-clan daily proposer. Mirrors the vanilla logic but
         /// drops the Clan.PlayerClan / Hero.MainHero dependencies and proposes synced kingdom decisions.
         /// Proposed decisions flow through the live Kingdom.AddDecision funnel, which resolves
@@ -56,7 +49,7 @@ namespace GameInterface.Services.Kingdoms.Patches
         [HarmonyPrefix]
         public static bool DailyTickClanPrefix(KingdomDecisionProposalBehavior __instance, Clan clan)
         {
-            if (ModInformation.IsClient) return false;
+            if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
 
             // Mirrors vanilla's `clan == Clan.PlayerClan` skip. Proposing for a registered
             // player clan would spend that player's influence and author a decision in their name.
@@ -142,7 +135,7 @@ namespace GameInterface.Services.Kingdoms.Patches
         [HarmonyPrefix]
         public static bool HourlyTickPrefix()
         {
-            if (ModInformation.IsClient) return false;
+            if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
 
             foreach (Kingdom kingdom in Kingdom.All)
             {

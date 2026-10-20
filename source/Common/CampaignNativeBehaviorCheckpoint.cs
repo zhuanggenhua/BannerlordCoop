@@ -12,12 +12,15 @@ public sealed class CampaignNativeBehaviorCheckpoint
     [ProtoMember(1)] public int Version { get; private set; }
     [ProtoMember(2)] public CampaignAgingBehaviorState Aging { get; private set; }
     [ProtoMember(3)] public CampaignCaravanBehaviorState Caravans { get; private set; }
+    [ProtoMember(4)] public CampaignKingdomProposalState KingdomProposals { get; private set; }
     private CampaignNativeBehaviorCheckpoint() { }
-    public CampaignNativeBehaviorCheckpoint(CampaignAgingBehaviorState aging, CampaignCaravanBehaviorState caravans = null)
+    public CampaignNativeBehaviorCheckpoint(CampaignAgingBehaviorState aging, CampaignCaravanBehaviorState caravans = null,
+        CampaignKingdomProposalState kingdomProposals = null)
     {
-        Version = 2;
+        Version = 3;
         Aging = aging;
         Caravans = caravans;
+        KingdomProposals = kingdomProposals;
     }
 }
 
@@ -122,4 +125,14 @@ public readonly struct CampaignCategoryPriceState
     [ProtoMember(3)] public readonly float Minimum;
     public CampaignCategoryPriceState(uint categoryHandle, float average, float minimum)
     { CategoryHandle = categoryHandle; Average = average; Minimum = minimum; }
+}
+
+/// <summary>Existing decision DTO protobuf payload for the native five-day proposal index.</summary>
+[ProtoContract]
+public sealed class CampaignKingdomProposalState
+{
+    [ProtoMember(1)] public int Count { get; private set; }
+    [ProtoMember(2)] public byte[] Payload { get; private set; }
+    private CampaignKingdomProposalState() { Payload = Array.Empty<byte>(); }
+    public CampaignKingdomProposalState(int count, byte[] payload) { Count = count; Payload = payload; }
 }
