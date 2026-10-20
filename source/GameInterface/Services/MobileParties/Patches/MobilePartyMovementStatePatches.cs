@@ -1,6 +1,7 @@
 ﻿using Common;
 using Common.Messaging;
 using GameInterface.Policies;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.MobileParties.Messages.Behavior;
 using HarmonyLib;
 using System;
@@ -25,13 +26,14 @@ internal static class MobilePartyMovementStatePatches
                 method.Name == nameof(MobileParty.SetTargetSettlement));
 
     [HarmonyPrefix]
-    private static void Prefix(out bool __state) =>
+    internal static void Prefix(out bool __state) =>
         __state = movementCommandDepth++ == 0 &&
-            ModInformation.IsServer &&
+            CampaignSimulationAuthorityPolicy.CanRunWorldSimulation() &&
+            !CampaignExecutionScope.IsWorldWriteRestricted &&
             !CallOriginalPolicy.IsOriginalAllowed();
 
     [HarmonyFinalizer]
-    private static Exception Finalizer(
+    internal static Exception Finalizer(
         MobileParty __instance,
         MethodBase __originalMethod,
         bool __state,

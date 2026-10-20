@@ -137,6 +137,7 @@ internal class MobilePartyBehaviorHandler : IHandler
             }
 
             IInteractablePoint interactablePoint = null;
+            bool correctObserverPosition = ShouldApplyObserverCorrections();
             // AllowedThread keeps outbound movement patches quiet while the complete snapshot is replayed.
             using (new AllowedThread())
             {
@@ -166,7 +167,7 @@ internal class MobilePartyBehaviorHandler : IHandler
                         data.BestTargetPoint);
                 }
 
-                if (ModInformation.IsClient)
+                if (correctObserverPosition)
                 {
                     // Moving parties already simulate the replicated target, so an in-flight snapshot is stale.
                     if (!data.ForcePosition && ShouldApplyAuthoritativePosition(
@@ -193,6 +194,14 @@ internal class MobilePartyBehaviorHandler : IHandler
             apply();
         else
             GameThread.RunSafe(apply, context: nameof(MobilePartyBehaviorHandler));
+    }
+
+    internal static bool ShouldApplyObserverCorrections()
+    {
+        if (ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authority) &&
+            authority.TryGetCurrentLease(out var lease) && lease.IsValid)
+            return !authority.IsLocalCampaignAuthority;
+        return ModInformation.IsClient;
     }
 
     private static void ApplyForcedPosition(MobileParty party, CampaignVec2 position, bool isCurrentlyAtSea)
