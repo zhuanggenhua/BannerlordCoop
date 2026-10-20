@@ -1,4 +1,5 @@
-﻿using LiteNetLib;
+﻿using GameInterface.Services.Missions;
+using LiteNetLib;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -61,18 +62,22 @@ internal class MissionInstance
 internal sealed class MissionMembership
 {
     public string ControllerId { get; }
-    public NetPeer Peer { get; set; }
+    public MissionPlayerEndpoint Endpoint { get; set; }
+    public NetPeer Peer => Endpoint.Peer;
     public MissionInstance Instance { get; }
     public Guid PeerCredential { get; set; }
 
+    public MissionMembership(string controllerId, NetPeer peer, MissionInstance instance, Guid peerCredential)
+        : this(controllerId, new RemotePeerEndpoint(controllerId, peer), instance, peerCredential) { }
+
     public MissionMembership(
         string controllerId,
-        NetPeer peer,
+        MissionPlayerEndpoint endpoint,
         MissionInstance instance,
         Guid peerCredential)
     {
         ControllerId = controllerId;
-        Peer = peer;
+        Endpoint = endpoint;
         Instance = instance;
         PeerCredential = peerCredential;
     }

@@ -1,6 +1,7 @@
 ﻿using Common.Logging;
 using Common.Network;
 using Common.Network.Data;
+using GameInterface.Services.Entity;
 using GameInterface.Services.Missions;
 using GameInterface.Services.Players;
 using LiteNetLib;
@@ -56,6 +57,9 @@ public interface IMissionManager
     /// exact authoritative membership existed; otherwise returns the membership actually removed.
     /// </summary>
     bool TryLeaveMission(NetPeer peer, string controllerId, string instanceId, out MissionDeparture departure);
+
+    bool TryEnterMission(LocalPlayerEndpoint endpoint, string instanceId, out MissionEntryResult result);
+    bool TryLeaveMission(LocalPlayerEndpoint endpoint, string instanceId, out MissionDeparture departure);
 
     /// <summary>
     /// Drop every membership and punch endpoint still tied to <paramref name="peer"/> after a disconnect.
@@ -146,6 +150,7 @@ public sealed class MissionEntryResult
     public MissionEntryStatus Status { get; }
     public Guid PeerCredential { get; }
     public IReadOnlyList<(string controllerId, NetPeer peer, Guid peerCredential)> ExistingMembers { get; }
+    public IReadOnlyList<(MissionPlayerEndpoint endpoint, Guid peerCredential)> ExistingEndpoints { get; }
     public IReadOnlyList<MissionDeparture> PreviousDepartures { get; }
     public bool IsFirstMember { get; }
 
@@ -157,12 +162,28 @@ public sealed class MissionEntryResult
         IReadOnlyList<(string controllerId, NetPeer peer, Guid peerCredential)> existingMembers,
         IReadOnlyList<MissionDeparture> previousDepartures,
         bool isFirstMember)
+        : this(controllerId, instanceId, status, peerCredential,
+            existingMembers.Select(member => ((MissionPlayerEndpoint)new RemotePeerEndpoint(member.controllerId, member.peer), member.peerCredential)).ToArray(),
+            previousDepartures, isFirstMember)
+    {
+    }
+
+    public MissionEntryResult(
+        string controllerId,
+        string instanceId,
+        MissionEntryStatus status,
+        Guid peerCredential,
+        IReadOnlyList<(MissionPlayerEndpoint endpoint, Guid peerCredential)> existingEndpoints,
+        IReadOnlyList<MissionDeparture> previousDepartures,
+        bool isFirstMember)
     {
         ControllerId = controllerId;
         InstanceId = instanceId;
         Status = status;
         PeerCredential = peerCredential;
-        ExistingMembers = existingMembers;
+        ExistingEndpoints = existingEndpoints;
+        ExistingMembers = existingEndpoints.Where(member => member.endpoint is RemotePeerEndpoint)
+            .Select(member => (member.endpoint.ControllerId, member.endpoint.Peer, member.peerCredential)).ToArray();
         PreviousDepartures = previousDepartures;
         IsFirstMember = isFirstMember;
     }
@@ -173,16 +194,25 @@ public sealed class MissionDeparture
     public string ControllerId { get; }
     public string InstanceId { get; }
     public IReadOnlyList<(string controllerId, NetPeer peer)> RemainingMembers { get; }
-    public bool IsInstanceEmpty => RemainingMembers.Count == 0;
+    public IReadOnlyList<MissionPlayerEndpoint> RemainingEndpoints { get; }
+    public bool IsInstanceEmpty => RemainingEndpoints.Count == 0;
 
     public MissionDeparture(
         string controllerId,
         string instanceId,
         IReadOnlyList<(string controllerId, NetPeer peer)> remainingMembers)
+        : this(controllerId, instanceId, remainingMembers.Select(member =>
+            (MissionPlayerEndpoint)new RemotePeerEndpoint(member.controllerId, member.peer)).ToArray())
+    {
+    }
+
+    public MissionDeparture(string controllerId, string instanceId, IReadOnlyList<MissionPlayerEndpoint> remainingEndpoints)
     {
         ControllerId = controllerId;
         InstanceId = instanceId;
-        RemainingMembers = remainingMembers;
+        RemainingEndpoints = remainingEndpoints;
+        RemainingMembers = remainingEndpoints.Where(endpoint => endpoint is RemotePeerEndpoint)
+            .Select(endpoint => (endpoint.ControllerId, endpoint.Peer)).ToArray();
     }
 }
 
@@ -193,6 +223,7 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
 
     private readonly object gate = new object();
     private readonly IPlayerManager playerManager;
+    private readonly IControllerIdProvider controllerIdProvider;
     private readonly Dictionary<string, MissionInstance> byInstanceId = new Dictionary<string, MissionInstance>();
     private readonly Dictionary<NetPeer, MissionMembership> byPeer = new Dictionary<NetPeer, MissionMembership>();
     private readonly Dictionary<string, MissionMembership> byController = new Dictionary<string, MissionMembership>();
@@ -244,10 +275,13 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
         }
     }
 
-    public MissionManager(IPlayerManager playerManager)
+    public MissionManager(IPlayerManager playerManager) : this(playerManager, null) { }
+
+    public MissionManager(IPlayerManager playerManager, IControllerIdProvider controllerIdProvider)
     {
         if (playerManager == null) throw new ArgumentNullException(nameof(playerManager));
         this.playerManager = playerManager;
+        this.controllerIdProvider = controllerIdProvider;
     }
 
     public bool TryAuthorizeIntroduction(
@@ -396,7 +430,7 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
             }
 
             peer = targetMembership.Peer;
-            return true;
+            return peer != null;
         }
     }
 
@@ -419,8 +453,26 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
         out MissionEntryResult result)
     {
         result = null;
-        if (peer == null || string.IsNullOrEmpty(controllerId) || string.IsNullOrEmpty(instanceId))
-            return false;
+        if (peer == null || string.IsNullOrEmpty(controllerId)) return false;
+        return TryEnterMission(new RemotePeerEndpoint(controllerId, peer), instanceId, out result);
+    }
+
+    public bool TryEnterMission(LocalPlayerEndpoint endpoint, string instanceId, out MissionEntryResult result)
+    {
+        result = null;
+        return IsRegisteredLocal(endpoint) && TryEnterMission((MissionPlayerEndpoint)endpoint, instanceId, out result);
+    }
+
+    private bool IsRegisteredLocal(LocalPlayerEndpoint endpoint) => endpoint != null &&
+        controllerIdProvider != null && endpoint.ControllerId == controllerIdProvider.ControllerId &&
+        endpoint.ControllerId != "Server" && playerManager.TryGetPlayer(endpoint.ControllerId, out _);
+
+    private bool TryEnterMission(MissionPlayerEndpoint endpoint, string instanceId, out MissionEntryResult result)
+    {
+        result = null;
+        if (string.IsNullOrEmpty(instanceId)) return false;
+        var controllerId = endpoint.ControllerId;
+        var peer = endpoint.Peer;
 
         lock (gate)
         {
@@ -432,8 +484,13 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
                 return false;
             }
 
-            byPeer.TryGetValue(peer, out var peerMembership);
+            MissionMembership peerMembership = null;
+            if (peer != null) byPeer.TryGetValue(peer, out peerMembership);
+            else byController.TryGetValue(controllerId, out peerMembership);
             byController.TryGetValue(controllerId, out var controllerMembership);
+
+            if (controllerMembership != null && (controllerMembership.Endpoint is LocalPlayerEndpoint) != (endpoint is LocalPlayerEndpoint))
+                return false;
 
             if (ReferenceEquals(peerMembership, controllerMembership) &&
                 peerMembership != null &&
@@ -456,10 +513,10 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
                 if (peerMembership != null && !ReferenceEquals(peerMembership, controllerMembership))
                     previousDepartures.Add(RemoveMembership(peerMembership));
 
-                byPeer.Remove(controllerMembership.Peer);
-                controllerMembership.Peer = peer;
+                if (controllerMembership.Peer != null) byPeer.Remove(controllerMembership.Peer);
+                controllerMembership.Endpoint = endpoint;
                 controllerMembership.PeerCredential = CreatePeerCredential();
-                byPeer[peer] = controllerMembership;
+                if (peer != null) byPeer[peer] = controllerMembership;
 
                 var existingMembers = EntryMembers(controllerMembership.Instance, controllerId);
                 result = new MissionEntryResult(
@@ -492,11 +549,11 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
             var others = EntryMembers(instance);
             var membership = new MissionMembership(
                 controllerId,
-                peer,
+                endpoint,
                 instance,
                 CreatePeerCredential());
             instance.Memberships.Add(membership);
-            byPeer[peer] = membership;
+            if (peer != null) byPeer[peer] = membership;
             byController[controllerId] = membership;
 
             Logger.Information("Controller {Controller} entered instance {Instance} on {Peer}",
@@ -538,6 +595,20 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
 
             departure = RemoveMembership(membership);
             Logger.Information("Controller {Controller} left instance {Instance}", controllerId, instanceId);
+            return true;
+        }
+    }
+
+    public bool TryLeaveMission(LocalPlayerEndpoint endpoint, string instanceId, out MissionDeparture departure)
+    {
+        departure = null;
+        if (!IsRegisteredLocal(endpoint)) return false;
+        lock (gate)
+        {
+            if (!byController.TryGetValue(endpoint.ControllerId, out var membership) ||
+                membership.Endpoint is not LocalPlayerEndpoint || membership.Instance.Id != instanceId)
+                return false;
+            departure = RemoveMembership(membership);
             return true;
         }
     }
@@ -873,7 +944,7 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
         concludingInstances.ContainsKey(instanceId) || concludedInstances.ContainsKey(instanceId);
 
     private bool IsRelayRevoked(MissionMembership membership) =>
-        relayRevocationCounts.ContainsKey(membership.Peer);
+        membership.Peer != null && relayRevocationCounts.ContainsKey(membership.Peer);
 
     private void CompleteRelayRevocation(NetPeer peer)
     {
@@ -899,7 +970,7 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
         membership.Instance.PunchEndpoints.RemoveAll(e =>
             e.ControllerId == membership.ControllerId && ReferenceEquals(e.CampaignPeer, membership.Peer));
 
-        if (byPeer.TryGetValue(membership.Peer, out var peerMembership) &&
+        if (membership.Peer != null && byPeer.TryGetValue(membership.Peer, out var peerMembership) &&
             ReferenceEquals(peerMembership, membership))
         {
             byPeer.Remove(membership.Peer);
@@ -915,18 +986,18 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
         return new MissionDeparture(membership.ControllerId, membership.Instance.Id, remaining);
     }
 
-    private static IReadOnlyList<(string controllerId, NetPeer peer, Guid peerCredential)> EntryMembers(
+    private static IReadOnlyList<(MissionPlayerEndpoint endpoint, Guid peerCredential)> EntryMembers(
         MissionInstance instance,
         string excludedControllerId = null)
         => instance.Memberships
             .Where(member => member.ControllerId != excludedControllerId)
-            .Select(member => (member.ControllerId, member.Peer, member.PeerCredential))
+            .Select(member => (member.Endpoint, member.PeerCredential))
             .ToList();
 
-    private static IReadOnlyList<(string controllerId, NetPeer peer)> DepartureMembers(
+    private static IReadOnlyList<MissionPlayerEndpoint> DepartureMembers(
         MissionInstance instance)
         => instance.Memberships
-            .Select(member => (member.ControllerId, member.Peer))
+            .Select(member => member.Endpoint)
             .ToList();
 
     private Guid CreatePeerCredential()
