@@ -45,6 +45,14 @@ public sealed class CampaignObjectGraphReadinessTests
         RuntimeHelpers.RunModuleConstructor(typeof(Coop.Tests.Mocks.TestNetwork).Module.ModuleHandle);
 
     [Fact]
+    public void FixtureHandlersAreExcludedFromProductionDiscovery()
+    {
+        var handlers = InterfaceCollector.GetInterfaces<IHandler>("GameInterface").ToArray();
+        Assert.DoesNotContain(typeof(OwnerReferences<>), handlers);
+        Assert.DoesNotContain(typeof(PartyReferences<>), handlers);
+    }
+
+    [Fact]
     public void TempRosterWindowRefusesCaptureUntilRealCreateAndReferenceMessagesApply()
     {
         using var fixture = new Fixture();
@@ -561,7 +569,7 @@ public sealed class CampaignObjectGraphReadinessTests
             handlers.Add(new AutoRegistryHandler<PartyBase>(new PartyBaseRegistry(logger, factory, Objects), Broker, network, Objects));
             handlers.Add(new ItemRosterLifetimeHandler(Broker, Objects, network));
             handlers.Add(new AutoRegistryHandler<TroopRoster>(new TroopRosterRegistry(logger, factory, Objects), Broker, network, Objects));
-            handlers.Add(new OwnerReferences(Broker, Objects, network, Readiness));
+            handlers.Add(new OwnerReferences<object>(Broker, Objects, network, Readiness));
         }
 
         internal void Begin(Action? publish = null)
@@ -615,9 +623,10 @@ public sealed class CampaignObjectGraphReadinessTests
     private sealed record PrisonReference(uint Owner, uint Prisoners, bool Backlink) : GenericNetworkReferenceEvent<PartyBase, TroopRoster>(Owner, Prisoners)
     { public override uint InstanceId { get; set; } public override uint ValueId { get; set; } }
 
-    private sealed class OwnerReferences : GenericHandler<OwnerReferences, MobileParty>
+    // Generic fixtures are excluded from production handler discovery.
+    private sealed class OwnerReferences<T> : GenericHandler<OwnerReferences<T>, MobileParty>
     {
-        private readonly PartyReferences partyReferences;
+        private readonly PartyReferences<T> partyReferences;
         internal OwnerReferences(IMessageBroker broker, IObjectManager objects,
             INetwork network, ICampaignObjectGraphReadiness readiness) : base(broker, objects, network)
         {
@@ -627,12 +636,12 @@ public sealed class CampaignObjectGraphReadinessTests
                 owner.MobileParty = party;
                 readiness.ReferencesApplied();
             });
-            partyReferences = new PartyReferences(broker, objects, network, readiness);
+            partyReferences = new PartyReferences<T>(broker, objects, network, readiness);
         }
         public new void Dispose() { partyReferences.Dispose(); base.Dispose(); }
     }
 
-    private sealed class PartyReferences : GenericHandler<PartyReferences, PartyBase>
+    private sealed class PartyReferences<T> : GenericHandler<PartyReferences<T>, PartyBase>
     {
         internal PartyReferences(IMessageBroker broker, IObjectManager objects,
             INetwork network, ICampaignObjectGraphReadiness readiness) : base(broker, objects, network)
