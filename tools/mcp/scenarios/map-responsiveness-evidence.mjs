@@ -1,5 +1,26 @@
 import assert from 'node:assert/strict';
 
+export function assertMovingPlayersCritical(pair) {
+    assert.equal(pair.length, 2);
+    const keys = ['gold', 'troops', 'wounded', 'heroId', 'clanId', 'characterId', 'partyId', 'partyStringId',
+        'heroStringId', 'settlementId', 'registeredPlayers', 'heroRegistrations', 'partyRegistrations', 'clanRegistrations'];
+    const maps = pair.map(rows => { assert.equal(rows.length, 2); return new Map(rows.map(row => [row.controllerId, row])); });
+    assert.equal(maps[0].size, 2); assert.equal(maps[1].size, 2);
+    assert.deepEqual([...maps[0].keys()].sort(), [...maps[1].keys()].sort());
+    for (const [controller, left] of maps[0]) {
+        const right = maps[1].get(controller);
+        for (const key of keys) {
+            assert.ok(Object.hasOwn(left, key) && Object.hasOwn(right, key), 'Missing critical player field ' + key);
+            assert.equal(right[key], left[key], controller + '/' + key);
+        }
+        for (const row of [left, right]) {
+            assert.equal(row.active, true); assert.equal(row.registeredPlayers, 2);
+            for (const key of ['heroRegistrations', 'partyRegistrations', 'clanRegistrations']) assert.equal(row[key], 1);
+            assert.ok(Number.isFinite(row.x) && Number.isFinite(row.y), 'Invalid observed moving position');
+        }
+    }
+}
+
 export function clockOffset(samples) {
     assert.ok(samples.length >= 3, 'At least three clock brackets required');
     let lower = -Infinity, upper = Infinity;

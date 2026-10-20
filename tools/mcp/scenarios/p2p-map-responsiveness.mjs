@@ -5,15 +5,15 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { options, run } from './p2p-mission-lifecycle.mjs';
-import { assertActors, assertWriter, jsonOutput } from './p2p-udp-reliability.mjs';
-import { clockOffset, mergeProbePages, summarizeMovement } from './map-responsiveness-evidence.mjs';
+import { assertActors, assertWorld, assertWriter, jsonOutput } from './p2p-udp-reliability.mjs';
+import { assertMovingPlayersCritical, clockOffset, mergeProbePages, summarizeMovement } from './map-responsiveness-evidence.mjs';
 
 const INSTANCES = ['server', 'client1'];
 export const PROFILE_CASES = [{ name: 'transparent', fault: {} },
     { name: 'one-way-50ms', fault: { delayEvery: 1, delayMs: 50 } }];
 
 export async function exerciseMapMovement(context) {
-    const { command, feature, initial, bothStates, setTime, proxy, config, emit, screenshot, consistentSnapshot } = context;
+    const { command, feature, initial, bothStates, setTime, proxy, config, emit, screenshot, poll } = context;
     assert.ok(proxy, 'Actual UDP proxy is required for measured network conditions');
     const read = async (instance, offset = 0) => jsonOutput(await command(instance,
         'coop.debug.movement_probe.read', [String(offset), '256']));
@@ -36,6 +36,7 @@ export async function exerciseMapMovement(context) {
         throw new Error('Movement evidence page limit reached');
     }
     for (const profile of PROFILE_CASES) await feature('two-moving-players-' + profile.name, async () => {
+        await setTime('Pause');
         proxy.setFault(profile.fault);
         const label = profile.name + '-' + Date.now();
         for (const instance of INSTANCES) {
@@ -43,7 +44,6 @@ export async function exerciseMapMovement(context) {
             assert.equal(page.armed, true); assert.ok(!page.fault);
         }
         const clocks = await Promise.all(INSTANCES.map(calibrate));
-        await setTime('Play_1x');
         const clicks = [], beforeNetwork = structuredClone(proxy.stats);
         // These are observation windows between distinct user actions, not readiness waits.
         for (const [dx, dy] of [[6, 0], [0, 6], [-6, 0], [0, -6]]) {
@@ -71,7 +71,16 @@ export async function exerciseMapMovement(context) {
         const result = { label, profile, clocks, clicks, analysis, states, beforeNetwork, afterNetwork };
         await writeFile(config.record + '.' + profile.name + '.movement.json', JSON.stringify({ ...result, probes }, null, 2), { flag: 'wx' });
         proxy.setFault({});
-        result.finalCriticalWorld = await consistentSnapshot('critical state after ' + profile.name);
+        await setTime('Pause');
+        result.finalCriticalWorld = await poll('critical state after ' + profile.name, async () => {
+            const states = await bothStates(); assertActors(states, initial); assertWriter(states, initial[0].controller, initial);
+            const worlds = await Promise.all(INSTANCES.map(instance => command(instance, 'coop.debug.authority.world_state').then(jsonOutput)));
+            assertWorld(worlds);
+            const players = await Promise.all(INSTANCES.map(instance => Promise.all(initial.map(actor =>
+                command(instance, 'coop.debug.players.party_state', [actor.controller]).then(jsonOutput)))));
+            assertMovingPlayersCritical(players);
+            return { states, worlds, players, positionPolicy: 'Raw positions retained; replica offsets allowed' };
+        });
         return result;
     });
 }

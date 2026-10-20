@@ -1,7 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { clockOffset, latencyBounds, mergeProbePages, summarizeMovement } from './map-responsiveness-evidence.mjs';
+import { assertMovingPlayersCritical, clockOffset, latencyBounds, mergeProbePages, summarizeMovement } from './map-responsiveness-evidence.mjs';
+
+test('moving player comparison allows position offsets and rejects resource or registration divergence', () => {
+    const players = ['A', 'B'].map(controllerId => ({ controllerId, gold: 10, troops: 5, wounded: 0, heroId: controllerId,
+        clanId: controllerId, characterId: controllerId, partyId: controllerId, partyStringId: controllerId,
+        heroStringId: controllerId, settlementId: null, registeredPlayers: 2, heroRegistrations: 1,
+        partyRegistrations: 1, clanRegistrations: 1, active: true, x: 1, y: 2 }));
+    const pair = [players, structuredClone(players)]; pair[1][0].x += 3;
+    assertMovingPlayersCritical(pair);
+    for (const edit of [r => r.gold++, r => r.troops++, r => r.heroId = 'switched', r => r.partyRegistrations++,
+        r => delete r.clanId, r => r.x = NaN]) {
+        const bad = structuredClone(pair); edit(bad[1][0]); assert.throws(() => assertMovingPlayersCritical(bad));
+    }
+});
 
 const clock = (pid = 1, ticks = 1000) => ({ pid, frequency: 1000, basis: 'Stopwatch.GetTimestamp', stopwatchTicks: ticks });
 const samples = () => [0, 1, 2].map(n => ({ before: 100 + n, after: 102 + n, clock: clock(1, 1101 + n) }));
