@@ -108,6 +108,23 @@ public class MessageBroker : IMessageBroker
         throw new InvalidOperationException(reason);
     }
 
+    private IMessageApplyObserver ValidateClassifiedPublication()
+    {
+        try
+        {
+            var observer = PublicationObserver();
+            if (!MessageApplyScope.IsCurrent)
+                throw new OperationCanceledException("Classified publication outlived its session binding or source lease.");
+            return observer;
+        }
+        catch (Exception ex)
+        {
+            // Fault the receipt's captured source lease even if its identity has already changed.
+            MessageApplyScope.Fail(ex.ToString());
+            throw;
+        }
+    }
+
     public MessageBroker()
     {
         subscribers = new Dictionary<Type, List<WeakDelegate>>();
@@ -120,12 +137,7 @@ public class MessageBroker : IMessageBroker
 
         bool classified = message is ICampaignAuthorityScopedMessage;
         // Even an explicit observation cannot make a process-global multi-session delivery safe.
-        var observer = classified ? PublicationObserver() : null;
-        if (classified && !MessageApplyScope.IsCurrent)
-        {
-            MessageApplyScope.Fail("Classified publication outlived its session binding or source lease.");
-            throw new OperationCanceledException("Classified publication outlived its session binding or source lease.");
-        }
+        var observer = classified ? ValidateClassifiedPublication() : null;
         using var apply = classified && !MessageApplyScope.HasCurrent
             ? MessageApplyScope.Begin(observer, typeof(T)) : null;
         List<WeakDelegate> delegates;
@@ -165,6 +177,9 @@ public class MessageBroker : IMessageBroker
                     continue;
                 }
 
+                // A preceding subscriber may have changed the binding/lease or appended a foreign
+                // subscriber. Keep ordinary live-list reentry, but never continue a stale critical apply.
+                if (classified) ValidateClassifiedPublication();
                 try
                 {
                     // Making synchronous to maintain sequencing of packets

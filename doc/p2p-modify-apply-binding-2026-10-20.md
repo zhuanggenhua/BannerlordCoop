@@ -42,3 +42,14 @@ No atomic full-world rollback, complete checkpoint, lossless takeover, natural-d
 - Every build/test uses `-p:ModName=`; no game deployment, process or physical test is run by this worker. Coordinator integrated and dual-process native acceptance remains required.
 
 Raw command logs/TRX, exact commands, SHA256, baseline comparison, failedAttempts and handoff are retained under `artifacts/modify-apply-binding-m3`. The original 201-failure coordinator TRX, first failing 4-case production reproduction, seven collection-corruption failures and 196-failure role-race run remain unchanged. The original baseline-name JSON stores XML attribute entities; comparison decodes XML entities once to match XML parser decoding, records each decoded name, and changes no test name or exclusion rule.
+
+## V2 independent-review mustfix: reentrant critical subscriber fencing
+
+Four-part justification recorded before this correction:
+
+1. Existing implementation retains the original live indexed subscription list: a subscriber may append another subscriber, and ordinary delivery may reach it in the same publish. Critical session selection and receipt currentness were checked only at Publish entry.
+2. Actual RED evidence against `a01cf147f1fde210b9ada4a45289d2e3cc043850`: two real synchronous reentry cases in `v2/red02` both fail with expected later-call count 0, actual 1. The first subscriber can attach an idle foreign session and append its handler; alternatively it can release the last current binding while an existing later handler still runs. An external adapter cannot fence individual invocations inside this live broker loop.
+3. Preserve ordinary-message live-index reentry, weak subscribers, invocation order and lock-free delegate invocation. Only classified critical messages must revalidate their current receipt generation/source lease and unambiguous session registrations immediately before each actual invocation. A rejection records the original current receipt fault, not just whichever lease the identities currently hold, and stops later execution. No snapshot enumeration or delegate lock is added.
+4. Required regression: both synchronous reentry cases RED then GREEN, including zero later calls and sticky fault/no ACK after outer completion; full Common regression retains original ordinary reentry/GC/pruning/throw behavior. Original `a01` receipts are immutable; new receipts live under `v2`. Coordinator runs integrated Coop/GI/native acceptance separately.
+
+V2 verification: actual synchronous cases **2 FAIL / 0 PASS** on `a01` (`v2/red02`, each later-call count actual 1), then **2 PASS / 0 FAIL** (`v2/green`). Complete Common regression **445 PASS / 0 FAIL** (`v2/common-full`). Previous a01 Coop/GI receipts remain original-version evidence; this worker does not relabel those as V2 integrated results. Coordinator performs full integrated reruns and native acceptance.
