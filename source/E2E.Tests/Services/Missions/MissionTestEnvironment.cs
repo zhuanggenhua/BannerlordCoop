@@ -163,6 +163,12 @@ public class MissionTestEnvironment : E2ETestEnvironment
         Register(Server);
         foreach (var client in Clients)
             Register(client);
+
+        // Use the campaign peer that actually sends this player's election requests.
+        var connectedClient = Clients.FirstOrDefault(client =>
+            client.Resolve<IControllerIdProvider>().ControllerId == controllerId);
+        if (connectedClient != null)
+            Server.Call(() => Server.Resolve<IPlayerManager>().SetPeer(controllerId, connectedClient.NetPeer));
     }
 
     /// <summary>

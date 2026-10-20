@@ -172,7 +172,7 @@ public class ServerMissionMembershipHandler : IHandler
 
     private void Handle_MissionLeft(MessagePayload<NetworkMissionLeft> payload)
     {
-        if (payload.Who is NetPeer peer) missionManager.RevokeRelay(peer);
+        if (payload.Who is NetPeer peer && TryGetCurrentController(peer, out _)) missionManager.RevokeRelay(peer);
         var message = payload.What;
         GameThread.RunSafe(() =>
         {

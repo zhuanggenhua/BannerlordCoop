@@ -6,6 +6,7 @@ using GameInterface.Services.Entity;
 using GameInterface.Services.Locations;
 using GameInterface.Services.Locations.Hosting;
 using GameInterface.Services.ObjectManager;
+using GameInterface.Services.Missions;
 using GameInterface.Services.Players;
 using LiteNetLib;
 using Missions.Messages;
@@ -86,13 +87,16 @@ internal class LocationHostHandler : IHandler
     /// its per-instance connection order is the mission-ready order.</summary>
     private void Handle_LocationMissionReady(MessagePayload<LocationMissionReady> payload)
     {
-        if (ModInformation.IsServer) return;
+        if (ModInformation.IsDedicatedAuthority) return;
 
         var instanceId = payload.What.InstanceId;
         if (string.IsNullOrEmpty(instanceId)) return;
 
         // On a client, SendAll targets the server (its only connected peer).
-        network.SendAll(new NetworkRequestLocationHost(instanceId, controllerIdProvider.ControllerId));
+        var request = new NetworkRequestLocationHost(instanceId, controllerIdProvider.ControllerId);
+        if (ModInformation.IsListenAuthority)
+            messageBroker.Publish(new LocalPlayerEndpoint(controllerIdProvider.ControllerId), request);
+        else network.SendAll(request);
         Logger.Information("[LocationHost] Mission ready — requested host election for location {InstanceId}", instanceId);
     }
 
@@ -112,8 +116,8 @@ internal class LocationHostHandler : IHandler
         // append in arrival (= mission-ready) order, so concurrent requests cannot double-elect.
         GameThread.RunSafe(() =>
         {
-            if (string.IsNullOrEmpty(instanceId) || string.IsNullOrEmpty(requesterId))
-                return;
+            if (string.IsNullOrEmpty(instanceId) || string.IsNullOrEmpty(requesterId) ||
+                !IsCurrentRequester(payload.Who, requesterId)) return;
 
             if (!IsRequesterInInstanceSettlement(instanceId, requesterId))
             {
@@ -133,10 +137,8 @@ internal class LocationHostHandler : IHandler
                     Logger.Information("[LocationHost] {Requester} joined location {InstanceId}; successor line: {Successors}",
                         requesterId, instanceId, string.Join(", ", updated.SuccessorControllerIds));
                 }
-                else if (requester != null)
-                {
-                    network.Send(requester, ToMessage(instanceId, existing));
-                }
+                else if (requester != null) network.Send(requester, ToMessage(instanceId, existing));
+                else ApplyHostAssignment(ToMessage(instanceId, existing));
             }
             else
             {
@@ -221,10 +223,12 @@ internal class LocationHostHandler : IHandler
     /// <summary>[Client] Store the server's host assignment for this location instance.</summary>
     private void Handle_NetworkLocationHostAssigned(MessagePayload<NetworkLocationHostAssigned> payload)
     {
-        if (ModInformation.IsServer) return;
+        if (ModInformation.IsDedicatedAuthority) return;
+        ApplyHostAssignment(payload.What);
+    }
 
-        var message = payload.What;
-
+    private void ApplyHostAssignment(NetworkLocationHostAssigned message)
+    {
         // Capture the host we knew before applying the update, so we can detect a migration TO us.
         string previousHost = null;
         bool wasLocalHost = false;
@@ -279,6 +283,16 @@ internal class LocationHostHandler : IHandler
             if (isMigrationToUs)
                 Logger.Information("[LocationHost] Became NPC host of {InstanceId} via migration from {Old}", message.InstanceId, previousHost);
         }
+    }
+
+    private bool IsCurrentRequester(object source, string controllerId)
+    {
+        if (source is LocalPlayerEndpoint local)
+            return ModInformation.IsListenAuthority && local.ControllerId == controllerIdProvider.ControllerId &&
+                local.ControllerId == controllerId && playerManager.TryGetPlayer(controllerId, out _);
+        return source is NetPeer peer && playerManager.TryGetPlayer(peer, out var player) &&
+            player.ControllerId == controllerId && playerManager.TryGetPeer(controllerId, out var current) &&
+            ReferenceEquals(current, peer);
     }
 
     // True if the requesting controller's player party is currently in the instance's settlement. The
@@ -342,7 +356,9 @@ internal class LocationHostHandler : IHandler
 
     private void SetServerAssignment(string instanceId, LocationHostAssignment assignment)
     {
-        hostRegistry.Set(instanceId, assignment);
-        network.SendAll(ToMessage(instanceId, assignment));
+        var message = ToMessage(instanceId, assignment);
+        if (ModInformation.IsListenAuthority) ApplyHostAssignment(message);
+        else hostRegistry.Set(instanceId, assignment);
+        network.SendAll(message);
     }
 }

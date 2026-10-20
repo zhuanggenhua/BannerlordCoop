@@ -12,6 +12,7 @@ using GameInterface.Services.MapEvents.Messages.Start;
 using GameInterface.Services.MapEvents.TroopSupply;
 using GameInterface.Services.MapEvents.TroopSupply.Messages;
 using GameInterface.Services.ObjectManager;
+using GameInterface.Services.Missions;
 using GameInterface.Services.PlayerCaptivityService.Messages;
 using GameInterface.Services.Players;
 using LiteNetLib;
@@ -271,11 +272,10 @@ internal class BattleHostHandler : IHandler
     {
         if (ModInformation.IsClient) return;
         var handoff = payload.What.Handoff;
-        var sender = payload.Who as NetPeer;
         GameThread.RunSafe(() =>
         {
-            if (sender == null || handoff == null || !handoff.HasValidAuthorityTransition
-                || !playerManager.TryGetPlayer(sender, out var holder)
+            if (handoff == null || !handoff.HasValidAuthorityTransition
+                || !TryResolvePlayer(payload.Who, out var holder)
                 || holder.ControllerId != handoff.Previous.OwnerControllerId
                 || !hostRegistry.TryGet(handoff.BattleInstanceId, out var assignment)
                 || assignment.HostControllerId != holder.ControllerId || assignment.Epoch != handoff.HostEpoch
@@ -307,13 +307,13 @@ internal class BattleHostHandler : IHandler
     /// screen has not yet joined (BR-013); the unowned/NPC sides are decided by the election at mission-ready.</summary>
     private void Handle_PlayerEnteredBattle(MessagePayload<PlayerEnteredBattle> payload)
     {
-        if (ModInformation.IsServer) return;
+        if (ModInformation.IsDedicatedAuthority) return;
 
         if (!objectManager.TryGetIdWithLogging(payload.What.MapEvent, out var mapEventId))
             return;
 
         // On a client, SendAll targets the server (its only connected peer).
-        network.SendAll(new NetworkRequestBattleReserves(mapEventId, controllerIdProvider.ControllerId));
+        SendRoomRequest(new NetworkRequestBattleReserves(mapEventId, controllerIdProvider.ControllerId));
         Logger.Information("[BattleHost] Requested own battle reserves at entry for battle {MapEventId}", mapEventId);
     }
 
@@ -322,7 +322,7 @@ internal class BattleHostHandler : IHandler
     /// connection order is the mission-ready order (BR-013).</summary>
     private void Handle_BattleMissionReady(MessagePayload<BattleMissionReady> payload)
     {
-        if (ModInformation.IsServer) return;
+        if (ModInformation.IsDedicatedAuthority) return;
 
         var mapEventId = payload.What.MapEventId;
         if (string.IsNullOrEmpty(mapEventId)) return;
@@ -331,7 +331,7 @@ internal class BattleHostHandler : IHandler
         if (ShouldDeferFixtureMissionReady(mapEventId)) return;
 #endif
         var hideout = TaleWorlds.MountAndBlade.Mission.Current?.GetMissionBehavior<CoopHideoutMissionLogic>();
-        network.SendAll(new NetworkRequestBattleHost(mapEventId, controllerIdProvider.ControllerId,
+        SendRoomRequest(new NetworkRequestBattleHost(mapEventId, controllerIdProvider.ControllerId,
             hideout?.HasPhaseSnapshot == true));
         Logger.Information("[BattleHost] Mission ready — requested host election for battle {MapEventId}", mapEventId);
     }
@@ -355,7 +355,7 @@ internal class BattleHostHandler : IHandler
             if (!objectManager.TryGetObjectWithLogging<MapEvent>(mapEventId, out var mapEvent))
                 return;
 
-            if (string.IsNullOrEmpty(requesterId) || !IsRequesterInBattle(mapEvent, requesterId))
+            if (!IsCurrentRequester(payload.Who, requesterId) || !IsRequesterInBattle(mapEvent, requesterId))
             {
                 Logger.Warning("[BattleHost] Ignoring host request for {MapEventId} from '{Requester}' (not a participant)",
                     mapEventId, requesterId);
@@ -375,10 +375,7 @@ internal class BattleHostHandler : IHandler
                     Logger.Information("[BattleHost] {Requester} joined battle {MapEventId}; successor line: {Successors}",
                         requesterId, mapEventId, string.Join(", ", updated.SuccessorControllerIds));
                 }
-                else if (requester != null)
-                {
-                    network.Send(requester, ToMessage(mapEventId, existing));
-                }
+                else SendController(requester, requesterId, ToMessage(mapEventId, existing));
             }
             else
             {
@@ -431,7 +428,7 @@ internal class BattleHostHandler : IHandler
             if (!objectManager.TryGetObjectWithLogging<MapEvent>(mapEventId, out var mapEvent))
                 return;
 
-            if (string.IsNullOrEmpty(requesterId) || !IsRequesterInBattle(mapEvent, requesterId))
+            if (!IsCurrentRequester(payload.Who, requesterId) || !IsRequesterInBattle(mapEvent, requesterId))
             {
                 Logger.Warning("[BattleHost] Ignoring reserve request for {MapEventId} from '{Requester}' (not a participant)",
                     mapEventId, requesterId);
@@ -464,15 +461,14 @@ internal class BattleHostHandler : IHandler
 
     private void Handle_NetworkBattleTroopHealth(MessagePayload<NetworkBattleTroopHealth> payload)
     {
-        if (ModInformation.IsClient || payload.Who is not NetPeer peer) return;
+        if (ModInformation.IsClient) return;
+        var peer = payload.Who as NetPeer;
         var message = payload.What;
         if (string.IsNullOrEmpty(message.MapEventId) || string.IsNullOrEmpty(message.PartyId)) return;
 
         GameThread.RunSafe(() =>
         {
-            if (!playerManager.TryGetPlayer(peer, out var player) ||
-                !playerManager.TryGetPeer(player.ControllerId, out var currentPeer) ||
-                !ReferenceEquals(currentPeer, peer) ||
+            if (!TryResolvePlayer(payload.Who, out var player) ||
                 !battleRuntimeStates.TryGetValue(message.MapEventId, out var state) ||
                 !state.PresentControllers.Contains(player.ControllerId)) return;
             if (!objectManager.TryGetObjectWithLogging<MapEvent>(message.MapEventId, out var mapEvent)) return;
@@ -582,7 +578,7 @@ internal class BattleHostHandler : IHandler
         }
         pending.RetryUtc = DateTime.UtcNow + FlushAckDeadline;
         if (!state.PresentControllers.Contains(assignment.HostControllerId)
-            || !playerManager.TryGetPeer(assignment.HostControllerId, out var peer)) return;
+            || !TryGetCurrentPeer(assignment.HostControllerId, out var peer)) return;
         if (pending.HostEpoch != assignment.Epoch || !ReferenceEquals(pending.HostPeer, peer))
         {
             pending.SnapshotId = Guid.NewGuid();
@@ -590,7 +586,7 @@ internal class BattleHostHandler : IHandler
             pending.HostPeer = peer;
             pending.HostEpoch = assignment.Epoch;
         }
-        network.Send(peer, new NetworkRequestBattleTroopHealth(mapEventId,
+        SendController(peer, assignment.HostControllerId, new NetworkRequestBattleTroopHealth(mapEventId,
             pending.AwaitedParties.ToArray(), pending.SnapshotId));
     }
 
@@ -611,7 +607,7 @@ internal class BattleHostHandler : IHandler
         foreach (var grant in grants)
         {
             if (!state.PresentControllers.Contains(grant.ReturnerControllerId)
-                || !playerManager.TryGetPeer(grant.ReturnerControllerId, out var peer)
+                || !TryGetCurrentPeer(grant.ReturnerControllerId, out var peer)
                 || !ReferenceEquals(peer, grant.ReturnerPeer)) continue;
             RememberHostPeer(mapEventId, grant.ReturnerControllerId, peer);
             if (!HandleControllerReturn(mapEventId, mapEvent, grant.ReturnerControllerId,
@@ -645,8 +641,8 @@ internal class BattleHostHandler : IHandler
     /// skipped (entry replies — the unowned sides are not decided until the election).</summary>
     private void SendOwnedReserves(string mapEventId, MapEvent mapEvent, NetPeer requester, string requesterId, bool includeEmptySides)
     {
-        if (requester == null || DeferHealthGrant(mapEventId, requesterId, requester, includeEmptySides)) return;
-        SendSideReserves(requester, mapEventId, mapEvent,
+        if ((requester == null && !IsLocalController(requesterId)) || DeferHealthGrant(mapEventId, requesterId, requester, includeEmptySides)) return;
+        SendSideReserves(requester, requesterId, mapEventId, mapEvent,
             BuildOwnedReserves(mapEventId, mapEvent, requesterId, includeEmptySides), flushRequested: false);
     }
 
@@ -693,14 +689,14 @@ internal class BattleHostHandler : IHandler
         return sides;
     }
 
-    private void SendSideReserves(NetPeer receiver, string mapEventId, MapEvent mapEvent,
+    private void SendSideReserves(NetPeer receiver, string receiverId, string mapEventId, MapEvent mapEvent,
         List<SideReserve> reserves, bool flushRequested)
     {
-        if (receiver == null) return;
+        if (receiver == null && !IsLocalController(receiverId)) return;
         long allocationRevision = ++reserveSnapshotRevision;
         int battleSize = battleSizeProvider.GetBattleSize();
         foreach (var sideReserve in reserves)
-            network.Send(receiver, new NetworkBattleTroopReserve(
+            SendController(receiver, receiverId, new NetworkBattleTroopReserve(
                 mapEventId, (int)sideReserve.Side, sideReserve.Parties, sideReserve.TotalTroops,
                 sideReserve.PlayerOwnedPartyCount, allocationRevision, battleSize, flushRequested));
     }
@@ -722,11 +718,11 @@ internal class BattleHostHandler : IHandler
         {
             if (!playerManager.IsConnected(player) || !IsRequesterInBattle(mapEvent, player.ControllerId))
                 continue;
-            if (!playerManager.TryGetPeer(player.ControllerId, out var peer))
+            if (!TryGetCurrentPeer(player.ControllerId, out var peer))
                 continue;
 
             if (player.ControllerId == assignment.HostControllerId)
-                network.Send(peer, new NetworkBattleReserveOwnershipExpanded(mapEventId));
+                SendController(peer, player.ControllerId, new NetworkBattleReserveOwnershipExpanded(mapEventId));
 
             SendOwnedReserves(mapEventId, mapEvent, peer, player.ControllerId, includeEmptySides: true);
         }
@@ -736,7 +732,7 @@ internal class BattleHostHandler : IHandler
     /// own requests. A non-host requester leaves the record untouched.</summary>
     private void RememberHostPeer(string mapEventId, string requesterId, NetPeer requester)
     {
-        if (requester == null) return;
+        if (requester == null && !IsLocalController(requesterId)) return;
         if (!hostRegistry.TryGet(mapEventId, out var assignment) || assignment.HostControllerId != requesterId)
             return;
 
@@ -801,11 +797,11 @@ internal class BattleHostHandler : IHandler
         // message) is known, and record the pending BEFORE sending so an ack can never miss it — the sends
         // can complete the whole handshake inline (the in-process test harness delivers synchronously).
         var refresh = BuildOwnedReserves(mapEventId, mapEvent, host.ControllerId, includeEmptySides: true);
-        if (refresh.Count == 0 || requesterPeer == null)
+        if (refresh.Count == 0 || (requesterPeer == null && !IsLocalController(requesterId)))
         {
             // Nothing to flush, or no peer to defer a grant for: refresh unflagged (legacy semantics) and
             // let the caller serve immediately from the ledger.
-            SendSideReserves(host.Peer, mapEventId, mapEvent, refresh, flushRequested: false);
+            SendSideReserves(host.Peer, host.ControllerId, mapEventId, mapEvent, refresh, flushRequested: false);
             Logger.Information("[BattleHost] Refreshed host {Host}'s reserve scope for {MapEventId} after {Controller} returned",
                 host.ControllerId, mapEventId, requesterId);
             return false;
@@ -823,7 +819,7 @@ internal class BattleHostHandler : IHandler
         };
         runtimeState.PendingReturns.Add(pending);
 
-        SendSideReserves(host.Peer, mapEventId, mapEvent, refresh, flushRequested: true);
+        SendSideReserves(host.Peer, host.ControllerId, mapEventId, mapEvent, refresh, flushRequested: true);
         Logger.Information("[BattleHost] Refreshed host {Host}'s reserve scope for {MapEventId} after {Controller} returned; the return grant awaits {Acks} flush ack(s)",
             host.ControllerId, mapEventId, requesterId, refresh.Count);
         return true;
@@ -846,7 +842,7 @@ internal class BattleHostHandler : IHandler
                 continue;
 
             pending.IncludeEmptySides |= includeEmptySides;
-            if (requesterPeer != null)
+            if (requesterPeer != null || IsLocalController(requesterId))
                 pending.ReturnerPeer = requesterPeer;
             Logger.Information("[BattleHost] Folded {Controller}'s reserve request for {MapEventId} into its pending return (grant deferred until the host's flush ack)",
                 requesterId, mapEventId);
@@ -1180,7 +1176,7 @@ internal class BattleHostHandler : IHandler
     /// <summary>[Client] Store the server's host assignment for this battle.</summary>
     private void Handle_NetworkBattleHostAssigned(MessagePayload<NetworkBattleHostAssigned> payload)
     {
-        if (ModInformation.IsServer) return;
+        if (ModInformation.IsDedicatedAuthority) return;
 
         GameThread.RunSafe(() => ApplyHostAssignment(payload.What), context: nameof(Handle_NetworkBattleHostAssigned));
     }
@@ -1239,6 +1235,40 @@ internal class BattleHostHandler : IHandler
             if (isLocalHost)
                 Logger.Information("[BattleHost] Became host of {MapEventId} via migration from {Old}", message.MapEventId, previousHost);
         }
+    }
+
+    private bool IsLocalController(string controllerId) => ModInformation.IsListenAuthority &&
+        controllerId == controllerIdProvider.ControllerId && playerManager.TryGetPlayer(controllerId, out _);
+
+    private bool TryGetCurrentPeer(string controllerId, out NetPeer peer)
+    {
+        peer = null;
+        return IsLocalController(controllerId) || playerManager.TryGetPeer(controllerId, out peer);
+    }
+
+    private bool TryResolvePlayer(object source, out GameInterface.Services.Players.Data.Player player)
+    {
+        player = null;
+        if (source is LocalPlayerEndpoint local && IsLocalController(local.ControllerId))
+            return playerManager.TryGetPlayer(local.ControllerId, out player);
+        return source is NetPeer peer && playerManager.TryGetPlayer(peer, out player) &&
+            playerManager.TryGetPeer(player.ControllerId, out var current) && ReferenceEquals(current, peer);
+    }
+
+    private bool IsCurrentRequester(object source, string controllerId) =>
+        TryResolvePlayer(source, out var player) && player.ControllerId == controllerId;
+
+    private void SendRoomRequest<T>(T request) where T : IMessage
+    {
+        if (ModInformation.IsListenAuthority)
+            messageBroker.Publish(new LocalPlayerEndpoint(controllerIdProvider.ControllerId), request);
+        else network.SendAll(request);
+    }
+
+    private void SendController<T>(NetPeer peer, string controllerId, T message) where T : IMessage
+    {
+        if (peer != null) network.Send(peer, message);
+        else if (IsLocalController(controllerId)) messageBroker.Publish(this, message);
     }
 
     // True if the requesting controller's player party is in this map event. Defends against a stale or
@@ -1342,7 +1372,7 @@ internal class BattleHostHandler : IHandler
         }
 
         var host = runtimeState.HostEndpoint;
-        network.Send(host.Peer, new NetworkBattleReserveOwnershipExpanded(mapEventId));
+        SendController(host.Peer, host.ControllerId, new NetworkBattleReserveOwnershipExpanded(mapEventId));
         SendOwnedReserves(mapEventId, mapEvent, host.Peer, hostControllerId, includeEmptySides: true);
         Logger.Information("[BattleHost] Pushed {Dropped}'s remaining reserves to host {Host} in {MapEventId}",
             droppedControllerId, hostControllerId, mapEventId);
@@ -1395,8 +1425,10 @@ internal class BattleHostHandler : IHandler
 
     private void SetServerAssignment(string mapEventId, BattleHostAssignment assignment)
     {
-        hostRegistry.Set(mapEventId, assignment);
-        network.SendAll(ToMessage(mapEventId, assignment));
+        var message = ToMessage(mapEventId, assignment);
+        if (ModInformation.IsListenAuthority) ApplyHostAssignment(message);
+        else hostRegistry.Set(mapEventId, assignment);
+        network.SendAll(message);
         if (battleRuntimeStates.TryGetValue(mapEventId, out var runtimeState) &&
             (runtimeState.ResolvedState == BattleState.AttackerVictory
              || runtimeState.ResolvedState == BattleState.DefenderVictory
