@@ -32,6 +32,7 @@ using System.Threading.Tasks;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Roster;
+using TaleWorlds.ObjectSystem;
 using Xunit;
 using Objects = GameInterface.Services.ObjectManager.ObjectManager;
 
@@ -50,6 +51,63 @@ public sealed class CampaignObjectGraphReadinessTests
         var handlers = InterfaceCollector.GetInterfaces<IHandler>("GameInterface").ToArray();
         Assert.DoesNotContain(typeof(OwnerReferences<>), handlers);
         Assert.DoesNotContain(typeof(PartyReferences<>), handlers);
+    }
+
+    [Fact]
+    public void NativeObjectIdAssignmentDuringPublicationDoesNotLeaveCommittedReplicaPending()
+    {
+        using var fixture = new Fixture();
+        int before = 0, after = 0;
+        OnGame(() => fixture.Begin(() =>
+        {
+            before = fixture.Party.GetHashCode();
+            fixture.Party.Id = new MBGUID(14000001);
+            after = fixture.Party.GetHashCode();
+            fixture.Publications++;
+        }));
+        fixture.CreateAttachments();
+        fixture.BindOwnerAndItems();
+        fixture.BindMember();
+        fixture.BindPrison();
+        OnGame(() =>
+        {
+            Assert.NotEqual(before, after);
+            Assert.True(fixture.Readiness.TryEnsureReady(out var reason), reason);
+            Assert.Null(reason);
+            Assert.Equal(1, fixture.Publications);
+            fixture.Party.Id = new MBGUID(14000002);
+            fixture.Readiness.BeginReplicaCreation(fixture.Party);
+            fixture.Readiness.PublishReplicaWhenReady(fixture.Party, () => fixture.Publications++);
+            fixture.Readiness.ReferencesApplied();
+            Assert.True(fixture.Readiness.TryEnsureReady(out reason), reason);
+            Assert.Equal(1, fixture.Publications);
+        });
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NativeObjectIdChangesBeforeAndDuringRemovalDoNotStrandReplica(bool published)
+    {
+        using var fixture = new Fixture();
+        if (published) fixture.Complete();
+        else OnGame(() => fixture.Begin());
+        OnGame(() =>
+        {
+            fixture.Party.Id = new MBGUID(14000003);
+            fixture.Readiness.CancelReplicaPublication(fixture.Party);
+            fixture.Readiness.BeginReplicaCreation(fixture.Party);
+            fixture.Readiness.PublishReplicaWhenReady(fixture.Party, () => fixture.Publications++);
+            Assert.False(fixture.Readiness.TryEnsureReady(out var reason));
+            Assert.Contains("removal-pending", reason);
+            fixture.Party.Id = new MBGUID(14000004);
+            fixture.Readiness.CompleteReplicaRemoval(fixture.Party);
+            Assert.False(fixture.Readiness.TryEnsureReady(out reason));
+            fixture.Objects.Remove(fixture.Party);
+            Assert.True(fixture.Readiness.TryEnsureReady(out reason), reason);
+            Assert.Null(reason);
+            Assert.Equal(published ? 1 : 0, fixture.Publications);
+        });
     }
 
     [Fact]

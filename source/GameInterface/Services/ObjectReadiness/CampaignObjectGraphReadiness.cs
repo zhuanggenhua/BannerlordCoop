@@ -1,5 +1,6 @@
 ﻿using Common;
 using GameInterface.Services.ObjectManager;
+using Common.Network;
 using Serilog;
 using System;
 using System.Collections.Generic;
@@ -34,7 +35,7 @@ internal sealed class CampaignObjectGraphReadiness : ICampaignObjectGraphReadine
     private readonly IObjectManager objects;
     private readonly ILogger logger;
     private ConditionalWeakTable<MobileParty, Creation> creations = new();
-    private readonly Dictionary<MobileParty, Creation> pending = new();
+    private readonly Dictionary<MobileParty, Creation> pending = new(ReferenceComparer<MobileParty>.Instance);
     private bool checking;
     private Campaign campaign;
     private bool campaignCaptured;
