@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { appendFile, mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, realpath, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -13,6 +13,7 @@ import { allocationCheckpoint, assertAllocationCheckpointFloor, assertNoPollingM
 import { collectNativeLog } from './native-log-archive.mjs';
 import { UdpFaultProxy } from './udp-fault-proxy.mjs';
 import { assertFrozenMovementPair, assertFrozenNpcSamples } from './frozen-movement-evidence.mjs';
+import { createNativeJsonlWriter } from './native-jsonl-writer.mjs';
 
 export { options };
 export const HELP = `Usage: node tools/mcp/scenarios/p2p-mission-lifecycle.mjs
@@ -328,7 +329,7 @@ export async function run(config, scenario = null) {
         if (proxy) summary.udp = structuredClone(proxy.stats);
         return writeFile(summaryPath, JSON.stringify(summary, null, 2) + '\n');
     };
-    const emit = entry => appendFile(config.record, JSON.stringify({ utc: new Date().toISOString(), ...entry }) + '\n');
+    const emit = createNativeJsonlWriter(config.record);
     const client = new Client({ name: 'codex-p2p-mission-lifecycle', version: '1.0.0' });
     const transport = new StdioClientTransport({ command: config.server, args: ['--config', config.config],
         cwd: config.repo, stderr: 'inherit', maxBufferSize: 16 * 1024 * 1024 });

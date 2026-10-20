@@ -4,7 +4,7 @@ import { performance } from 'node:perf_hooks';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
-import { options, run } from './p2p-mission-lifecycle.mjs';
+import { assertTimeModes, options, run } from './p2p-mission-lifecycle.mjs';
 import { assertActors, assertWorld, assertWriter, jsonOutput } from './p2p-udp-reliability.mjs';
 import { allocationCheckpoint, assertAllocationCheckpointFloor } from './p2p-prisoner-sale.mjs';
 import { assertMovingPlayersCritical, clockOffset, mergeProbePages, summarizeMovement } from './map-responsiveness-evidence.mjs';
@@ -45,6 +45,12 @@ export async function exerciseMapMovement(context) {
             const page = jsonOutput(await command(instance, 'coop.debug.movement_probe.begin', [label], true));
             assert.equal(page.armed, true); assert.ok(!page.fault);
         }
+        await setTime('Play_1x');
+        await poll('both native map clocks running', async () => {
+            const modes = await Promise.all(INSTANCES.map(async instance => ({ instance,
+                mode: await command(instance, 'coop.debug.get_time_mode') })));
+            assertTimeModes(modes, true); return modes;
+        });
         const clocks = await Promise.all(INSTANCES.map(calibrate));
         const clicks = [], beforeNetwork = structuredClone(proxy.stats);
         // These are observation windows between distinct user actions, not readiness waits.
@@ -60,6 +66,8 @@ export async function exerciseMapMovement(context) {
         const probes = await Promise.all(INSTANCES.map(pages));
         const analysis = summarizeMovement(probes, clocks, { input: 'input_enter', apply: 'apply_enter',
             simulation: 'model_frame', visual: 'visual_frame' });
+        await writeFile(config.record + '.' + profile.name + '.movement.json', JSON.stringify({ label, profile, clocks,
+            clicks, analysis, probes, scope: 'Unasserted raw collection retained before gameplay acceptance' }, null, 2), { flag: 'wx' });
         for (const probe of probes) {
             const localInputs = probe.rows.filter(row => row.kind === 'input_enter' && row.actorController === row.localController);
             assert.equal(localInputs.length, 4, 'Every actual local click must be observed exactly once');
@@ -71,7 +79,6 @@ export async function exerciseMapMovement(context) {
         assert.equal(afterNetwork.errorCount, 0);
         if (profile.fault.delayMs) assert.ok(afterNetwork.delayed > beforeNetwork.delayed, 'No actual datagram delayed');
         const result = { label, profile, clocks, clicks, analysis, states, beforeNetwork, afterNetwork };
-        await writeFile(config.record + '.' + profile.name + '.movement.json', JSON.stringify({ ...result, probes }, null, 2), { flag: 'wx' });
         proxy.setFault({});
         await setTime('Pause');
         result.finalCriticalWorld = await poll('critical state after ' + profile.name, async () => {

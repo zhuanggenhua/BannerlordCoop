@@ -80,6 +80,10 @@ export function summarizeMovement(probes, clocks, kinds) {
         assert.ok(inputs.length > 0, 'No original map-click input observed');
         for (let n = 0; n < inputs.length; n++) {
             const input = inputs[n], end = inputs[n + 1]?.stopwatchTicks ?? Infinity;
+            const preceding = probe.rows.filter(row => row.kind === kinds.simulation && row.partyId === input.partyId &&
+                row.stopwatchTicks < input.stopwatchTicks).slice(-3);
+            const stationaryBeforeInput = preceding.length >= 2 && preceding.every(row =>
+                Math.hypot(row.x - preceding[0].x, row.y - preceding[0].y) <= 0.00001);
             const local = probe.rows.filter(row => row.partyId === input.partyId && row.stopwatchTicks >= input.stopwatchTicks &&
                 row.stopwatchTicks < end);
             const adopted = local.find(row => row.kind === 'input_exit' && row.observationId === input.observationId && targetMatches(input, row));
@@ -113,7 +117,8 @@ export function summarizeMovement(probes, clocks, kinds) {
                 remoteApply: remote ? latencyBounds(input, remote, clock, clocks[1 - index]) : 'NOT_OBSERVED',
                 remoteVisualState: remoteVisual ? latencyBounds(input, remoteVisual, clock, clocks[1 - index]) : 'NOT_OBSERVED',
                 correlation: ambiguous || matches.length > 1 ? 'AMBIGUOUS' : remote ? 'actor-and-unique-target' : 'NOT_OBSERVED',
-                interpretation: n === 0 ? 'First motion after initial map input' :
+                stationaryBeforeInput,
+                interpretation: stationaryBeforeInput ? 'First observed motion following a stationary map input' :
                     'Already moving: first subsequent motion is not proof of completed turn',
             });
         }
