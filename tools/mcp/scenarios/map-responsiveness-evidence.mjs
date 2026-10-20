@@ -1,4 +1,18 @@
 import assert from 'node:assert/strict';
+import { allocationCheckpoint, assertAllocationCheckpointFloor } from './p2p-prisoner-sale.mjs';
+
+export function assertSteadyWriterAllocationProgress(worlds, confirmedFloor, previousWorlds) {
+    assertAllocationCheckpointFloor(worlds, confirmedFloor);
+    assert.equal(previousWorlds.length, 2);
+    for (let index = 0; index < 2; index++) {
+        const before = allocationCheckpoint(previousWorlds[index]), after = allocationCheckpoint(worlds[index]);
+        assert.ok(after.nextHandle >= before.nextHandle, 'Local handle high-water regressed on peer ' + index);
+        for (const [type, count] of Object.entries(before.allocationCounters)) {
+            assert.ok(Object.hasOwn(after.allocationCounters, type), 'Local counter type disappeared: ' + type);
+            assert.ok(after.allocationCounters[type] >= count, 'Local counter high-water regressed: ' + type);
+        }
+    }
+}
 
 export function assertMovingPlayersCritical(pair, actors) {
     assert.equal(pair.length, 2);

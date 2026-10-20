@@ -1,7 +1,20 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { assertMovingPlayersCritical, clockOffset, latencyBounds, mergeProbePages, summarizeMovement } from './map-responsiveness-evidence.mjs';
+import { assertMovingPlayersCritical, assertSteadyWriterAllocationProgress, clockOffset, latencyBounds, mergeProbePages, summarizeMovement } from './map-responsiveness-evidence.mjs';
+
+test('steady observers preserve confirmed checkpoint and their own high-water without claiming an unreceived writer checkpoint', () => {
+    const world = (raid, nextHandle = 100) => ({ nextHandle, allocationCounters: {
+        'TaleWorlds.CampaignSystem.Roster.TroopRoster': 20, Raid: raid } });
+    const confirmed = world(10), previous = [world(12, 102), world(11, 102)], current = [world(14, 104), world(12, 104)];
+    assertSteadyWriterAllocationProgress(current, confirmed, previous);
+    for (const edit of [p => p[0].allocationCounters.Raid = 11, p => p[1].allocationCounters.Raid = 10,
+        p => p[1].nextHandle = 101, p => delete p[1].allocationCounters.Raid,
+        p => p[1].allocationCounters.Raid = -1, p => p[1].allocationCounters.Raid = 12.5]) {
+        const bad = structuredClone(current); edit(bad);
+        assert.throws(() => assertSteadyWriterAllocationProgress(bad, confirmed, previous));
+    }
+});
 
 test('moving player comparison allows position offsets and rejects resource or registration divergence', () => {
     const players = ['A', 'B'].map(controllerId => ({ controllerId, gold: 10, troops: 5, wounded: 0, heroId: controllerId,
