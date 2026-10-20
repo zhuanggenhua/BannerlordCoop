@@ -2,6 +2,8 @@
 using Common.Messaging;
 using Common.Network;
 using Common.Util;
+using GameInterface.Policies;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.MobileParties.Messages;
 using GameInterface.Services.ObjectManager;
 using TaleWorlds.CampaignSystem.Party;
@@ -31,21 +33,33 @@ internal class MobilePartyDisorganizationHandler : IHandler
 
     private void HandleChanged(MessagePayload<MobilePartyDisorganizationChanged> payload)
     {
-        if (ModInformation.IsClient) return;
+        if (CallOriginalPolicy.IsOriginalAllowed()) return;
         var change = payload.What;
-        GameThread.RunSafe(() =>
+        if (ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authority) &&
+            authority.TryGetCurrentLease(out var current) && current.IsValid)
         {
-            if (!objectManager.TryGetHandleWithLogging(change.Party, out var partyId)) return;
-            network.SendAll(new NetworkMobilePartyDisorganizationChanged(partyId, change.IsDisorganized));
-        });
+            if (authority.TryGetLocalAuthorityLease(out var lease) && lease == current)
+                authority.TryExecuteWithCurrentLease(lease, () => PublishResult(change));
+            return;
+        }
+        // Until a campaign lease is known, retain the original dedicated/listen initialization.
+        if (CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) PublishResult(change);
+    }
+
+    private void PublishResult(MobilePartyDisorganizationChanged change)
+    {
+        // Publish on the setter's producer, before its subsequent synchronous registry retirement.
+        // Deferring this lookup to GameThread allows that retirement to overtake the result.
+        if (!objectManager.TryGetHandleWithLogging(change.Party, out var partyId)) return;
+        network.SendAll(new NetworkMobilePartyDisorganizationChanged(partyId, change.IsDisorganized));
     }
 
     private void HandleNetworkChanged(MessagePayload<NetworkMobilePartyDisorganizationChanged> payload)
     {
-        if (ModInformation.IsServer) return;
         var change = payload.What;
         GameThread.RunSafe(() =>
         {
+            if (CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return;
             if (!objectManager.TryGetObjectWithLogging<MobileParty>(change.PartyId, out var party)) return;
             if (party.IsDisorganized == change.IsDisorganized) return;
             using (new AllowedThread())

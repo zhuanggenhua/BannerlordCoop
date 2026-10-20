@@ -17,7 +17,7 @@ internal readonly struct MobilePartyDisorganizationChanged : IEvent
 }
 
 [ProtoContract(SkipConstructor = true)]
-internal readonly struct NetworkMobilePartyDisorganizationChanged : ICommand
+internal readonly struct NetworkMobilePartyDisorganizationChanged : ICommand, ICampaignAuthorityScopedMessage
 {
     [ProtoMember(1)]
     public readonly uint PartyId;
