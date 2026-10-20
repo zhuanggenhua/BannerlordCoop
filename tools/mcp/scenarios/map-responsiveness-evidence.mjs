@@ -85,7 +85,13 @@ export function summarizeMovement(probes, clocks, kinds) {
                 previousVisual && Math.hypot(row.visualX - previousVisual.visualX, row.visualY - previousVisual.visualY) > 0.00001 :
                 Math.hypot(row.x - input.x, row.y - input.y) > 0.00001));
             const simulation = first(kinds.simulation), visual = first(kinds.visual);
-            const matches = other.rows.filter(row => row.kind === kinds.apply && row.partyId === input.partyId && targetMatches(input, row));
+            const windowMs = (end - input.stopwatchTicks) * 1000 / clock.frequency;
+            const matches = other.rows.filter(row => {
+                if (row.kind !== kinds.apply || row.partyId !== input.partyId || row.actorController !== input.actorController ||
+                    (row.originController && row.originController !== input.actorController) || !targetMatches(input, row)) return false;
+                const bounds = latencyBounds(input, row, clock, clocks[1 - index]);
+                return bounds.upperMs >= 0 && bounds.lowerMs <= windowMs;
+            });
             const ambiguous = inputs.filter(row => row.partyId === input.partyId && targetMatches(row, input)).length > 1;
             const remote = !ambiguous && matches.length === 1 ? matches[0] : null;
             const priorRemoteVisual = remote && other.rows.filter(row => row.kind === kinds.visual && row.partyId === input.partyId &&
