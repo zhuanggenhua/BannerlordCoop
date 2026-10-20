@@ -186,6 +186,8 @@ public class GameInterfaceModule : Module
             .As<Services.CampaignAuthority.ICampaignRosterCheckpointService>().InstancePerDependency();
         builder.RegisterType<Services.CampaignAuthority.CampaignSessionCheckpointService>()
             .As<Services.CampaignAuthority.ICampaignSessionCheckpointService>().InstancePerDependency();
+        builder.RegisterType<Services.CampaignAuthority.NativeState.CampaignNativeBehaviorCheckpointService>()
+            .As<Services.CampaignAuthority.NativeState.ICampaignNativeBehaviorCheckpointService>().InstancePerDependency();
         builder.RegisterType<Services.CampaignAuthority.CampaignSchedulerCheckpointService>()
             .As<Services.CampaignAuthority.ICampaignSchedulerCheckpointService>().InstancePerDependency();
         builder.RegisterType<Services.CampaignAuthority.CampaignAsyncTaskDrain>()
