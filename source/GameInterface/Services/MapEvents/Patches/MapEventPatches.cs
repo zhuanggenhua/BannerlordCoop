@@ -572,11 +572,11 @@ internal class MapEventPatches
     private static bool HasOccupiedBattleMission(MapEvent mapEvent)
     {
         if (!ContainerProvider.TryResolve<IObjectManager>(out var objectManager) ||
-            !objectManager.TryGetId(mapEvent, out var mapEventId) ||
-            !ContainerProvider.TryResolve<IMissionMembershipRegistry>(out var membershipRegistry))
+            !objectManager.TryGetId(mapEvent, out var mapEventId))
             return false;
 
         return ServerBattleModeArbiter.IsMissionClaimed(mapEventId) &&
+               ContainerProvider.TryResolve<IMissionMembershipRegistry>(out var membershipRegistry) &&
                membershipRegistry.IsInstanceOccupied(mapEventId);
     }
 
