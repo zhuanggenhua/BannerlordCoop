@@ -35,13 +35,17 @@ namespace GameInterface.Services.Time.Patches
 
         // Prevents pausing in menus with their own game states (such as the banner editor, party screen, clan screen, etc.)
         [HarmonyPatch(nameof(GameStateManager.OnTick))]
-        static void Prefix(ref GameStateManager __instance, float dt)
+        internal static void Prefix(ref GameStateManager __instance, float dt)
         {
 #if DEBUG
             ListenAuthorityTickEvidence.BeginFrame();
 #endif
             // P1-A keeps native local menus/mission scheduling. No second world driver.
             if (ModInformation.IsListenAuthority) return;
+            // Mission transitions hand off campaign ownership through the existing readiness report.
+            // Never start another background map frame while waiting for that network handshake.
+            // The already-started native AI task is still drained under its old lease by Freeze.
+            if (__instance.GameStates.Any(state => state is MissionState)) return;
             if (!(__instance.ActiveState is MapState))
             {
                 MapState mapState = __instance.LastOrDefault<MapState>();
