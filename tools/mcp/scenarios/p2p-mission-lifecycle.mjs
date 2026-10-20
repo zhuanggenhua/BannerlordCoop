@@ -295,7 +295,12 @@ export function assertSingleWriterProgress(before, after, writerIndex, initial) 
     }
 }
 
-export async function run(config) {
+export async function run(config, scenario = null) {
+    if (scenario) {
+        assert.equal(typeof scenario.name, 'string');
+        assert.equal(typeof scenario.run, 'function');
+        assert.ok(Number.isInteger(scenario.featureCount) && scenario.featureCount > 1);
+    }
     assert.ok((await stat(join(config.repo, '.git'))).isDirectory(), 'Use coordinator main checkout');
     const git = args => execFileSync('git', args, { cwd: config.repo, encoding: 'utf8', windowsHide: true }).trim();
     assert.equal(await realpath(config.repo), await realpath(git(['rev-parse', '--show-toplevel'])));
@@ -311,12 +316,12 @@ export async function run(config) {
     await mkdir(dirname(config.record), { recursive: true });
     await writeFile(config.record, '', { flag: 'wx' });
     const summaryPath = config.record + '.summary.json';
-    const summary = { scenario: 'p2p-mission-lifecycle', codeHead: git(['rev-parse', 'HEAD']), config,
+    const summary = { scenario: scenario?.name ?? 'p2p-mission-lifecycle', codeHead: git(['rev-parse', 'HEAD']), config,
         startedUtc: new Date().toISOString(), features: [], screenshots: [], logs: {}, runId: null,
         cleanupConfirmed: false, passed: false,
         transportAcceptance: 'NOT_OBSERVED',
         network: proxyOptions ? 'Direct IP through original transparent loopback UDP proxy; no injected packet faults' : 'Direct IP; transport liveness NOT_OBSERVED',
-        scope: 'Native tavern Mission coordination and all-away pause/resume, not battle results or natural-day acceptance' };
+        scope: scenario?.scope ?? 'Native tavern Mission coordination and all-away pause/resume, not battle results or natural-day acceptance' };
     await writeFile(summaryPath, JSON.stringify(summary, null, 2), { flag: 'wx' });
     const proxy = proxyOptions ? new UdpFaultProxy({ listenPort: proxyOptions.port }) : null;
     const save = () => {
@@ -510,6 +515,9 @@ export async function run(config) {
             const locations = await command('server', 'coop.debug.location.list');
             assert.ok([...locations.matchAll(/Id: '([^']+)'/g)].some(match => match[1] === LOCATION)); return { ...receipt, freeMap };
         });
+        if (scenario) await scenario.run({ initial, command, call, feature, summary, emit, state, bothStates,
+            setTime, screenshot, poll, proxy, native, runId, config, consistentSnapshot });
+        else {
         await feature('A-Mission-B-automatic-map-writer', async () => {
             const freeMap = await readBMapActor(); assertFreeMapActor(freeMap, initial[1]);
             await setTime('Play_1x'); const entry = await enter('server');
@@ -559,6 +567,7 @@ export async function run(config) {
             for (const instance of INSTANCES) await native(instance, false);
             return { freeMap, modesBefore, modesAfter, before, after, world: await consistentSnapshot('final A world') };
         });
+        }
     } catch (error) {
         summary.failed = { message: error.message, stack: error.stack }; process.exitCode = 1;
         await emit({ phase: 'scenario_failure', ...summary.failed });
@@ -584,7 +593,8 @@ export async function run(config) {
         catch (error) { summary.proxyCloseError = error.stack; process.exitCode = 1; }
         summary.completedUtc = new Date().toISOString();
         summary.passed = !summary.failed && !summary.cleanupError && !summary.logVerificationError &&
-            !summary.closeError && !summary.proxyCloseError && summary.cleanupConfirmed && summary.features.length === 5;
+            !summary.closeError && !summary.proxyCloseError && summary.cleanupConfirmed &&
+            summary.features.length === (scenario?.featureCount ?? 5);
         await save(); if (!summary.passed) process.exitCode = 1;
         console.log(JSON.stringify({ scenario: summary.scenario, runId, passed: summary.passed, summaryPath }));
     }
