@@ -138,12 +138,37 @@ internal sealed class CampaignSchedulerCheckpointService : ICampaignSchedulerChe
     {
         if (checkpoint?.Tickers == null || checkpoint.Events == null || manager == null || events == null) return false;
         if (checkpoint.MinimumIntervalTicks != manager.MinimumPeriodicEventInterval.NumTicks ||
-            checkpoint.LastGameTimeTicks < 0 || checkpoint.Events.Length != events.Count)
+            checkpoint.LastGameTimeTicks < 0)
         {
             Logger.Warning("Rejected campaign scheduler header: interval source={SourceInterval} local={LocalInterval}, last signal={LastSignal}, events source={SourceEvents} local={LocalEvents}",
                 checkpoint.MinimumIntervalTicks, manager.MinimumPeriodicEventInterval.NumTicks, checkpoint.LastGameTimeTicks,
                 checkpoint.Events.Length, events.Count);
             return false;
+        }
+
+        var targetEvents = events.ToArray();
+        var deletedEventIndices = Array.Empty<int>();
+        if (checkpoint.Events.Length != targetEvents.Length)
+        {
+            // The observer does not run SignalPeriodicEvents/DeleteMarkedPeriodicEvents. Only
+            // native-marked deletions may explain an all-active writer's shorter event list.
+            if (checkpoint.Events.Length >= targetEvents.Length || events.IsReadOnly ||
+                checkpoint.Events.Any(state => state == null || state.IsDeleted) ||
+                targetEvents.Any(value => value == null))
+            {
+                Logger.Warning("Rejected campaign scheduler event count: source={SourceEvents} local={LocalEvents}; unequal counts require an all-active source and removable native-deleted local extras",
+                    checkpoint.Events.Length, targetEvents.Length);
+                return false;
+            }
+            deletedEventIndices = targetEvents.Select((value, index) => (value, index))
+                .Where(entry => entry.value.isEventDeleted).Select(entry => entry.index).ToArray();
+            targetEvents = targetEvents.Where(value => !value.isEventDeleted).ToArray();
+            if (checkpoint.Events.Length != targetEvents.Length)
+            {
+                Logger.Warning("Rejected campaign scheduler active event count: source={SourceEvents} localActive={LocalActiveEvents} localDeleted={LocalDeletedEvents}",
+                    checkpoint.Events.Length, targetEvents.Length, deletedEventIndices.Length);
+                return false;
+            }
         }
 
         var bindings = Bind(manager).ToArray();
@@ -163,10 +188,10 @@ internal sealed class CampaignSchedulerCheckpointService : ICampaignSchedulerChe
             }
             apply.Add(action);
         }
-        for (int i = 0; i < events.Count; i++)
+        for (int i = 0; i < targetEvents.Length; i++)
         {
             var state = checkpoint.Events[i];
-            var target = events[i];
+            var target = targetEvents[i];
             if (state == null || target == null || state.TriggerPeriodTicks <= 0 ||
                 state.InitialWaitTicks < 0 || state.NextTriggerTicks < 0 ||
                 !string.Equals(state.Description, target.description, StringComparison.Ordinal) ||
@@ -201,8 +226,13 @@ internal sealed class CampaignSchedulerCheckpointService : ICampaignSchedulerChe
         }
 
         // Validation precedes every mutation. Global entity lists retain their native ordering.
+        // Match native DeleteMarkedPeriodicEvents only after the full active graph is proven.
+        for (int i = deletedEventIndices.Length - 1; i >= 0; i--) events.RemoveAt(deletedEventIndices[i]);
         foreach (var action in apply) action();
         manager._lastGameTime = new CampaignTime(checkpoint.LastGameTimeTicks);
+        if (deletedEventIndices.Length != 0)
+            Logger.Information("Removed {DeletedEvents} native-deleted scheduler events after full checkpoint validation; active events={ActiveEvents}",
+                deletedEventIndices.Length, targetEvents.Length);
         return true;
     }
 

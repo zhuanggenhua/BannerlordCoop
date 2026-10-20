@@ -332,7 +332,7 @@ public class CampaignSchedulerCheckpointServiceTests
         Assert.Equal(.5, source.Manager._mobilePartyHourlyTicker.TickDebt);
     }
 
-    private sealed class Fixture
+    internal sealed class Fixture
     {
         private readonly ObjectManagerService objects = new(Mock.Of<ILogger>());
         public CampaignSchedulerCheckpointService Service { get; }
