@@ -3,6 +3,7 @@ using Common;
 using Common.Messaging;
 using Common.Util;
 using GameInterface.Services.Caravans.Interfaces;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Caravans.Messages;
 using GameInterface.Services.MobileParties.Extensions;
 using HarmonyLib;
@@ -29,39 +30,23 @@ internal class DisableCaravansCampaignBehaviorPatch
         AccessTools.Method(typeof(CaravansCampaignBehavior), nameof(CaravansCampaignBehavior.HourlyTickParty)),
         //AccessTools.Method(typeof(CaravansCampaignBehavior), nameof(CaravansCampaignBehavior.OnSessionLaunched)), // Needed on client to load dialogue for interacting with caravans
         AccessTools.Method(typeof(CaravansCampaignBehavior), nameof(CaravansCampaignBehavior.OnNewGameCreatedPartialFollowUpEndEvent)),
-        AccessTools.Method(typeof(CaravansCampaignBehavior), nameof(CaravansCampaignBehavior.OnMobilePartyDestroyed)),
-        AccessTools.Method(typeof(CaravansCampaignBehavior), nameof(CaravansCampaignBehavior.OnMobilePartyCreated)),
         AccessTools.Method(typeof(CaravansCampaignBehavior), nameof(CaravansCampaignBehavior.OnMapEventEnded)),
         AccessTools.Method(typeof(CaravansCampaignBehavior), nameof(CaravansCampaignBehavior.OnLootDistributedToParty)),
         AccessTools.Method(typeof(CaravansCampaignBehavior), nameof(CaravansCampaignBehavior.OnSiegeEventStarted)),
-        AccessTools.Method(typeof(CaravansCampaignBehavior), nameof(CaravansCampaignBehavior.OnGameLoadFinished)),
-        AccessTools.Method(typeof(CaravansCampaignBehavior), nameof(CaravansCampaignBehavior.OnKingdomDestroyed))
     };
 
-    static bool Prefix()
-    {
-        return ModInformation.IsServer;
-    }
+    internal static bool Prefix() => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
 }
 
 [HarmonyPatch(typeof(CaravansCampaignBehavior))]
 internal class CaravansCampaignBehaviorPatches
 {
-    [HarmonyPatch(nameof(CaravansCampaignBehavior.RegisterEvents))]
-    [HarmonyPrefix]
-    public static bool RegisterEventsPrefix(ref CaravansCampaignBehavior __instance)
-    {
-        if (ModInformation.IsServer) return true;
-
-        // Needs to run on the client to initialize carvan dialogue options
-        CampaignEvents.OnSessionLaunchedEvent.AddNonSerializedListener(__instance, new Action<CampaignGameStarter>(__instance.OnSessionLaunched));
-        return false;
-    }
-
     [HarmonyPatch(nameof(CaravansCampaignBehavior.DeleteExpiredTradeRumorTakenCaravans))]
     [HarmonyPrefix]
     public static bool DeleteExpiredTradeRumorTakenCaravansPrefix(ref CaravansCampaignBehavior __instance)
     {
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
+
         // Override implementation to use CoopSession on the server and update client instances of _tradeRumorTakenCaravans
         var message = new DeleteExpiredTradeRumorTakenCaravans();
         MessageBroker.Instance.Publish(__instance, message);
@@ -73,6 +58,8 @@ internal class CaravansCampaignBehaviorPatches
     [HarmonyPrefix]
     public static bool DeleteExpiredLootedCaravansPrefix(ref CaravansCampaignBehavior __instance)
     {
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
+
         var message = new DeleteExpiredLootedCaravans();
         MessageBroker.Instance.Publish(__instance, message);
 
@@ -87,6 +74,8 @@ internal class CaravansCampaignBehaviorPatches
     [HarmonyPrefix]
     public static bool OnSettlementLeftPrefix(ref CaravansCampaignBehavior __instance, MobileParty mobileParty, Settlement settlement)
     {
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
+
         // Replace Static Mobile.MainParty check with IsPlayerParty()
         if (mobileParty != null && !mobileParty.IsPlayerParty() && (mobileParty.IsCaravan || mobileParty.IsLordParty))
         {

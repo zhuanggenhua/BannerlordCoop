@@ -1,4 +1,4 @@
-﻿using Common;
+﻿using GameInterface.Services.CampaignAuthority;
 using HarmonyLib;
 using System;
 using System.Collections.Generic;
@@ -16,12 +16,8 @@ internal class GovernorCampaignBehaviorPatches
         //AccessTools.Method(typeof(GovernorCampaignBehavior), nameof(GovernorCampaignBehavior.OnSessionLaunched)), // Needed to load dialogue for clients
         AccessTools.Method(typeof(GovernorCampaignBehavior), nameof(GovernorCampaignBehavior.OnHeroKilled)),
         AccessTools.Method(typeof(GovernorCampaignBehavior), nameof(GovernorCampaignBehavior.DailyTickSettlement)),
-        AccessTools.Method(typeof(GovernorCampaignBehavior), nameof(GovernorCampaignBehavior.OnHeroChangedClan)),
-        AccessTools.Method(typeof(GovernorCampaignBehavior), nameof(GovernorCampaignBehavior.OnGameLoadFinished))
+        AccessTools.Method(typeof(GovernorCampaignBehavior), nameof(GovernorCampaignBehavior.OnHeroChangedClan))
     };
 
-    static bool Prefix()
-    {
-        return ModInformation.IsServer;
-    }
+    internal static bool Prefix() => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
 }

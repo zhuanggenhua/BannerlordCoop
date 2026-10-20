@@ -1,4 +1,6 @@
-﻿using Common;
+﻿using GameInterface.Services.CampaignAuthority;
+using System.Collections.Generic;
+using System.Reflection;
 using GameInterface.Services.MobileParties.Extensions;
 using HarmonyLib;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
@@ -10,8 +12,13 @@ namespace GameInterface.Services.MobileParties.Patches.Disable;
 [HarmonyPatch(typeof(PartiesBuyFoodCampaignBehavior))]
 internal class DisablePartiesBuyFoodCampaignBehavior
 {
-    [HarmonyPatch(nameof(PartiesBuyFoodCampaignBehavior.RegisterEvents))]
-    static bool Prefix() => ModInformation.IsServer;
+    private static IEnumerable<MethodBase> TargetMethods() => new MethodBase[]
+    {
+        AccessTools.Method(typeof(PartiesBuyFoodCampaignBehavior), nameof(PartiesBuyFoodCampaignBehavior.HourlyTickParty)),
+        AccessTools.Method(typeof(PartiesBuyFoodCampaignBehavior), nameof(PartiesBuyFoodCampaignBehavior.OnSettlementEntered))
+    };
+
+    internal static bool Prefix() => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
 }
 
 [HarmonyPatch(typeof(PartiesBuyFoodCampaignBehavior))]
@@ -21,6 +28,6 @@ internal class PartiesBuyFoodCampaignBehaviorPatches
     [HarmonyPrefix]
     public static bool BuyFoodInternalPrefix(PartiesBuyFoodCampaignBehavior __instance, MobileParty mobileParty, Settlement settlement, int numberOfFoodItemsNeededToBuy)
     {
-        return mobileParty != null && !mobileParty.IsPlayerParty();
+        return CampaignSimulationAuthorityPolicy.CanRunWorldSimulation() && mobileParty != null && !mobileParty.IsPlayerParty();
     }
 }

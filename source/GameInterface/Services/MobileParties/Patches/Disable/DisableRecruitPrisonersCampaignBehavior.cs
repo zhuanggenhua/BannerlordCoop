@@ -1,4 +1,4 @@
-﻿using Common;
+﻿using GameInterface.Services.CampaignAuthority;
 using GameInterface.Extentions;
 using GameInterface.Services.MobileParties.Extensions;
 using HarmonyLib;
@@ -17,7 +17,7 @@ internal class RecruitPrisonersCampaignBehaviorPatches
     [HarmonyPrefix]
     public static bool HourlyTickMainPartyPrefix(RecruitPrisonersCampaignBehavior __instance)
     {
-        if (ModInformation.IsClient) return false;
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
 
         // Iterate over all player parties instead of just the server's party
         foreach (var playerParty in Campaign.Current.CampaignObjectManager.GetPlayerMobileParties())
@@ -56,7 +56,7 @@ internal class RecruitPrisonersCampaignBehaviorPatches
     [HarmonyPrefix]
     public static bool DailyTickAIMobilePartyPrefix(MobileParty mobileParty)
     {
-        if (ModInformation.IsClient) return false;
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
 
         // Block doing this daily tick on player parties
         return !mobileParty.IsPlayerParty();
