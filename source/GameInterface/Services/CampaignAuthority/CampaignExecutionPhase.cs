@@ -44,7 +44,8 @@ public sealed class CampaignExecutionScope : IDisposable
         get
         {
             for (var scope = current; scope != null; scope = scope.parent)
-                if (scope.Phase == CampaignExecutionPhase.Replay ||
+                if (scope.Phase == CampaignExecutionPhase.Bootstrap ||
+                    scope.Phase == CampaignExecutionPhase.Replay ||
                     scope.Phase == CampaignExecutionPhase.Prediction ||
                     scope.Phase == CampaignExecutionPhase.CheckpointInstall ||
                     scope.Phase == CampaignExecutionPhase.LocalIntent)

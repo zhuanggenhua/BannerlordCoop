@@ -76,6 +76,27 @@ public class CampaignWorldExecutionTests
         });
     }
 
+    [Theory]
+    [InlineData(CampaignExecutionPhase.Bootstrap)]
+    [InlineData(CampaignExecutionPhase.Replay)]
+    [InlineData(CampaignExecutionPhase.Prediction)]
+    [InlineData(CampaignExecutionPhase.CheckpointInstall)]
+    [InlineData(CampaignExecutionPhase.LocalIntent)]
+    public void NonWorldPhaseCannotElevateAnExistingPermit(CampaignExecutionPhase phase)
+    {
+        WithReplica(() =>
+        {
+            var context = Create("b", "b", out _, out _);
+            Assert.True(context.TryAcquireWritePermit(out var permit));
+            using (CampaignExecutionScope.Enter(phase))
+            using (CampaignExecutionScope.Enter(CampaignExecutionPhase.WorldWrite))
+            {
+                Assert.False(context.TryAcquireWritePermit(out _));
+                Assert.False(context.TryExecuteWorldWrite(permit, () => throw new Exception("Elevated write")));
+            }
+        });
+    }
+
     [Fact]
     public void FailedReplayRestoresBothScopesAndIsNotReportedAsSuccess()
     {
