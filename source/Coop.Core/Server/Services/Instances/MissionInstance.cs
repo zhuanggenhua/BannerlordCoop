@@ -66,6 +66,7 @@ internal sealed class MissionMembership
     public NetPeer Peer => Endpoint.Peer;
     public MissionInstance Instance { get; }
     public Guid PeerCredential { get; set; }
+    public long Generation { get; set; }
 
     public MissionMembership(string controllerId, NetPeer peer, MissionInstance instance, Guid peerCredential)
         : this(controllerId, new RemotePeerEndpoint(controllerId, peer), instance, peerCredential) { }
@@ -74,11 +75,12 @@ internal sealed class MissionMembership
         string controllerId,
         MissionPlayerEndpoint endpoint,
         MissionInstance instance,
-        Guid peerCredential)
+        Guid peerCredential, long generation = 0)
     {
         ControllerId = controllerId;
         Endpoint = endpoint;
         Instance = instance;
         PeerCredential = peerCredential;
+        Generation = generation;
     }
 }

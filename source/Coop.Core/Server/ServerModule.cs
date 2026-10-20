@@ -95,6 +95,7 @@ public class ServerModule : CommonModule
         builder.RegisterType<MissionManager>()
             .As<IMissionManager>()
             .As<IMissionMembershipRegistry>()
+            .As<IMissionRelaySourceVerifier>()
             .InstancePerLifetimeScope();
         builder.RegisterType<BattleCompletionTracker>().As<IBattleCompletionTracker>().InstancePerDependency();
         builder.RegisterType<SettlementEncounterDistanceValidator>()

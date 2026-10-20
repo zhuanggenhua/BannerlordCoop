@@ -219,7 +219,7 @@ public sealed class MissionDeparture
 }
 
 /// <inheritdoc cref="IMissionManager"/>
-public class MissionManager : IMissionManager, IMissionMembershipRegistry
+public class MissionManager : IMissionManager, IMissionMembershipRegistry, IMissionRelaySourceVerifier
 {
     private static readonly ILogger Logger = LogManager.GetLogger<MissionManager>();
 
@@ -239,6 +239,7 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
     private readonly ConditionalWeakTable<NetPeer, object> disconnectedPeers = new();
     private readonly Dictionary<string, DateTime> expiredConclusions = new Dictionary<string, DateTime>();
     private long expiredEntryCount;
+    private long nextMembershipGeneration;
     private DateTime lastDiagnosticsUtc;
 
     /// <summary>How long a punch endpoint may wait for its mission entry before it expires.</summary>
@@ -487,6 +488,51 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
         }
     }
 
+    private sealed class LocalRelayReceipt : MissionRelayReceipt
+    {
+        internal readonly MissionManager Issuer;
+        internal readonly MissionMembership Source, Target;
+        internal LocalRelayReceipt(MissionManager issuer, MissionMembership source, MissionMembership target)
+            : base(source.Peer, source.ControllerId, source.Instance.Id, target.ControllerId,
+                source.PeerCredential, target.PeerCredential, source.Generation, target.Generation)
+        { Issuer = issuer; Source = source; Target = target; }
+    }
+
+    public bool TryCaptureLocalDelivery(NetPeer sourcePeer, string instanceId, string localControllerId, out MissionRelayReceipt receipt)
+    {
+        receipt = null;
+        if (sourcePeer == null || string.IsNullOrEmpty(instanceId) || string.IsNullOrEmpty(localControllerId)) return false;
+        lock (gate)
+        {
+            if (!byPeer.TryGetValue(sourcePeer, out var source) || source.Endpoint is not RemotePeerEndpoint ||
+                !byController.TryGetValue(localControllerId, out var target) || target.Endpoint is not LocalPlayerEndpoint ||
+                source.Instance.Id != instanceId || !ReferenceEquals(source.Instance, target.Instance)) return false;
+            var captured = new LocalRelayReceipt(this, source, target);
+            if (!IsCurrent(captured)) return false;
+            receipt = captured;
+            return true;
+        }
+    }
+
+    public bool IsCurrent(MissionRelayReceipt receipt)
+    {
+        if (receipt is not LocalRelayReceipt captured || !ReferenceEquals(captured.Issuer, this)) return false;
+        lock (gate)
+        {
+            return captured.SourceCredential != Guid.Empty && captured.TargetCredential != Guid.Empty &&
+                captured.SourceGeneration > 0 && captured.TargetGeneration > 0 &&
+                IsRegisteredLocal(captured.Target.Endpoint as LocalPlayerEndpoint) &&
+                byPeer.TryGetValue(captured.Peer, out var source) && ReferenceEquals(source, captured.Source) &&
+                byController.TryGetValue(captured.ControllerId, out var sourceController) && ReferenceEquals(sourceController, source) &&
+                byController.TryGetValue(captured.TargetControllerId, out var target) && ReferenceEquals(target, captured.Target) &&
+                ReferenceEquals(source.Instance, target.Instance) && source.Instance.Id == captured.InstanceId &&
+                source.PeerCredential == captured.SourceCredential && target.PeerCredential == captured.TargetCredential &&
+                source.Generation == captured.SourceGeneration && target.Generation == captured.TargetGeneration &&
+                !IsRelayRevoked(source) && !disconnectedPeers.TryGetValue(captured.Peer, out _) &&
+                playerManager.TryGetPeer(captured.ControllerId, out var currentPeer) && ReferenceEquals(currentPeer, captured.Peer);
+        }
+    }
+
     public void RevokeRelay(NetPeer peer)
     {
         if (peer == null)
@@ -569,6 +615,7 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
                 if (controllerMembership.Peer != null) byPeer.Remove(controllerMembership.Peer);
                 controllerMembership.Endpoint = endpoint;
                 controllerMembership.PeerCredential = CreatePeerCredential();
+                controllerMembership.Generation = checked(++nextMembershipGeneration);
                 if (peer != null) byPeer[peer] = controllerMembership;
 
                 var existingMembers = EntryMembers(controllerMembership.Instance, controllerId);
@@ -604,7 +651,7 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry
                 controllerId,
                 endpoint,
                 instance,
-                CreatePeerCredential());
+                CreatePeerCredential(), checked(++nextMembershipGeneration));
             instance.Memberships.Add(membership);
             if (peer != null) byPeer[peer] = membership;
             byController[controllerId] = membership;
