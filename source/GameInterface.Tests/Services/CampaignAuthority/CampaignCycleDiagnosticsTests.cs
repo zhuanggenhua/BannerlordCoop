@@ -8,11 +8,36 @@ using HarmonyLib;
 using System.Linq;
 using System.Collections.Generic;
 using TaleWorlds.ObjectSystem;
+using System;
+using Newtonsoft.Json.Linq;
+using System.Runtime.CompilerServices;
+using TaleWorlds.Library;
+using System.Reflection;
 
 namespace GameInterface.Tests.Services.CampaignAuthority;
 
+[Collection(ModInformationRoleCollection.Name)]
 public sealed class CampaignCycleDiagnosticsTests
 {
+    [Fact]
+    public void EveryTargetIsAnActualClosedNativeTickerBoundary()
+    {
+        var targets = CampaignTickerEvidencePatches.TargetMethods().ToArray();
+        Assert.NotEmpty(targets);
+        Assert.All(targets, method =>
+        {
+            Assert.Equal("PeriodicTickSome", method.Name);
+            Assert.False(method.ContainsGenericParameters);
+            Assert.True(method.DeclaringType!.IsConstructedGenericType);
+            Assert.Equal(typeof(double), Assert.Single(method.GetParameters()).ParameterType);
+        });
+        var expected = new[] { "MobilePartyHourlyTick", "PeriodicHourlyTick", "PeriodicDailyTick", "PeriodicQuarterDailyTick", "TickPartialHourlyAi" }
+            .SelectMany(CampaignTickerEvidencePatches.Bindings)
+            .Select(binding => AccessTools.Method(AccessTools.Field(typeof(CampaignPeriodicEventManager), binding.Name).FieldType, "PeriodicTickSome"))
+            .Distinct();
+        Assert.Equal(expected.OrderBy(method => method.DeclaringType!.FullName), targets.OrderBy(method => method.DeclaringType!.FullName));
+    }
+
     [Fact]
     public void NativeFrameDuplicateCounterIsCampaignScopedAndIndependentOfSessionMode()
     {
@@ -25,14 +50,13 @@ public sealed class CampaignCycleDiagnosticsTests
     }
 
     [Fact]
-    public void FailedNativeTickerPreservesOriginalExceptionWithoutReadingBrokenInstance()
+    public void FailedNativeTickerPreservesOriginalExceptionDespiteDiagnosticReadFailure()
     {
         var original = new System.NullReferenceException("native list missing");
         var collector = new CampaignCycleDiagnostics();
         var batch = new CampaignTickerEvidencePatches.TickerBatch { Instance = new object(), Collector = collector,
             Audit = new CampaignTickerAudit { Ticker = "broken", Node = "a" } };
-        var group = new CampaignTickerEvidencePatches.TickerGroup(); group.Batches.Add(batch);
-        var result = AccessTools.Method(typeof(CampaignTickerEvidencePatches), "Finalizer").Invoke(null, new object[] { original, true, group });
+        var result = CampaignTickerEvidencePatches.Finalizer(original, true, batch);
         Assert.Same(original, result);
         var audit = Assert.Single(collector.AuditSnapshot());
         Assert.Equal(1, audit.Mismatches);
@@ -42,7 +66,7 @@ public sealed class CampaignCycleDiagnosticsTests
     [Fact]
     public void OnlyNonGenericNativeGroupsAreDetouredAndAllTwentyFieldsAreObserved()
     {
-        var targets = CampaignTickerEvidencePatches.TargetMethods().ToArray();
+        var targets = CampaignTickerEvidencePatches.GroupTargetMethods().ToArray();
         Assert.Equal(5, targets.Length);
         Assert.All(targets, method => { Assert.False(method.ContainsGenericParameters); Assert.False(method.DeclaringType!.IsGenericType); Assert.Empty(method.GetParameters()); });
         var bindings = targets.SelectMany(method => CampaignTickerEvidencePatches.Bindings(method.Name)).ToArray();
@@ -54,19 +78,17 @@ public sealed class CampaignCycleDiagnosticsTests
     }
 
     [Fact]
-    public void GroupAuditPreservesExactCallbackIdentityOrderAndEmptyPartitions()
+    public void PerTickerAuditPreservesExactCallbackIdentityOrderIncludingOmittedDuplicatedAndReordered()
     {
         foreach (string[] observed in new[] { new[] { "party|a", "native|a" }, new[] { "party|a" },
             new[] { "native|a", "party|a" }, new[] { "party|a", "native|a", "native|a" } })
         {
             var collector = new CampaignCycleDiagnostics();
-            var group = new CampaignTickerEvidencePatches.TickerGroup();
-            group.Batches.Add(Batch(collector, "first", "party|a"));
-            group.Batches.Add(Batch(collector, "empty"));
-            group.Batches.Add(Batch(collector, "last", "native|a"));
-            group.Completed.AddRange(observed);
-            CampaignTickerEvidencePatches.Partition(group);
-            foreach (var batch in group.Batches) CampaignTickerEvidencePatches.FinishBatch(null!, batch);
+            var empty = Batch(collector, "empty");
+            CampaignTickerEvidencePatches.FinishBatch(null!, empty);
+            var batch = Batch(collector, "observed", "party|a", "native|a");
+            batch.Completed.AddRange(observed);
+            CampaignTickerEvidencePatches.FinishBatch(null!, batch);
             var audits = collector.AuditSnapshot();
             Assert.Equal(0, audits.Single(row => row.Ticker == "empty").Mismatches);
             Assert.Equal(observed.SequenceEqual(new[] { "party|a", "native|a" }), audits.All(row => row.Mismatches == 0));
@@ -96,11 +118,27 @@ public sealed class CampaignCycleDiagnosticsTests
     {
         var collector = new CampaignCycleDiagnostics();
         var batch = Batch(collector, "skipped", "party|a"); batch.Audit.LocalWriter = writer;
-        var group = new CampaignTickerEvidencePatches.TickerGroup(); group.Batches.Add(batch);
-        Assert.Null(AccessTools.Method(typeof(CampaignTickerEvidencePatches), "Finalizer").Invoke(null, new object?[] { null, false, group }));
+        Assert.Null(CampaignTickerEvidencePatches.Finalizer(null!, false, batch));
         Assert.Empty(collector.AuditSnapshot());
         Assert.Equal(1, collector.SimulationSnapshot()["CampaignTicker.skipped.skipped"]);
         Assert.Equal(writer, collector.SimulationSnapshot().ContainsKey("CampaignTicker.writerSkipped.failed"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SkippedOuterGroupRetainsEvidenceWithoutTakingASiblingSnapshot(bool writer)
+    {
+        var collector = new CampaignCycleDiagnostics();
+        var batch = Batch(collector, "outer-skipped"); batch.Audit.LocalWriter = writer;
+        var finalizer = AccessTools.Method(typeof(CampaignTickerGroupEvidencePatches), "Finalizer");
+        Assert.Null(finalizer.Invoke(null, new object?[] { null, false, new[] { batch } }));
+        Assert.Empty(collector.AuditSnapshot());
+        Assert.Equal(1, collector.SimulationSnapshot()["CampaignTicker.outer-skipped.skipped"]);
+        Assert.Equal(writer, collector.SimulationSnapshot().ContainsKey("CampaignTicker.writerSkipped.failed"));
+        var original = new InvalidOperationException("outer-before-first-ticker");
+        Assert.Same(original, finalizer.Invoke(null, new object?[] { original, true, new[] { batch } }));
+        Assert.Equal(1, collector.SimulationSnapshot()["CampaignTicker.outer-skipped.skipped"]);
     }
 
     private static CampaignTickerEvidencePatches.TickerBatch Batch(CampaignCycleDiagnostics collector, string name, params string[] expected)
@@ -118,13 +156,183 @@ public sealed class CampaignCycleDiagnosticsTests
         public double TickDebt { get; set; }
     }
 
+    [Theory]
+    [InlineData("CampaignEventDispatcher.DailyTickParty")]
+    [InlineData("CampaignEventDispatcher.HourlyTickParty")]
+    public void LaterSiblingSpawnCannotInvalidateAnAlreadyCompletedNativeTicker(string callback)
+    {
+        var collector = new CampaignCycleDiagnostics();
+        var party = new CharacterObject { StringId = "a" };
+        var ticker = new ObservedTicker { _list = new() { party }, Index = 0, TickDebt = 0.5 };
+        var batch = CampaignTickerEvidencePatches.BeginBatch(ticker, callback, collector,
+            new CampaignTickerAudit { Ticker = "party" }, 1);
+        // Native one-item tick (debt1.5 -> callback a -> debt0.5).
+        CampaignTickerEvidencePatches.Completed(callback, party);
+        Assert.Null(CampaignTickerEvidencePatches.Finalizer(null!, true, batch));
+        // Later DailyTickClan/HourlyTickSettlement can spawn a party in this shared live list.
+        ticker._list.Add(new CharacterObject { StringId = "new-lord-or-villager" });
+        Assert.Equal(0, Assert.Single(collector.AuditSnapshot()).Mismatches);
+        Assert.Equal(1, Assert.Single(collector.AuditSnapshot()).Completed);
+    }
+
+    [Fact]
+    public void NestedTickerKeepsEachCallbackOnItsOwnBoundaryAndRestoresOuterEvenOnException()
+    {
+        var collector = new CampaignCycleDiagnostics();
+        var outerEntity = new CharacterObject { StringId = "outer" };
+        var innerEntity = new CharacterObject { StringId = "inner" };
+        var outer = CampaignTickerEvidencePatches.BeginBatch(new ObservedTicker { _list = new() { outerEntity }, TickDebt = 0.5 },
+            "outer", collector, new CampaignTickerAudit { Ticker = "outer" }, 1);
+        var inner = CampaignTickerEvidencePatches.BeginBatch(new ObservedTicker { _list = new() { innerEntity }, TickDebt = 0.5 },
+            "inner", collector, new CampaignTickerAudit { Ticker = "inner" }, 1);
+        var error = new InvalidOperationException("native-inner");
+        CampaignTickerEvidencePatches.Completed("inner", innerEntity);
+        Assert.Same(error, CampaignTickerEvidencePatches.Finalizer(error, true, inner));
+        CampaignTickerEvidencePatches.Completed("outer", outerEntity);
+        Assert.Null(CampaignTickerEvidencePatches.Finalizer(null!, true, outer));
+        Assert.Equal(1, inner.Completed.Count); Assert.Equal("inner|inner", inner.Completed[0]);
+        Assert.Equal("outer|outer", Assert.Single(outer.Completed));
+        Assert.Equal(1, outer.Depth); Assert.Equal(2, inner.Depth);
+        Assert.Equal(0, collector.AuditSnapshot().Single(row => row.Ticker == "outer").Mismatches);
+        Assert.Equal(1, collector.AuditSnapshot().Single(row => row.Ticker == "inner").Mismatches);
+        // Completed outside a boundary must not leak back into the previous one.
+        CampaignTickerEvidencePatches.Completed("outside", outerEntity);
+        Assert.Single(outer.Completed);
+    }
+
+    [Fact]
+    public void FirstFailureContainsAllPredicatesFullSequencesAndExactPhaseBitsWithoutOverwritingFirst()
+    {
+        var collector = new CampaignCycleDiagnostics();
+        var entity = new CharacterObject { StringId = "a" };
+        var ticker = new ObservedTicker { _list = new() { entity }, Index = 0, TickDebt = 0.5 };
+        var batch = CampaignTickerEvidencePatches.BeginBatch(ticker, "cb", collector,
+            new CampaignTickerAudit { Ticker = "native", Node = "A", RoomId = "room", AuthorityId = "world", Epoch = 3 }, 14);
+        for (int i = 0; i < 14; i++) CampaignTickerEvidencePatches.Completed("cb", entity);
+        ticker.TickDebt = 0.75; // Debt-only defect must remain a mismatch, even with14 matching callbacks.
+        CampaignTickerEvidencePatches.Finalizer(null!, true, batch);
+        string original = Assert.Single(collector.AuditSnapshot()).FirstFailure;
+        var failure = JObject.Parse(original);
+        Assert.True((bool)failure["sequenceMatches"]!); Assert.True((bool)failure["membershipMatches"]!);
+        Assert.True((bool)failure["indexMatches"]!); Assert.False((bool)failure["debtMatches"]!);
+        Assert.Equal(14, ((JArray)failure["expected"]!).Count); Assert.Equal(14, ((JArray)failure["completed"]!).Count);
+        Assert.Single((JArray)failure["beforeIds"]!); Assert.Single((JArray)failure["afterIds"]!);
+        Assert.Equal(BitConverter.DoubleToInt64Bits(0.75), (long)failure["actualDebtBits"]!);
+        Assert.Equal(3, (long)failure["Epoch"]!); Assert.Equal("A", (string)failure["Node"]!);
+        Assert.True((int)failure["ThreadId"]! > 0); Assert.NotNull(failure["StartedUtc"]); Assert.NotNull(failure["Frame"]);
+        var next = Batch(collector, "native"); next.Audit.Node = "A"; next.Audit.RoomId = "room";
+        next.Audit.AuthorityId = "world"; next.Audit.Epoch = 3;
+        CampaignTickerEvidencePatches.FinishBatch(new Exception("later"), next);
+        Assert.Equal(original, Assert.Single(collector.AuditSnapshot()).FirstFailure);
+    }
+
+    [Fact]
+    public void InternalMembershipMutationStillFailsAtNativeTickerExit()
+    {
+        var collector = new CampaignCycleDiagnostics();
+        var entity = new CharacterObject { StringId = "a" };
+        var ticker = new ObservedTicker { _list = new() { entity }, Index = 0, TickDebt = 0.5 };
+        var batch = CampaignTickerEvidencePatches.BeginBatch(ticker, "cb", collector, new CampaignTickerAudit { Ticker = "inside" }, 1);
+        CampaignTickerEvidencePatches.Completed("cb", entity);
+        ticker._list.Add(new CharacterObject { StringId = "inside-spawn" });
+        CampaignTickerEvidencePatches.Finalizer(null!, true, batch);
+        var audit = Assert.Single(collector.AuditSnapshot()); Assert.Equal(1, audit.Mismatches);
+        Assert.False((bool)JObject.Parse(audit.FirstFailure)["membershipMatches"]!);
+    }
+
+    [Fact]
+    public void ExcessiveEvidenceIsExplicitFailureAndPredictionCannotLoopWithoutBound()
+    {
+        Assert.Throws<InvalidOperationException>(() => CampaignTickerEvidencePatches.Expected(new[] { "a" }, 0, 0,
+            CampaignTickerEvidencePatches.EvidenceLimit + 2, out _, out _));
+        var collector = new CampaignCycleDiagnostics();
+        var entity = new CharacterObject { StringId = "a" };
+        var batch = CampaignTickerEvidencePatches.BeginBatch(new ObservedTicker { _list = new() { entity } }, "cb",
+            collector, new CampaignTickerAudit { Ticker = "bounded" }, 0);
+        for (int i = 0; i < CampaignTickerEvidencePatches.EvidenceLimit + 1; i++) CampaignTickerEvidencePatches.Completed("cb", entity);
+        CampaignTickerEvidencePatches.Finalizer(null!, true, batch);
+        var audit = Assert.Single(collector.AuditSnapshot()); Assert.Equal(1, audit.Mismatches);
+        var failure = JObject.Parse(audit.FirstFailure);
+        Assert.False((bool)failure["complete"]!); Assert.Equal(CampaignTickerEvidencePatches.EvidenceLimit, ((JArray)failure["completed"]!).Count);
+    }
+
+    [Fact]
+    public void InstalledClosedNativeMethodsEachObserveOneActualInstanceExactlyOnce()
+    {
+        var harmony = new Harmony("coop.tests.closed-ticker-dispatch");
+        var previous = Campaign.Current;
+        ContainerProvider.TryGetContainer(out var previousContainer);
+        try
+        {
+            ContainerProvider.Clear();
+            var campaign = (Campaign)RuntimeHelpers.GetUninitializedObject(typeof(Campaign));
+            campaign._campaignPeriodicEventManager = new CampaignPeriodicEventManager();
+            Campaign.Current = campaign;
+            harmony.Patch(AccessTools.PropertyGetter(typeof(TaleWorlds.Engine.Utilities), "EngineFrameNo"),
+                prefix: new HarmonyMethod(typeof(CampaignCycleDiagnosticsTests), nameof(FramePrefix)));
+            Assert.NotEmpty(harmony.CreateClassProcessor(typeof(CampaignTickerEvidencePatches)).Patch());
+            int nativeCalls = 0;
+            var bindings = CampaignTickerEvidencePatches.GroupTargetMethods().SelectMany(method => CampaignTickerEvidencePatches.Bindings(method.Name)).ToArray();
+            foreach (var binding in bindings)
+            {
+                var field = AccessTools.Field(typeof(CampaignPeriodicEventManager), binding.Name);
+                var ticker = field.GetValue(campaign._campaignPeriodicEventManager);
+                AccessTools.Method(typeof(CampaignCycleDiagnosticsTests), nameof(InitializeNativeFixture))
+                    .MakeGenericMethod(field.FieldType.GetGenericArguments()[0])
+                    .Invoke(null, new object[] { ticker, binding.Name, binding.Callback, (Action)(() => nativeCalls++) });
+                AccessTools.Method(field.FieldType, "PeriodicTickSome").Invoke(ticker, new object[] { 1d });
+                var observed = CampaignCycleDispatchPatches.For(campaign).AuditSnapshot();
+                Assert.Equal(nativeCalls, observed.Length);
+                var audit = observed.Single(row => row.Ticker == binding.Name);
+                Assert.Equal(1, audit.Batches); Assert.Equal(1, audit.Expected); Assert.Equal(1, audit.Completed);
+                Assert.True(audit.Mismatches == 0, audit.FirstFailure);
+            }
+            Assert.Equal(20, nativeCalls);
+            // An unbound same-closed-type ticker must run natively without creating a campaign audit.
+            var foreign = new CampaignPeriodicEventManager.PeriodicTicker<Hero>();
+            InitializeNativeFixture(foreign, "foreign", "foreign", () => nativeCalls++);
+            foreign.PeriodicTickSome(1d);
+            Assert.Equal(21, nativeCalls);
+            Assert.Equal(20, CampaignCycleDispatchPatches.For(campaign).AuditSnapshot().Length);
+            var original = new InvalidOperationException("native action fault retained");
+            InitializeNativeFixture(campaign._campaignPeriodicEventManager._dailyTickHeroTicker, "failing-hero",
+                "CampaignEventDispatcher.DailyTickHero", () => throw original);
+            var thrown = Assert.Throws<TargetInvocationException>(() => AccessTools.Method(
+                campaign._campaignPeriodicEventManager._dailyTickHeroTicker.GetType(), "PeriodicTickSome")
+                .Invoke(campaign._campaignPeriodicEventManager._dailyTickHeroTicker, new object[] { 1d }));
+            Assert.Same(original, thrown.InnerException);
+            var failed = CampaignCycleDispatchPatches.For(campaign).AuditSnapshot().Single(row => row.Ticker == "_dailyTickHeroTicker");
+            Assert.Equal(2, failed.Batches); Assert.Equal(1, failed.Mismatches);
+            var detail = JObject.Parse(failed.FirstFailure);
+            Assert.Equal(17, (int)detail["Frame"]!);
+            Assert.Contains(original.Message, (string)detail["originalException"]!);
+        }
+        finally
+        {
+            harmony.UnpatchAll(harmony.Id);
+            Campaign.Current = previous;
+            if (previousContainer != null) ContainerProvider.SetContainer(previousContainer); else ContainerProvider.Clear();
+        }
+    }
+
+    private static bool FramePrefix(ref int __result) { __result = 17; return false; }
+
+    private static void InitializeNativeFixture<T>(CampaignPeriodicEventManager.PeriodicTicker<T> ticker,
+        string id, string callback, Action nativeCall) where T : MBObjectBase
+    {
+        var entity = (T)RuntimeHelpers.GetUninitializedObject(typeof(T)); entity.StringId = id;
+        ticker.Initialize(new MBReadOnlyList<T>(new[] { entity }), value =>
+        { nativeCall(); CampaignTickerEvidencePatches.Completed(callback, value); }, false);
+        ticker.TickDebt = 0.5;
+    }
+
     [Fact]
     public void ReadOnlyEvidencePatchesBindInstalledNativeOverloads()
     {
         var harmony = new Harmony("coop.tests.native-cycle-evidence");
         try
         {
-            foreach (var type in new[] { typeof(CampaignTickerEvidencePatches), typeof(CampaignTickerCallbackEvidencePatches),
+            foreach (var type in new[] { typeof(CampaignTickerEvidencePatches), typeof(CampaignTickerGroupEvidencePatches), typeof(CampaignTickerCallbackEvidencePatches),
                 typeof(CampaignMobilePartyCallbackEvidencePatches), typeof(CampaignSimulationEvidencePatches),
                 typeof(CampaignEconomicEvidencePatches), typeof(CampaignWageEvidencePatches) })
                 Assert.NotEmpty(harmony.CreateClassProcessor(type).Patch());

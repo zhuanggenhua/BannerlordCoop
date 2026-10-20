@@ -11,6 +11,8 @@ using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
+using Newtonsoft.Json;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
@@ -203,12 +205,17 @@ internal static class CampaignCycleDispatchPatches
 [HarmonyPatch]
 internal static class CampaignTickerEvidencePatches
 {
-    [ThreadStatic] private static TickerGroup current;
-    internal static IEnumerable<MethodBase> TargetMethods()
+    internal const int EvidenceLimit = 32768;
+    [ThreadStatic] private static TickerBatch current;
+    internal static IEnumerable<MethodBase> GroupTargetMethods()
     {
         foreach (string name in new[] { "MobilePartyHourlyTick", "PeriodicHourlyTick", "PeriodicDailyTick", "PeriodicQuarterDailyTick", "TickPartialHourlyAi" })
             yield return AccessTools.Method(typeof(CampaignPeriodicEventManager), name);
     }
+    internal static IEnumerable<MethodBase> TargetMethods() => GroupTargetMethods()
+        .SelectMany(method => Bindings(method.Name))
+        .Select(binding => AccessTools.Method(AccessTools.Field(typeof(CampaignPeriodicEventManager), binding.Name).FieldType,
+            "PeriodicTickSome", new[] { typeof(double) })).Distinct();
 
     internal static (string Name, string Callback)[] Bindings(string method)
     {
@@ -236,39 +243,58 @@ internal static class CampaignTickerEvidencePatches
     }
 
     [HarmonyPrefix]
-    private static void Prefix(CampaignPeriodicEventManager __instance, MethodBase __originalMethod, out TickerGroup __state)
+    private static void Prefix(object __instance, double timeUnitsElapsed, out TickerBatch __state)
     {
         __state = null;
         var campaign = Campaign.Current;
-        if (!ReferenceEquals(campaign?._campaignPeriodicEventManager, __instance)) return;
-        ContainerProvider.TryResolve<IControllerIdProvider>(out var controller);
-        ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authority);
-        AuthorityLease lease = default;
-        bool known = authority?.TryGetCurrentLease(out lease) == true;
-        __state = new TickerGroup { Parent = current };
-        string method = __originalMethod.Name;
-        double elapsed = method == "PeriodicDailyTick" || method == "PeriodicQuarterDailyTick"
-            ? CampaignTime.DeltaTime.ToDays : CampaignTime.DeltaTime.ToHours;
-        if (method == "PeriodicQuarterDailyTick") elapsed *= 4;
-        if (method == "TickPartialHourlyAi") elapsed *= 0.99;
-        foreach (var binding in Bindings(method))
+        if (campaign?._campaignPeriodicEventManager == null) return;
+        // Resolve by the actual instance, not the generic method's reported T: reference-type
+        // instantiations can share native code. Only this Campaign's twenty ticker fields count.
+        foreach (var method in GroupTargetMethods())
+        foreach (var binding in Bindings(method.Name))
         {
-            var batch = new TickerBatch { Collector = CampaignCycleDispatchPatches.For(campaign),
-                Audit = new CampaignTickerAudit { Ticker = binding.Name,
-                Node = controller?.ControllerId, AuthorityId = lease.AuthorityId, RoomId = lease.RoomId,
-                Epoch = lease.Epoch, LeaseKnown = known, LocalWriter = authority?.IsLocalCampaignAuthority == true } };
-            try
-            {
-                batch.Instance = AccessTools.Field(typeof(CampaignPeriodicEventManager), binding.Name).GetValue(__instance);
-                var ticker = Traverse.Create(batch.Instance);
-                batch.Ids = ((System.Collections.IEnumerable)ticker.Field("_list").GetValue()).Cast<MBObjectBase>().Select(value => value.StringId).ToArray();
-                batch.Expected = Expected(batch.Ids, ticker.Property<int>("Index").Value, ticker.Property<double>("TickDebt").Value,
-                    elapsed, out batch.EndIndex, out batch.EndDebt).Select(id => binding.Callback + "|" + id).ToArray();
-            }
-            catch (Exception error) { batch.DiagnosticError = error.ToString(); }
-            __state.Batches.Add(batch);
+            if (!ReferenceEquals(AccessTools.Field(typeof(CampaignPeriodicEventManager), binding.Name)
+                    .GetValue(campaign._campaignPeriodicEventManager), __instance)) continue;
+            ContainerProvider.TryResolve<IControllerIdProvider>(out var controller);
+            ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authority);
+            AuthorityLease lease = default;
+            bool known = authority?.TryGetCurrentLease(out lease) == true;
+            __state = BeginBatch(__instance, binding.Callback, CampaignCycleDispatchPatches.For(campaign),
+                new CampaignTickerAudit { Ticker = binding.Name, Node = controller?.ControllerId,
+                    AuthorityId = lease.AuthorityId, RoomId = lease.RoomId, Epoch = lease.Epoch,
+                    LeaseKnown = known, LocalWriter = authority?.IsLocalCampaignAuthority == true }, timeUnitsElapsed);
+            try { __state.Frame = TaleWorlds.Engine.Utilities.EngineFrameNo; }
+            catch (Exception error) { __state.DiagnosticError = error.ToString(); }
+            return;
         }
-        current = __state;
+    }
+
+    internal static TickerBatch BeginBatch(object instance, string callback, CampaignCycleDiagnostics collector,
+        CampaignTickerAudit audit, double elapsed)
+    {
+        var batch = new TickerBatch { Instance = instance, Collector = collector, Audit = audit,
+            Parent = current, Depth = (current?.Depth ?? 0) + 1, StartedUtc = DateTime.UtcNow,
+            ThreadId = Thread.CurrentThread.ManagedThreadId, Elapsed = elapsed };
+        current = batch;
+        try
+        {
+            var ticker = Traverse.Create(instance);
+            batch.Ids = ReadIds(instance);
+            batch.StartIndex = ticker.Property<int>("Index").Value;
+            batch.StartDebt = ticker.Property<double>("TickDebt").Value;
+            batch.Expected = Expected(batch.Ids, batch.StartIndex, batch.StartDebt, elapsed,
+                out batch.EndIndex, out batch.EndDebt).Select(id => callback + "|" + id).ToArray();
+        }
+        catch (Exception error) { batch.DiagnosticError = error.ToString(); }
+        return batch;
+    }
+
+    private static string[] ReadIds(object instance)
+    {
+        var ids = ((System.Collections.IEnumerable)Traverse.Create(instance).Field("_list").GetValue())
+            .Cast<MBObjectBase>().Select(value => value.StringId).Take(EvidenceLimit + 1).ToArray();
+        if (ids.Length > EvidenceLimit) throw new InvalidOperationException("Ticker evidence list exceeds complete capture limit; evidence incomplete.");
+        return ids;
     }
 
     internal static string[] Expected(string[] ids, int index, double debt, double elapsed, out int endIndex, out double endDebt)
@@ -276,8 +302,10 @@ internal static class CampaignTickerEvidencePatches
         var expected = new List<string>();
         if (ids.Length == 0) { endIndex = index; endDebt = 0; return expected.ToArray(); }
         debt += elapsed * ids.Length;
+        if (double.IsNaN(debt) || double.IsInfinity(debt)) throw new InvalidOperationException("Nonfinite ticker evidence debt.");
         while (debt > 1)
         {
+            if (expected.Count == EvidenceLimit) throw new InvalidOperationException("Ticker callback prediction exceeds complete capture limit; evidence incomplete.");
             index++;
             if (index >= ids.Length) index = 0;
             expected.Add(ids[index]); debt--;
@@ -286,73 +314,80 @@ internal static class CampaignTickerEvidencePatches
     }
 
     internal static void Completed(string callback, object entity)
-    { if (current != null && entity is MBObjectBase value) current.Completed.Add(callback + "|" + value.StringId); }
-
-    internal static void Partition(TickerGroup group)
     {
-        int offset = 0;
-        for (int index = 0; index < group.Batches.Count; index++)
-        {
-            var batch = group.Batches[index];
-            batch.Completed.Clear();
-            int count = index == group.Batches.Count - 1 ? group.Completed.Count - offset : batch.Expected.Length;
-            batch.Completed.AddRange(group.Completed.Skip(offset).Take(Math.Max(0, count)));
-            offset += batch.Completed.Count;
-        }
+        if (current == null || entity is not MBObjectBase value) return;
+        if (current.Completed.Count == EvidenceLimit)
+        { current.DiagnosticError = "Ticker completed callbacks exceed complete capture limit; evidence incomplete."; return; }
+        current.Completed.Add(callback + "|" + value.StringId);
     }
 
     [HarmonyFinalizer]
-    private static Exception Finalizer(Exception __exception, bool __runOriginal, TickerGroup __state)
+    internal static Exception Finalizer(Exception __exception, bool __runOriginal, TickerBatch __state)
     {
         if (__state == null) return __exception;
         current = __state.Parent;
         if (!__runOriginal && __exception == null)
         {
-            foreach (var batch in __state.Batches)
-            {
-                batch.Collector.Simulation("CampaignTicker." + batch.Audit.Ticker + ".skipped");
-                bool stillWriter = batch.Audit.LocalWriter;
-                if (batch.Audit.LeaseKnown && ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var context))
-                    stillWriter &= context.TryGetLocalAuthorityLease(out var lease) && lease.RoomId == batch.Audit.RoomId &&
-                        lease.AuthorityId == batch.Audit.AuthorityId && lease.Epoch == batch.Audit.Epoch;
-                if (stillWriter) batch.Collector.Simulation("CampaignTicker.writerSkipped.failed");
-            }
+            RecordSkipped(__state);
             return __exception;
         }
-        Partition(__state);
-        foreach (var batch in __state.Batches) FinishBatch(__exception, batch);
-        return __exception;
+        return FinishBatch(__exception, __state);
+    }
+
+    internal static void RecordSkipped(TickerBatch batch)
+    {
+        batch.Collector.Simulation("CampaignTicker." + batch.Audit.Ticker + ".skipped");
+        bool stillWriter = batch.Audit.LocalWriter;
+        if (batch.Audit.LeaseKnown && ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var context))
+            stillWriter &= context.TryGetLocalAuthorityLease(out var lease) && lease.RoomId == batch.Audit.RoomId &&
+                lease.AuthorityId == batch.Audit.AuthorityId && lease.Epoch == batch.Audit.Epoch;
+        if (stillWriter) batch.Collector.Simulation("CampaignTicker.writerSkipped.failed");
     }
 
     internal static Exception FinishBatch(Exception originalException, TickerBatch batch)
     {
-        bool matches = false;
-        if (originalException == null && batch.DiagnosticError == null)
+        bool sequenceMatches = batch.Expected.SequenceEqual(batch.Completed), membershipMatches = false,
+            indexMatches = false, debtMatches = false;
+        string[] actualIds = null;
+        int? actualIndex = null;
+        double? actualDebt = null;
+        // Still capture final state on a native exception, without replacing that exception.
+        try
         {
-            try
-            {
-                var ticker = Traverse.Create(batch.Instance);
-                var ids = ((System.Collections.IEnumerable)ticker.Field("_list").GetValue()).Cast<MBObjectBase>().Select(value => value.StringId).ToArray();
-                matches = batch.Expected.SequenceEqual(batch.Completed) && batch.Ids.SequenceEqual(ids) &&
-                    ticker.Property<int>("Index").Value == batch.EndIndex && ticker.Property<double>("TickDebt").Value == batch.EndDebt;
-            }
-            catch (Exception error) { batch.DiagnosticError = error.ToString(); }
+            var ticker = Traverse.Create(batch.Instance);
+            actualIds = ReadIds(batch.Instance);
+            actualIndex = ticker.Property<int>("Index").Value;
+            actualDebt = ticker.Property<double>("TickDebt").Value;
+            membershipMatches = batch.Ids.SequenceEqual(actualIds);
+            indexMatches = actualIndex == batch.EndIndex;
+            debtMatches = actualDebt == batch.EndDebt;
         }
+        catch (Exception error) { batch.DiagnosticError = (batch.DiagnosticError == null ? "" : batch.DiagnosticError + "\n") + error; }
+        bool matches = originalException == null && batch.DiagnosticError == null && sequenceMatches &&
+            membershipMatches && indexMatches && debtMatches;
         var audit = batch.Audit;
         audit.Expected = batch.Expected.Length; audit.Completed = batch.Completed.Count;
         audit.ExpectedHash = CampaignCycleDiagnostics.Hash(string.Join("|", batch.Expected));
         audit.CompletedHash = CampaignCycleDiagnostics.Hash(string.Join("|", batch.Completed));
         audit.Mismatches = matches ? 0 : 1;
-        if (!matches) audit.FirstFailure = $"expected={string.Join(",", batch.Expected.Take(12))}; completed={string.Join(",", batch.Completed.Take(12))}; originalException={originalException}; diagnosticError={batch.DiagnosticError}";
+        if (!matches) audit.FirstFailure = JsonConvert.SerializeObject(new
+        {
+            sequenceMatches, membershipMatches, indexMatches, debtMatches,
+            complete = batch.DiagnosticError == null,
+            batch.StartedUtc, finishedUtc = DateTime.UtcNow, batch.Frame, batch.ThreadId, batch.Depth,
+            finishedThreadId = Thread.CurrentThread.ManagedThreadId,
+            nativeTicker = batch.Instance?.GetType().FullName,
+            audit.Ticker, audit.Node, audit.RoomId, audit.AuthorityId, audit.Epoch, audit.LeaseKnown, audit.LocalWriter,
+            beforeIds = batch.Ids, afterIds = actualIds, expected = batch.Expected, completed = batch.Completed,
+            batch.StartIndex, expectedIndex = batch.EndIndex, actualIndex,
+            startDebtBits = BitConverter.DoubleToInt64Bits(batch.StartDebt),
+            elapsedBits = BitConverter.DoubleToInt64Bits(batch.Elapsed),
+            expectedDebtBits = BitConverter.DoubleToInt64Bits(batch.EndDebt),
+            actualDebtBits = actualDebt.HasValue ? (long?)BitConverter.DoubleToInt64Bits(actualDebt.Value) : null,
+            originalException = originalException?.ToString(), diagnosticError = batch.DiagnosticError,
+        });
         batch.Collector.Audit(audit);
         return originalException;
-    }
-
-    internal sealed class TickerGroup
-    {
-        public TickerGroup Parent;
-        public readonly List<TickerBatch> Batches = new();
-        public readonly List<string> Completed = new();
     }
 
     internal sealed class TickerBatch
@@ -362,11 +397,48 @@ internal static class CampaignTickerEvidencePatches
         public string DiagnosticError;
         public string[] Ids = Array.Empty<string>(), Expected = Array.Empty<string>();
         public readonly List<string> Completed = new();
-        public int EndIndex;
-        public double EndDebt;
+        public int StartIndex, EndIndex;
+        public double StartDebt, EndDebt, Elapsed;
         public CampaignTickerAudit Audit;
+        public TickerBatch Parent;
+        public int Frame, ThreadId, Depth;
+        public DateTime StartedUtc;
     }
 }
+
+// A skipped outer group never enters its native tickers. Retain writer-skip evidence
+// separately, without taking any list/cursor/debt snapshot across sibling callbacks.
+[HarmonyPatch]
+internal static class CampaignTickerGroupEvidencePatches
+{
+    internal static IEnumerable<MethodBase> TargetMethods() => CampaignTickerEvidencePatches.GroupTargetMethods();
+    [HarmonyPrefix]
+    private static void Prefix(CampaignPeriodicEventManager __instance, MethodBase __originalMethod,
+        out CampaignTickerEvidencePatches.TickerBatch[] __state)
+    {
+        __state = null;
+        var campaign = Campaign.Current;
+        if (!ReferenceEquals(campaign?._campaignPeriodicEventManager, __instance)) return;
+        ContainerProvider.TryResolve<IControllerIdProvider>(out var controller);
+        ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authority);
+        AuthorityLease lease = default;
+        bool known = authority?.TryGetCurrentLease(out lease) == true;
+        __state = CampaignTickerEvidencePatches.Bindings(__originalMethod.Name).Select(binding =>
+            new CampaignTickerEvidencePatches.TickerBatch { Collector = CampaignCycleDispatchPatches.For(campaign),
+                Audit = new CampaignTickerAudit { Ticker = binding.Name, Node = controller?.ControllerId,
+                    RoomId = lease.RoomId, AuthorityId = lease.AuthorityId, Epoch = lease.Epoch,
+                    LeaseKnown = known, LocalWriter = authority?.IsLocalCampaignAuthority == true } }).ToArray();
+    }
+    [HarmonyFinalizer]
+    private static Exception Finalizer(Exception __exception, bool __runOriginal,
+        CampaignTickerEvidencePatches.TickerBatch[] __state)
+    {
+        if (__state != null && !__runOriginal && __exception == null)
+            foreach (var batch in __state) CampaignTickerEvidencePatches.RecordSkipped(batch);
+        return __exception;
+    }
+}
+
 
 [HarmonyPatch]
 internal static class CampaignTickerCallbackEvidencePatches
