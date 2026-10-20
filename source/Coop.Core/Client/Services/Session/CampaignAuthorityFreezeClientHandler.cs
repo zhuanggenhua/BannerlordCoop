@@ -1,4 +1,4 @@
-using Common;
+﻿using Common;
 using GameInterface.Services.CampaignAuthority.Movement;
 using Common.Logging;
 using Common.Messaging;
@@ -31,6 +31,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
     private readonly ICampaignAsyncTaskDrain asyncTasks;
     private readonly ISendCoalescer sendCoalescer;
     private readonly ICampaignMovementCheckpointService movement;
+    private readonly ICampaignMovementFreezePreparation movementPreparation;
 
     public CampaignAuthorityFreezeClientHandler(
         IMessageBroker messageBroker,
@@ -44,7 +45,8 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
         ICampaignSchedulerCheckpointService schedulerCheckpointService,
         ICampaignAsyncTaskDrain asyncTasks,
         ISendCoalescer sendCoalescer = null,
-        ICampaignMovementCheckpointService movement = null)
+        ICampaignMovementCheckpointService movement = null,
+        ICampaignMovementFreezePreparation movementPreparation = null)
     {
         this.messageBroker = messageBroker;
         this.network = network;
@@ -58,6 +60,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
         this.asyncTasks = asyncTasks;
         this.sendCoalescer = sendCoalescer;
         this.movement = movement;
+        this.movementPreparation = movementPreparation;
         messageBroker.Subscribe<NetworkCampaignAuthorityFreezeRequest>(Handle_FreezeRequest);
         messageBroker.Subscribe<NetworkCampaignAuthorityFreezeCanceled>(Handle_FreezeCanceled);
     }
@@ -98,6 +101,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
                 bool frozen = false;
                 if (!sessionIdentity.TryExecuteWithLease(lease, () =>
                 {
+                    if (movementPreparation != null && !movementPreparation.TryPrepareForFreeze(lease)) return;
                     sendCoalescer?.Flush(network);
                     frozen = sessionIdentity.TryFreezeLocalAuthority(lease, request.HandoffSequence);
                 }) || !frozen) return;

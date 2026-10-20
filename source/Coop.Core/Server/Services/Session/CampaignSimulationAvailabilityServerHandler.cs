@@ -1,4 +1,4 @@
-using Common;
+﻿using Common;
 using GameInterface.Services.CampaignAuthority.Movement;
 using Common.Logging;
 using Common.Messaging;
@@ -46,6 +46,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private readonly ICampaignSchedulerCheckpointService schedulerCheckpointService;
     private readonly ICampaignAsyncTaskDrain asyncTasks;
     private readonly ICampaignMovementCheckpointService movement;
+    private readonly ICampaignMovementFreezePreparation movementPreparation;
     private CampaignMovementCheckpoint finalMovementCheckpoint;
     private AuthorityLease pendingMovementLease;
     private readonly Dictionary<int, (NetPeer peer, string controller)> pendingMovementAcks = new();
@@ -93,7 +94,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         ICampaignSessionCheckpointService sessionCheckpointService = null,
         ICampaignSchedulerCheckpointService schedulerCheckpointService = null,
         ICampaignAsyncTaskDrain asyncTasks = null,
-        ICampaignMovementCheckpointService movement = null)
+        ICampaignMovementCheckpointService movement = null,
+        ICampaignMovementFreezePreparation movementPreparation = null)
     {
         this.messageBroker = messageBroker;
         this.coordinator = coordinator;
@@ -110,6 +112,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         this.schedulerCheckpointService = schedulerCheckpointService;
         this.asyncTasks = asyncTasks;
         this.movement = movement;
+        this.movementPreparation = movementPreparation;
         messageBroker.Subscribe<CampaignReady>(Handle_CampaignReady);
         messageBroker.Subscribe<CampaignInitializationCompleted>(Handle_CampaignInitializationCompleted);
         messageBroker.Subscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
@@ -444,6 +447,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             bool committedPause = false;
             if (!sessionIdentity.TryExecuteWithLease(currentLease, () =>
             {
+                if (movementPreparation != null && !movementPreparation.TryPrepareForFreeze(currentLease)) return;
                 sendCoalescer?.Flush(network);
                 network.FlushPendingMessages();
                 if (movement != null)

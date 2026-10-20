@@ -1,4 +1,5 @@
-﻿using Common;
+﻿using GameInterface.Services.CampaignAuthority.Movement;
+using Common;
 using Common.Messaging;
 using Common.Network.Messages;
 using Common.Network.Session;
@@ -27,6 +28,45 @@ namespace Coop.Tests.Server.Services.Session;
 [Collection(ModInformationRoleCollection.Name)]
 public class CampaignSimulationAvailabilityServerHandlerTests
 {
+    [Fact]
+    public void FailedHostNavigationPreparationCannotCommitPauseOrFlush()
+    {
+        var previousMode = ModInformation.SessionMode;
+        ModInformation.SessionMode = SessionMode.ListenAuthority;
+        try
+        {
+            var broker = new TestMessageBroker();
+            var identity = new SessionIdentity();
+            var lease = new AuthorityLease("room", "authority", "host", 1);
+            Assert.True(identity.TryApply(lease, "host"));
+            var coordinator = new CampaignAuthorityAvailabilityCoordinator(identity, new CampaignAuthorityCandidateSelector());
+            var controller = new ControllerIdProvider(); controller.SetControllerId("host");
+            var host = new Player("host", "hero", "party", "clan", "character");
+            var players = new Mock<IPlayerManager>();
+            players.Setup(value => value.TryGetPlayer("host", out host)).Returns(true);
+            var network = new Mock<INetwork>();
+            var coalescer = new Mock<ISendCoalescer>();
+            var preparation = new Mock<ICampaignMovementFreezePreparation>();
+            preparation.Setup(value => value.TryPrepareForFreeze(lease)).Returns(false);
+            using var handler = new CampaignSimulationAvailabilityServerHandler(broker, coordinator,
+                Mock.Of<IConnectionCollection>(), players.Object, controller, network.Object, identity,
+                sendCoalescer: coalescer.Object, asyncTasks: CampaignHandoffTestServices.Drained(),
+                movementPreparation: preparation.Object);
+            broker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
+            broker.Publish(this, new CampaignReady());
+            broker.Publish(this, new CampaignInitializationCompleted());
+            GameThread.Run(() => { }, blocking: true);
+            broker.Publish(this, new CampaignMapSimulationReadinessChanged(false));
+            GameThread.Run(() => { }, blocking: true);
+            preparation.Verify(value => value.TryPrepareForFreeze(lease), Times.AtLeastOnce);
+            Assert.Equal(lease, identity.CurrentLease);
+            Assert.False(identity.IsLocallyFrozen(lease));
+            coalescer.Verify(value => value.Flush(network.Object), Times.Never);
+            network.Verify(value => value.SendAll(It.IsAny<NetworkAuthorityLeaseSnapshot>()), Times.Never);
+        }
+        finally { ModInformation.SessionMode = previousMode; }
+    }
+
     [Fact]
     public void AvailabilityTimerKeepsRestoredLeaseWritableUntilCampaignObjectsAreRegistered()
     {
@@ -337,10 +377,24 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             var sessions = new Mock<ICampaignSessionCheckpointService>();
             sessions.Setup(value => value.TryCapture(out sessionCheckpoint))
                 .Callback(() => Assert.True(identity.CurrentLease.IsPaused)).Returns(true);
+            bool drained = false;
+            bool prepared = false;
+            var preparation = new Mock<ICampaignMovementFreezePreparation>();
+            preparation.Setup(value => value.TryPrepareForFreeze(It.IsAny<AuthorityLease>())).Callback<AuthorityLease>(value =>
+            {
+                Assert.True(drained);
+                Assert.True(GameThread.Instance.IsGameThread);
+                Assert.Equal(identity.CurrentLease, value);
+                Assert.False(value.IsPaused);
+                prepared = true;
+            }).Returns(true);
+            var drain = new Mock<ICampaignAsyncTaskDrain>();
+            drain.Setup(value => value.TryDrain()).Callback(() => drained = true).Returns(true);
             var coalescer = new Mock<ISendCoalescer>();
             coalescer.Setup(value => value.Flush(network.Object)).Callback(() =>
             {
                 Assert.True(GameThread.Instance.IsGameThread);
+                Assert.True(prepared);
                 Assert.False(identity.CurrentLease.IsPaused);
                 Assert.Equal(1, identity.Epoch);
                 bufferedResultsFlushed = true;
@@ -377,7 +431,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                 coalescer.Object,
                 rosterService.Object,
                 clock.Object,
-                sessions.Object, CampaignHandoffTestServices.Scheduler(), CampaignHandoffTestServices.Drained());
+                sessions.Object, CampaignHandoffTestServices.Scheduler(), drain.Object, movementPreparation: preparation.Object);
 
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
             messageBroker.Publish(this, new CampaignReady());
