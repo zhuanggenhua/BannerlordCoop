@@ -1,4 +1,4 @@
-using Common;
+﻿using Common;
 using Common.Messaging;
 using Common.Network;
 using Common.Network.Session;
@@ -211,6 +211,65 @@ public class CampaignFinalMovementProtocolTests
             Assert.Equal(checkpoint.Ticks, actual.Ticks);
             Assert.Equal(checkpoint.Sha256, actual.Sha256);
         }
+    }
+
+    [Theory]
+    [InlineData("none")]
+    [InlineData("send")]
+    [InlineData("flush")]
+    public void SnapshotAckKeepsInstallSendFlushOrderAndNeverRetriesFaultedTransport(string fault)
+    {
+        var broker = new TestMessageBroker();var identity = new SessionIdentity();
+        Assert.True(identity.TryApply(Source, "a"));
+        var checkpoint = Checkpoint();var calls = new List<string>();
+        Func<bool> install = () => { calls.Add("install:" + identity.Epoch);return true; };
+        var movement = new Mock<ICampaignMovementCheckpointService>();
+        movement.Setup(m => m.TryPrepare(checkpoint, Source, 777, out install)).Returns(true);
+        var clock = new Mock<IMapTimeTrackerInterface>();clock.Setup(c => c.TryApplyAuthorityHandoffBaseline(777)).Returns(true);
+        var tasks = new Mock<ICampaignAsyncTaskDrain>();tasks.Setup(t => t.TryDrain()).Returns(true);
+        var controller = new ControllerIdProvider();controller.SetControllerId("b");
+        var network = new Mock<INetwork>();NetworkCampaignMovementBaselineApplied? sent = null;
+        network.Setup(n => n.SendAll(It.IsAny<IMessage>())).Callback<IMessage>(message =>
+        {
+            calls.Add("send:" + identity.Epoch);sent = Assert.IsType<NetworkCampaignMovementBaselineApplied>(message);
+            if (fault == "send") throw new InvalidOperationException("test SendAll failure");
+        });
+        network.Setup(n => n.FlushPendingMessages()).Callback(() =>
+        {
+            calls.Add("flush:" + identity.Epoch);
+            if (fault == "flush") throw new InvalidOperationException("test Flush failure");
+        });
+        using var handler = new AuthorityLeaseSnapshotHandler(broker, identity, movement.Object, clock.Object, network.Object, controller, tasks.Object);
+        broker.Publish(new TestNetwork().CreatePeer(), new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint));
+        GameThread.Run(() => { }, blocking: true);
+        Assert.Equal(fault == "send" ? new[] { "install:5", "send:6" } : new[] { "install:5", "send:6", "flush:6" }, calls);
+        Assert.Equal(Paused, identity.CurrentLease);Assert.NotNull(sent);
+        Assert.Equal(Paused.RoomId, sent.Value.RoomId);Assert.Equal(Paused.AuthorityId, sent.Value.PausedAuthorityId);
+        Assert.Equal(Paused.Epoch, sent.Value.PausedEpoch);Assert.Equal("b", sent.Value.ControllerId);
+        Assert.Equal(checkpoint.Ticks, sent.Value.Ticks);Assert.Equal(checkpoint.Sha256, sent.Value.Sha256);
+        network.Verify(n => n.SendAll(It.IsAny<IMessage>()), Times.Once);
+        network.Verify(n => n.FlushPendingMessages(), fault == "send" ? Times.Never : Times.Once);
+        tasks.Verify(t => t.TryDrain(), Times.Once);
+        movement.Verify(m => m.TryPrepare(checkpoint, Source, 777, out install), Times.Once);
+        clock.Verify(c => c.TryApplyAuthorityHandoffBaseline(777), Times.Once);
+    }
+
+    [Theory]
+    [InlineData("movement")]
+    [InlineData("network")]
+    [InlineData("controller")]
+    public void OptionalAckDependenciesDoNotInventSendsOrChangeExistingLeaseApplication(string missing)
+    {
+        var broker = new TestMessageBroker();var identity = new SessionIdentity();Assert.True(identity.TryApply(Source, "a"));
+        var checkpoint = Checkpoint();int installs = 0;Func<bool> install = () => { installs++;return true; };
+        var movement = new Mock<ICampaignMovementCheckpointService>();movement.Setup(m => m.TryPrepare(checkpoint, Source, 777, out install)).Returns(true);
+        var clock = Mock.Of<IMapTimeTrackerInterface>(c => c.TryApplyAuthorityHandoffBaseline(777));
+        var network = new Mock<INetwork>();var controller = new ControllerIdProvider();controller.SetControllerId("b");
+        using var handler = new AuthorityLeaseSnapshotHandler(broker, identity, missing == "movement" ? null : movement.Object,
+            clock, missing == "network" ? null : network.Object, missing == "controller" ? null : controller, CampaignHandoffTestServices.Drained());
+        broker.Publish(this, new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint));GameThread.Run(() => { }, blocking: true);
+        Assert.Equal(Paused, identity.CurrentLease);Assert.Equal(missing == "movement" ? 0 : 1, installs);
+        network.Verify(n => n.SendAll(It.IsAny<IMessage>()), Times.Never);network.Verify(n => n.FlushPendingMessages(), Times.Never);
     }
 
     private static NetworkCampaignAuthorityHandoffBarrier Barrier(CampaignMovementCheckpoint checkpoint) =>

@@ -875,28 +875,71 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
 
     private void Handle_MovementBaselineApplied(MessagePayload<NetworkCampaignMovementBaselineApplied> payload)
     {
-        if (payload.Who is not NetPeer peer) return;
+        if (payload.Who is not NetPeer peer)
+        {
+            LogMovementAckStage("ingress-rejected-non-peer", null, payload.What, payload.Who?.GetType().FullName);
+            return;
+        }
         var ack = payload.What;
+        LogMovementAckStage("ingress", peer, ack, payload.Who.GetType().FullName);
         GameThread.EnqueueSafe(() => ApplyMovementAcknowledgement(peer, ack), context: nameof(CampaignSimulationAvailabilityServerHandler));
+        LogMovementAckStage("queued", peer, ack, payload.Who.GetType().FullName);
     }
 
     private void ApplyMovementAcknowledgement(NetPeer peer, NetworkCampaignMovementBaselineApplied ack)
     {
+        LogMovementAckStage("game-thread", peer, ack);
         lock (selectionGate)
         lock (leaseGate)
         {
-            if (movement == null || !sessionIdentity.TryGetConfirmedLease(out var paused) || !paused.IsPaused ||
-                pendingMovementLease != paused || finalMovementCheckpoint == null ||
-                !pendingMovementAcks.TryGetValue(peer.Id, out var expected) || !ReferenceEquals(expected.peer, peer) ||
-                ack.RoomId != paused.RoomId || ack.PausedAuthorityId != paused.AuthorityId || ack.PausedEpoch != paused.Epoch ||
-                ack.Ticks != finalMovementCheckpoint.Ticks || ack.Sha256 != finalMovementCheckpoint.Sha256 ||
-                ack.ControllerId != expected.controller || !TryGetSynchronizedPeer(ack.ControllerId, out var currentPeer) ||
-                !ReferenceEquals(peer, currentPeer)) return;
+            AuthorityLease paused = default;
+            (NetPeer peer, string controller) expected = default;
+            NetPeer currentPeer = null;
+            bool Reject(bool rejected, string reason)
+            {
+                if (rejected) LogMovementAckState("rejected-" + reason, peer, ack, paused, expected.peer, expected.controller, currentPeer);
+                return rejected;
+            }
+            if (Reject(movement == null, "movement-unavailable") ||
+                Reject(!sessionIdentity.TryGetConfirmedLease(out paused), "lease-unconfirmed") ||
+                Reject(!paused.IsPaused, "lease-not-paused") ||
+                Reject(pendingMovementLease != paused, "pending-lease-mismatch") ||
+                Reject(finalMovementCheckpoint == null, "checkpoint-missing") ||
+                Reject(!pendingMovementAcks.TryGetValue(peer.Id, out expected), "member-not-pending") ||
+                Reject(!ReferenceEquals(expected.peer, peer), "pending-peer-reference") ||
+                Reject(ack.RoomId != paused.RoomId, "room-mismatch") ||
+                Reject(ack.PausedAuthorityId != paused.AuthorityId, "authority-mismatch") ||
+                Reject(ack.PausedEpoch != paused.Epoch, "epoch-mismatch") ||
+                Reject(ack.Ticks != finalMovementCheckpoint.Ticks, "ticks-mismatch") ||
+                Reject(ack.Sha256 != finalMovementCheckpoint.Sha256, "hash-mismatch") ||
+                Reject(ack.ControllerId != expected.controller, "controller-mismatch") ||
+                Reject(!TryGetSynchronizedPeer(ack.ControllerId, out currentPeer), "current-synchronized-peer-unavailable") ||
+                Reject(!ReferenceEquals(peer, currentPeer), "current-peer-reference")) return;
+            LogMovementAckState("accepted", peer, ack, paused, expected.peer, expected.controller, currentPeer);
             pendingMovementAcks.Remove(peer.Id);
             Logger.Information("Confirmed final movement member {ControllerId} paused epoch {Epoch} remaining {Count} ticks {Ticks} sha256 {Sha256}",
                 ack.ControllerId, paused.Epoch, pendingMovementAcks.Count, ack.Ticks, ack.Sha256);
             ReconcileLease(coordinator.Select());
         }
+    }
+
+    private void LogMovementAckStage(string stage, NetPeer peer, NetworkCampaignMovementBaselineApplied ack, string whoType = null)
+    {
+        Logger.Information("Movement baseline ACK server stage {Stage} room {RoomId} authority {AuthorityId} epoch {Epoch} controller {ControllerId} ticks {Ticks} sha256 {Sha256} peerId {PeerId} peerRef {PeerReference} endpoint {Endpoint} state {PeerState} whoType {WhoType} thread {ThreadId} handlerRef {HandlerReference} networkRef {NetworkReference}",
+            stage, ack.RoomId, ack.PausedAuthorityId, ack.PausedEpoch, ack.ControllerId, ack.Ticks, ack.Sha256,
+            peer?.Id, peer == null ? 0 : RuntimeHelpers.GetHashCode(peer), peer?.ToString(), peer?.ConnectionState,
+            whoType, Thread.CurrentThread.ManagedThreadId, RuntimeHelpers.GetHashCode(this), network == null ? 0 : RuntimeHelpers.GetHashCode(network));
+    }
+
+    private void LogMovementAckState(string stage, NetPeer peer, NetworkCampaignMovementBaselineApplied ack,
+        AuthorityLease current, NetPeer expectedPeer, string expectedController, NetPeer currentPeer)
+    {
+        LogMovementAckStage(stage, peer, ack);
+        Logger.Information("Movement baseline ACK guard state {Stage} currentRoom {CurrentRoomId} currentAuthority {CurrentAuthorityId} currentEpoch {CurrentEpoch} currentPaused {CurrentPaused} pendingRoom {PendingRoomId} pendingAuthority {PendingAuthorityId} pendingEpoch {PendingEpoch} expectedController {ExpectedControllerId} expectedPeerRef {ExpectedPeerReference} currentPeerRef {CurrentPeerReference} expectedTicks {ExpectedTicks} expectedSha256 {ExpectedSha256} remaining {Count} handlerRef {HandlerReference}",
+            stage, current.RoomId, current.AuthorityId, current.Epoch, current.IsPaused,
+            pendingMovementLease.RoomId, pendingMovementLease.AuthorityId, pendingMovementLease.Epoch, expectedController,
+            expectedPeer == null ? 0 : RuntimeHelpers.GetHashCode(expectedPeer), currentPeer == null ? 0 : RuntimeHelpers.GetHashCode(currentPeer),
+            finalMovementCheckpoint?.Ticks, finalMovementCheckpoint?.Sha256, pendingMovementAcks.Count, RuntimeHelpers.GetHashCode(this));
     }
 
     private void BroadcastPendingLease()

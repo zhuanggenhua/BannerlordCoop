@@ -1,4 +1,4 @@
-using Common;
+﻿using Common;
 using Common.Messaging;
 using Common.Network;
 using Common.Network.Messages;
@@ -10,6 +10,7 @@ using Coop.Core.Server.Connections;
 using Coop.Core.Server.Services.Session;
 using Coop.Core.Server.States.Messages;
 using Coop.Tests.Mocks;
+using Coop.Tests.Extensions;
 using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.CampaignAuthority.Movement;
 using GameInterface.Services.Entity;
@@ -86,6 +87,43 @@ public class CampaignFinalMovementAcknowledgementTests
         fixture.Drain();
         Assert.Equal(paused, fixture.Identity.CurrentLease);
         Assert.Equal(1, fixture.Handler.PendingMovementAcknowledgements);
+    }
+
+    [Theory]
+    [InlineData("room")]
+    [InlineData("authority")]
+    [InlineData("epoch")]
+    [InlineData("ticks")]
+    [InlineData("hash")]
+    [InlineData("controller")]
+    [InlineData("non-peer")]
+    [InlineData("same-id-different-peer")]
+    [InlineData("unsynchronized")]
+    public void RejectedAckPreservesPendingBaselineUntilExactOriginalMemberResponds(string fault)
+    {
+        using var fixture = new Fixture();fixture.Pause();var paused = fixture.Identity.CurrentLease;
+        var wrongLease = new AuthorityLease(fault == "room" ? "wrong-room" : paused.RoomId,
+            fault == "authority" ? "wrong-authority" : paused.AuthorityId, "", fault == "epoch" ? paused.Epoch + 1 : paused.Epoch, true);
+        var baseline = new CampaignMovementCheckpoint(fixture.Checkpoint.SourceLease, fault == "ticks" ? 778 : 777, 1,
+            fixture.Checkpoint.Payload, fault == "hash" ? "wrong-hash" : fixture.Checkpoint.Sha256);
+        object sender = fixture.Peer;
+        if (fault == "non-peer") sender = this;
+        if (fault == "same-id-different-peer")
+        {
+            var replacement = new TestNetwork().CreatePeer();replacement.SetId(fixture.Peer.Id);sender = replacement;
+            Assert.Equal(fixture.Peer.Id, replacement.Id);Assert.NotSame(fixture.Peer, replacement);
+        }
+        if (fault == "unsynchronized") fixture.Connected = false;
+        fixture.Broker.Publish(sender, new NetworkCampaignMovementBaselineApplied(wrongLease, fault == "controller" ? "wrong-controller" : "b", baseline));
+        fixture.Drain();
+        Assert.Equal(paused, fixture.Identity.CurrentLease);Assert.Equal(1, fixture.Handler.PendingMovementAcknowledgements);
+        Assert.DoesNotContain(fixture.Sent, message => message is NetworkCampaignAuthorityHandoffBarrier);
+        fixture.Connected = true;fixture.Acknowledge(paused);
+        Assert.Equal(0, fixture.Handler.PendingMovementAcknowledgements);
+        Assert.Single(fixture.Sent.OfType<NetworkCampaignAuthorityHandoffBarrier>());
+        fixture.Acknowledge(paused);
+        Assert.Equal(0, fixture.Handler.PendingMovementAcknowledgements);
+        Assert.Single(fixture.Sent.OfType<NetworkCampaignAuthorityHandoffBarrier>());
     }
 
     private sealed class Fixture : IDisposable

@@ -1,4 +1,4 @@
-using Common;
+﻿using Common;
 using Common.Network;
 using GameInterface.Services.Entity;
 using GameInterface.Services.CampaignAuthority.Movement;
@@ -8,6 +8,9 @@ using Common.Logging;
 using Common.Messaging;
 using Common.Network.Session;
 using Serilog;
+using LiteNetLib;
+using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace Coop.Core.Client.Services.Session;
 
@@ -46,12 +49,16 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
     private void Handle_AuthorityLeaseSnapshot(MessagePayload<NetworkAuthorityLeaseSnapshot> payload)
     {
         var snapshot = payload.What;
-        GameThread.EnqueueSafe(() => ApplySnapshotOnGameThread(snapshot), context: nameof(AuthorityLeaseSnapshotHandler));
+        var peer = payload.Who as NetPeer;
+        LogMovementAckStage("snapshot-ingress", snapshot, peer);
+        GameThread.EnqueueSafe(() => ApplySnapshotOnGameThread(snapshot, peer), context: nameof(AuthorityLeaseSnapshotHandler));
+        LogMovementAckStage("snapshot-queued", snapshot, peer);
     }
 
-    private void ApplySnapshotOnGameThread(NetworkAuthorityLeaseSnapshot snapshot)
+    private void ApplySnapshotOnGameThread(NetworkAuthorityLeaseSnapshot snapshot, NetPeer peer)
     {
         var lease = snapshot.ToLease();
+        LogMovementAckStage("snapshot-game-thread", snapshot, peer);
         if (lease.IsPaused && movement != null)
         {
             // Reject stale identity before preparing or installing any received campaign state.
@@ -59,14 +66,27 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
                 (current.RoomId != lease.RoomId || lease.Epoch < current.Epoch ||
                  (lease.Epoch == current.Epoch && lease != current) ||
                  (lease.Epoch > current.Epoch && (current.IsPaused || lease.AuthorityId == current.AuthorityId ||
-                     snapshot.MovementCheckpoint?.SourceLease != current)))) return;
+                     snapshot.MovementCheckpoint?.SourceLease != current))))
+            {
+                LogMovementAckStage("snapshot-rejected-stale-or-conflicting-lease", snapshot, peer);
+                return;
+            }
             if (sessionIdentity.RoomHostControllerId != null && sessionIdentity.RoomHostControllerId.Length > 0 &&
-                sessionIdentity.RoomHostControllerId != snapshot.RoomHostControllerId) return;
-            if (asyncTasks == null || !asyncTasks.TryDrain()) return;
+                sessionIdentity.RoomHostControllerId != snapshot.RoomHostControllerId)
+            {
+                LogMovementAckStage("snapshot-rejected-room-host", snapshot, peer);
+                return;
+            }
+            if (RejectMovementAck(asyncTasks == null, "async-drain-unavailable", snapshot, peer) ||
+                RejectMovementAck(!asyncTasks.TryDrain(), "async-drain-incomplete", snapshot, peer)) return;
             var checkpoint = snapshot.MovementCheckpoint;
-            if (checkpoint == null || !checkpoint.Precedes(lease) ||
-                !movement.TryPrepare(checkpoint, checkpoint.SourceLease, checkpoint.Ticks, out var install) ||
-                clock == null || !clock.TryApplyAuthorityHandoffBaseline(checkpoint.Ticks) || !install())
+            System.Func<bool> install = null;
+            if (RejectMovementAck(checkpoint == null, "checkpoint-missing", snapshot, peer) ||
+                RejectMovementAck(!checkpoint.Precedes(lease), "checkpoint-source-lease", snapshot, peer) ||
+                RejectMovementAck(!movement.TryPrepare(checkpoint, checkpoint.SourceLease, checkpoint.Ticks, out install), "movement-prepare", snapshot, peer) ||
+                RejectMovementAck(clock == null, "clock-unavailable", snapshot, peer) ||
+                RejectMovementAck(!clock.TryApplyAuthorityHandoffBaseline(checkpoint.Ticks), "clock-baseline", snapshot, peer) ||
+                RejectMovementAck(!install(), "movement-install", snapshot, peer))
             {
                 Logger.Warning("Rejected paused lease epoch {Epoch}; final movement baseline is missing or incomplete", lease.Epoch);
                 return;
@@ -74,6 +94,7 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
         }
         if (!sessionIdentity.TryApply(lease, snapshot.RoomHostControllerId))
         {
+            LogMovementAckStage("snapshot-rejected-session-apply", snapshot, peer);
             Logger.Warning("Rejected campaign authority lease snapshot for room {RoomId} at epoch {Epoch} " +
                 "with room host {RoomHostControllerId}; current room is {CurrentRoomId} at epoch {CurrentEpoch} " +
                 "with room host {CurrentRoomHostControllerId}",
@@ -84,12 +105,54 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
 
         if (lease.IsPaused && movement != null && network != null && controller != null)
         {
+            LogMovementAckStage("send-call-delivery-unconfirmed", snapshot, peer);
             network.SendAll(new NetworkCampaignMovementBaselineApplied(lease, controller.ControllerId, snapshot.MovementCheckpoint));
+            LogMovementAckStage("send-returned-delivery-unconfirmed", snapshot, peer);
             network.FlushPendingMessages();
+            LogMovementAckStage("flush-returned-delivery-unconfirmed", snapshot, peer);
+        }
+
+        else if (lease.IsPaused)
+        {
+            if (movement == null) LogMovementAckStage("send-skipped-missing-movement", snapshot, peer);
+            if (network == null) LogMovementAckStage("send-skipped-missing-network", snapshot, peer);
+            if (controller == null) LogMovementAckStage("send-skipped-missing-controller", snapshot, peer);
         }
 
         Logger.Information("Applied campaign authority lease for room {RoomId}, authority {AuthorityId}, " +
             "controller {ControllerId}, epoch {Epoch}",
             lease.RoomId, lease.AuthorityId, lease.AuthorityControllerId, lease.Epoch);
     }
+    private bool RejectMovementAck(bool rejected, string reason, NetworkAuthorityLeaseSnapshot snapshot, NetPeer peer)
+    {
+        if (rejected) LogMovementAckStage("snapshot-rejected-" + reason, snapshot, peer);
+        return rejected;
+    }
+
+    private void LogMovementAckStage(string stage, NetworkAuthorityLeaseSnapshot snapshot, NetPeer peer)
+    {
+        string transport = DescribeMovementAckTransport(peer);
+        Logger.Information("Movement baseline ACK client stage {Stage} room {RoomId} authority {AuthorityId} epoch {Epoch} controller {ControllerId} roomHost {RoomHostControllerId} ticks {Ticks} sha256 {Sha256} sourceEpoch {SourceEpoch} sourceWriter {SourceWriter} peerId {PeerId} peerRef {PeerReference} endpoint {Endpoint} state {PeerState} thread {ThreadId} handlerRef {HandlerReference} networkRef {NetworkReference} transportSnapshot {TransportSnapshot}; delivery unconfirmed",
+            stage, snapshot.RoomId, snapshot.AuthorityId, snapshot.Epoch, controller?.ControllerId, snapshot.RoomHostControllerId,
+            snapshot.MovementCheckpoint?.Ticks, snapshot.MovementCheckpoint?.Sha256, snapshot.MovementCheckpoint?.SourceLease.Epoch,
+            snapshot.MovementCheckpoint?.SourceLease.AuthorityControllerId, peer?.Id, peer == null ? 0 : RuntimeHelpers.GetHashCode(peer),
+            peer?.ToString(), peer?.ConnectionState, Thread.CurrentThread.ManagedThreadId, RuntimeHelpers.GetHashCode(this),
+            network == null ? 0 : RuntimeHelpers.GetHashCode(network), transport);
+    }
+
+    private string DescribeMovementAckTransport(NetPeer peer)
+    {
+        try
+        {
+            string peers = network is CoopClient client ? client.DescribeRoomPeers() : "Unavailable(non-CoopClient transport)";
+            int? queued = peer?.GetPacketsCountInReliableQueue(0, true);
+            return $"{peers}; snapshotSenderOutboundChannel0OrderedPackets={queued?.ToString() ?? "Unavailable(non-peer sender)"}";
+        }
+        catch (System.Exception error)
+        {
+            Logger.Error(error, "Movement baseline ACK transport diagnostic read failed; original send/apply path continues");
+            return "Unavailable(transport diagnostic read failed)";
+        }
+    }
+
 }
