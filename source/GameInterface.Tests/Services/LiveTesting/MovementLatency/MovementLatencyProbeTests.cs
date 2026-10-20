@@ -39,6 +39,21 @@ public sealed class MovementLatencyProbeTests
     }
 
     [Fact]
+    public void FailedHookStartPreservesExceptionDisarmsAndCannotReportEmptyCaptureComplete()
+    {
+        var env = new Environment(); var failure = new InvalidOperationException("hook start failed");
+        var hooks = new Hooks { StartFailure = failure };
+        using var probe = new MovementLatencyProbe(env, hooks);
+        Assert.Same(failure, Assert.Throws<InvalidOperationException>(() => probe.Begin("arm-failed")));
+        var page = probe.Read(0, 256);
+        Assert.False(page.Complete); Assert.False(page.Armed); Assert.Empty(page.Rows);
+        Assert.Contains("arm_failed", page.Fault); Assert.Contains("hook start failed", page.Fault);
+        Assert.Equal("arm_failed", page.StopReason); Assert.Equal(1, hooks.Starts); Assert.Equal(1, hooks.Stops);
+        probe.Frame(); probe.Observe(env.Actors[0].Party, "native_position");
+        Assert.Equal(0, env.SampleCount); Assert.False(probe.Stop().Complete); Assert.Equal(1, hooks.Stops);
+    }
+
+    [Fact]
     public void CapacityDoesNotOverwriteOriginalRowsAndOverflowCannotComplete()
     {
         var env = new Environment(); using var probe = new MovementLatencyProbe(env, new Hooks(), 3);
@@ -243,7 +258,9 @@ public sealed class MovementLatencyProbeTests
     private sealed class Hooks : IMovementLatencyHooks
     {
         public int Starts, Stops;
-        public void Start(MovementLatencyProbe probe) => Starts++;
+        public Exception? StartFailure;
+        public void Start(MovementLatencyProbe probe)
+        { Starts++; if (StartFailure != null) throw StartFailure; }
         public void Stop() => Stops++;
     }
     private sealed class Environment : IMovementLatencyEnvironment

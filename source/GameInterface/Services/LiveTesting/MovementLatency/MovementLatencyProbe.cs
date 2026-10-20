@@ -76,10 +76,13 @@ internal sealed class MovementLatencyProbe : IMovementLatencyProbe
                 armed = true;
                 foreach (var actor in actors) Append(actor, "begin");
             }
-            catch
+            catch (Exception ex)
             {
                 armed = false;
+                fault = "arm_failed: " + ex.GetType().FullName + ": " + ex.Message;
+                stopReason = "arm_failed";
                 hooks.Stop(); actors = Array.Empty<MovementLatencyActor>();
+                observations.Clear(); campaignToken = null;
                 throw;
             }
             return Page(0, 256);
