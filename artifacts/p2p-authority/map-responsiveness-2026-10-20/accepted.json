@@ -1,0 +1,517 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-10-20",
+  "status": "PASS_SCOPED_MAP_ACCEPTANCE",
+  "sourceCommit": "e7e7f66a7765c34e0e8a99fb8fa2a2e4761c1631",
+  "qaCommit": "e7e7f66a7765c34e0e8a99fb8fa2a2e4761c1631",
+  "scope": "Same-machine two native player processes, original selected map-click targets, local model and native visual observations, transparent/direct-IP loopback proxy and injected 50ms in each direction; not full P2P acceptance",
+  "run": {
+    "id": "4bf0d90cf80348a1a79ab5790b12a5e7",
+    "startedUtc": "2026-10-20T03:42:32.625Z",
+    "completedUtc": "2026-10-20T03:44:56.776Z",
+    "pids": [
+      {
+        "role": "server",
+        "pid": 452,
+        "controller": "LocalA",
+        "buildVersion": "0.1.7+e7e7f66a7765c34e0e8a99fb8fa2a2e4761c1631",
+        "assemblyMvid": "a9f534a5-dcc5-4e70-864d-ffbeeefd6469"
+      },
+      {
+        "role": "client1",
+        "pid": 18504,
+        "controller": "testclient1",
+        "buildVersion": "0.1.7+e7e7f66a7765c34e0e8a99fb8fa2a2e4761c1631",
+        "assemblyMvid": "a9f534a5-dcc5-4e70-864d-ffbeeefd6469"
+      }
+    ],
+    "campaign": "RVLgBrkkFApz",
+    "epoch": 3,
+    "additionalGameServerProcess": false,
+    "cleanupConfirmed": true,
+    "stoppedProcesses": [
+      {
+        "role": "server",
+        "pid": 452,
+        "processAlive": false,
+        "processTreeAlive": false,
+        "cleanupComplete": true
+      },
+      {
+        "role": "client1",
+        "pid": 18504,
+        "processAlive": false,
+        "processTreeAlive": false,
+        "cleanupComplete": true
+      }
+    ],
+    "exclusiveWrapper": {
+      "exitCode": 0,
+      "sourcePinned": true,
+      "receiptSha256": "079157137a602409c7b45cb3ef7d016d2613c4033eff8314cb2ebf281e203fa1"
+    }
+  },
+  "profiles": [
+    {
+      "name": "transparent",
+      "status": "PASS",
+      "inputs": 8,
+      "adopted": 8,
+      "localTargetAdoptionMs": {
+        "min": 0.0516,
+        "max": 3.7737
+      },
+      "modelFrameObservationMs": {
+        "min": 12.0118,
+        "max": 55.7144
+      },
+      "modelObservedFrames": [
+        1
+      ],
+      "visualFrameReadyMs": {
+        "min": 4.2178,
+        "max": 52.13
+      },
+      "stationaryInputs": 2,
+      "uniqueRemoteAssociations": 8,
+      "ambiguousRemoteAssociations": 0,
+      "clockOffsetUncertaintyMs": [
+        10.300799999386072,
+        25.79619999974966
+      ],
+      "navigationCandidatesSkipped": 10,
+      "datagramsDelayedInsideObservation": 0,
+      "criticalState": "PASS",
+      "sameWriterNextHandle": [
+        45128,
+        45128
+      ],
+      "criticalWorld": {
+        "campaign": "RVLgBrkkFApz",
+        "ticks": 78699091522679,
+        "parties": 1450,
+        "unregisteredParties": 0,
+        "partyIdentityHash": "3CC3226D312AB2D69BF60BE5EC5062196AD4900CB8B12D2FBCC3FCD60524F13C",
+        "rosterCountsHash": "9BE9732478B87EB00B054D88AB94BA2C89E7BE5E62FF172D9E00BD77ADF7946D",
+        "rosterXpHash": "85D335D4CF0FA01FD5FFE0AAA66D747C7D9CD5DFC9ABA48BB8F01791963AF89A",
+        "volunteerHash": "33363E533966A726DC2FFD5F2CD2D60C12644AB947CD488D78EBCA955FAC9564",
+        "heroGoldHash": "B47D1E22A28DAE5BDE2455969B855698F977280ECCC46FDD89565E7ECA812447",
+        "nextHandle": 45128
+      },
+      "players": [
+        {
+          "controllerId": "LocalA",
+          "heroId": "Hero_main_hero",
+          "heroStringId": "main_hero",
+          "clanId": "Clan_player_faction",
+          "characterId": "CharacterObject_main_hero",
+          "partyId": "MobileParty_player_party",
+          "partyStringId": "player_party",
+          "gold": 1000,
+          "troops": 1,
+          "wounded": 0,
+          "registeredPlayers": 2,
+          "heroRegistrations": 1,
+          "partyRegistrations": 1,
+          "clanRegistrations": 1
+        },
+        {
+          "controllerId": "testclient1",
+          "heroId": "Hero_Player",
+          "heroStringId": "Player",
+          "clanId": "Clan_Player",
+          "characterId": "CharacterObject_Player",
+          "partyId": "MobileParty_Player",
+          "partyStringId": "Player",
+          "gold": 920,
+          "troops": 5,
+          "wounded": 0,
+          "registeredPlayers": 2,
+          "heroRegistrations": 1,
+          "partyRegistrations": 1,
+          "clanRegistrations": 1
+        }
+      ]
+    },
+    {
+      "name": "one-way-50ms",
+      "status": "PASS",
+      "inputs": 8,
+      "adopted": 8,
+      "localTargetAdoptionMs": {
+        "min": 0.0597,
+        "max": 0.1474
+      },
+      "modelFrameObservationMs": {
+        "min": 12.8506,
+        "max": 49.6584
+      },
+      "modelObservedFrames": [
+        1
+      ],
+      "visualFrameReadyMs": {
+        "min": 7.3686,
+        "max": 25.4877
+      },
+      "stationaryInputs": 0,
+      "uniqueRemoteAssociations": 7,
+      "ambiguousRemoteAssociations": 1,
+      "clockOffsetUncertaintyMs": [
+        24.598600002005696,
+        30.264299999922514
+      ],
+      "navigationCandidatesSkipped": 4,
+      "datagramsDelayedInsideObservation": 1612,
+      "criticalState": "PASS",
+      "sameWriterNextHandle": [
+        45397,
+        45397
+      ],
+      "criticalWorld": {
+        "campaign": "RVLgBrkkFApz",
+        "ticks": 78699184896010,
+        "parties": 1464,
+        "unregisteredParties": 0,
+        "partyIdentityHash": "8357AAD1483DDE0AE86E3FE5E2F1D3399D14DC9C2A1F81EC75FDFDC9114EA121",
+        "rosterCountsHash": "CBD5EA635638BEB55267A06D65FACC876ABFA70105ED35F58C512B3BD440443C",
+        "rosterXpHash": "FF3296372E9EDE3D4866D610D6DB5B86FDAD9E9521E7339C9725AEC1D08B559F",
+        "volunteerHash": "84C951A2E4ACA7980E2FA5ED5CF1897395037709C67C7472FFBC483BF39C412C",
+        "heroGoldHash": "232D236288ADD05CBD1D26744AB766597F344910E86D36DC9A8A0BA606E2A297",
+        "nextHandle": 45397
+      },
+      "players": [
+        {
+          "controllerId": "LocalA",
+          "heroId": "Hero_main_hero",
+          "heroStringId": "main_hero",
+          "clanId": "Clan_player_faction",
+          "characterId": "CharacterObject_main_hero",
+          "partyId": "MobileParty_player_party",
+          "partyStringId": "player_party",
+          "gold": 1000,
+          "troops": 1,
+          "wounded": 0,
+          "registeredPlayers": 2,
+          "heroRegistrations": 1,
+          "partyRegistrations": 1,
+          "clanRegistrations": 1
+        },
+        {
+          "controllerId": "testclient1",
+          "heroId": "Hero_Player",
+          "heroStringId": "Player",
+          "clanId": "Clan_Player",
+          "characterId": "CharacterObject_Player",
+          "partyId": "MobileParty_Player",
+          "partyStringId": "Player",
+          "gold": 920,
+          "troops": 5,
+          "wounded": 0,
+          "registeredPlayers": 2,
+          "heroRegistrations": 1,
+          "partyRegistrations": 1,
+          "clanRegistrations": 1
+        }
+      ]
+    }
+  ],
+  "network": {
+    "topology": "Direct IP via same-host UDP proxy; no WAN or independent machine acceptance",
+    "injectedDelayMsPerDirection": 50,
+    "injectedDrop": false,
+    "injectedReorder": false,
+    "observedDelayed": 1909,
+    "delayedInsideMeasurement": 1612,
+    "observedReordered": 2,
+    "observedDropped": 0,
+    "errorCount": 0,
+    "interpretation": "Configured bidirectional 50ms is not a measured wire RTT"
+  },
+  "critical": {
+    "status": "PASS",
+    "sharedChecks": [
+      "campaign",
+      "world ticks",
+      "party identity hash",
+      "troop/wounded counts",
+      "roster experience hash",
+      "volunteer hash",
+      "hero gold hash",
+      "actor hero/clan/party identity",
+      "one registration per actor object",
+      "single confirmed writer and Epoch",
+      "confirmed allocation floor",
+      "per-peer monotonic handle/type counters"
+    ],
+    "movingPositionEqualityRequired": false,
+    "crossPeerTypeCounterEqualityRequired": false,
+    "localInventoryEqualityRequired": false
+  },
+  "independentReview": {
+    "taskId": "p2p-map-native-acceptance-review-r3",
+    "handoffSha256": "80eac27031a567795f4aed77a15291c1be5fd6dae0cba88ed5a8ca9c536daba7",
+    "auditSha256": "20a03a680dadfae33c0684eebb4b34b4c04623e61ebf76e2a36f2cf5cf8d49d0",
+    "reviewSha256": "55e6b790b7263e8510720f9d1b99d1c846c6ce869bda6b18bad966eb7c752c36",
+    "rawJsonlLines": 1280,
+    "invalidJsonlLines": 0,
+    "requestResponsePairs": 605,
+    "probePages": 37,
+    "logPages": 386,
+    "bmpArtifacts": 10,
+    "deploymentFiles": 7,
+    "nativeLogErrMarkers": 0
+  },
+  "runtimeAssemblies": [
+    {
+      "name": "Common",
+      "version": "1.0.0.0",
+      "mvid": "a1012213-75bd-4e4f-9652-6a52098158a8"
+    },
+    {
+      "name": "Coop",
+      "version": "1.0.0.0",
+      "mvid": "a9f534a5-dcc5-4e70-864d-ffbeeefd6469"
+    },
+    {
+      "name": "Coop.Core",
+      "version": "1.0.0.0",
+      "mvid": "f33781f0-639b-4f21-beab-ee942725172b"
+    },
+    {
+      "name": "Coop.Steam",
+      "version": "1.0.0.0",
+      "mvid": "e54f06ae-1796-400f-b5dd-cd2a573d4dc7"
+    },
+    {
+      "name": "GameInterface",
+      "version": "1.0.0.0",
+      "mvid": "7861c954-1c3d-42be-802b-bc5f9ce82134"
+    },
+    {
+      "name": "Missions",
+      "version": "1.0.0.0",
+      "mvid": "4672c695-6519-4d20-bd36-5f8f95c64609"
+    }
+  ],
+  "deployment": [
+    {
+      "name": "Coop.dll",
+      "sha256": "b696bfa4b68e594de5f98e3ed7b40fdb892217c3e4ce82718caefe49a5da8432"
+    },
+    {
+      "name": "Common.dll",
+      "sha256": "8a3c146930f3fdecdab9f3c7114ffe49aee77486d6d18e390a812a7f5dad48d7"
+    },
+    {
+      "name": "Coop.Core.dll",
+      "sha256": "7638666e4285da62d27808448c7f181c24729cfb9b2d29900f5e9eae0e8f18d5"
+    },
+    {
+      "name": "GameInterface.dll",
+      "sha256": "1df7174618475ca91a3aa8f53c80d2b84389eaa194b6777500db6363f343aba3"
+    },
+    {
+      "name": "Missions.dll",
+      "sha256": "ef91dd10d8ed5a10e08536522d104429d42c2905c912679cecfc420b3e76a959"
+    },
+    {
+      "name": "Coop.Steam.dll",
+      "sha256": "f02fc622b308d066d08d9dcbfe5adc422656cf88b4c8c1a2c37c969cac775b36"
+    },
+    {
+      "name": "Coop.CrashReporter.exe",
+      "sha256": "dbdb7d8fe8a87caa7331bf563fc13592f4f227de6531fedc8979e92d697b8290"
+    }
+  ],
+  "ambiguity": [
+    {
+      "profile": "one-way-50ms",
+      "pid": 452,
+      "inputSeq": 1200,
+      "observationId": 7,
+      "target": {
+        "x": 653.601868,
+        "y": 279.137634
+      },
+      "candidates": [
+        {
+          "seq": 2500,
+          "observationId": 11,
+          "origin": null,
+          "applied": null,
+          "bounds": {
+            "lowerMs": 98.87349999882281,
+            "upperMs": 153.73640000075102
+          },
+          "ticks": 90715994545
+        },
+        {
+          "seq": 2520,
+          "observationId": 12,
+          "origin": null,
+          "applied": null,
+          "bounds": {
+            "lowerMs": 143.17749999836087,
+            "upperMs": 198.04040000028908
+          },
+          "ticks": 90716437585
+        }
+      ]
+    }
+  ],
+  "regression": {
+    "sourceCommit": "e7e7f66a7765c34e0e8a99fb8fa2a2e4761c1631",
+    "suites": [
+      {
+        "name": "gi",
+        "passed": 3185,
+        "failed": 0,
+        "rawExitCode": 0,
+        "addedFailures": [],
+        "removedBaselineFailures": [],
+        "logSha256": "20240750d22c5560356170f6c984e6b43ebd109f61524e3ca249f400480190da",
+        "trxSha256": "08d154409a077c04e6bc364a6d4e7030f169f9c47adf03cb8a219618a5efea1c"
+      },
+      {
+        "name": "coop",
+        "passed": 1461,
+        "failed": 195,
+        "rawExitCode": 1,
+        "addedFailures": [],
+        "removedBaselineFailures": [],
+        "logSha256": "19e2be56ff1adabe5a081b28df38011b2698e5e9dfc7f3bfb21f9167f064212d",
+        "trxSha256": "b238c3cc9e55ff9b0c7caf4445b941663455bcd278db8e1469e40e0f76213cf3"
+      },
+      {
+        "name": "common",
+        "passed": 423,
+        "failed": 0,
+        "rawExitCode": 0,
+        "addedFailures": [],
+        "removedBaselineFailures": [],
+        "logSha256": "752036a14659ac5eb1c89d7587fece3e48e44b1f99eda96ad21b15dc3e2e5b95",
+        "trxSha256": "41f0e045457efba816e2485c84cf19e2da22115b58c3341f02dc6d8d2fd2bc26"
+      },
+      {
+        "name": "e2e",
+        "passed": 61,
+        "failed": 10,
+        "rawExitCode": 1,
+        "addedFailures": [],
+        "removedBaselineFailures": [],
+        "logSha256": "c0928ce08be591d70ee0f5a78418bc0d8524319e1d1f72b985470344824eaf5e",
+        "trxSha256": "c93b5bd8a09344cc111992eb17bed96a764e5b502943ccb0c64ff191a1f7502b"
+      }
+    ],
+    "buildExitCode": 0,
+    "baselineComparisonPassed": true,
+    "allSuitesGreen": false,
+    "node": {
+      "receiptSourceCommit": "e7e7f66a7765c34e0e8a99fb8fa2a2e4761c1631",
+      "passed": 42,
+      "failed": 0,
+      "command": "node --test tools/mcp/scenarios/map-responsiveness-evidence.test.mjs tools/mcp/scenarios/p2p-mission-lifecycle.test.mjs tools/mcp/scenarios/native-jsonl-writer.test.mjs",
+      "logSha256": "dd521fe5885f286f53e7740d9a21848429392181d44d36f986333a71667de43f",
+      "interpretation": "Actual E7 QA receipt, separate from native run; earlier E78 receipt retained separately."
+    },
+    "nodeEarlierIndependent": {
+      "receiptSourceCommit": "e78c93918be8827b7c082c5691b3c42a2c00d651",
+      "passed": 42,
+      "failed": 0,
+      "command": "node --test tools/mcp/scenarios/map-responsiveness-evidence.test.mjs tools/mcp/scenarios/p2p-mission-lifecycle.test.mjs tools/mcp/scenarios/native-jsonl-writer.test.mjs",
+      "logSha256": "3c16079dece11f58e359717ca47e18f054e2615a36e455f2192d684fb86984d1",
+      "sourceComparison": [
+        {
+          "path": "tools/mcp/scenarios/map-responsiveness-evidence.mjs",
+          "gitBlob": "a0dd09e15989bdfedbf8d116c7b16b32c615618c"
+        },
+        {
+          "path": "tools/mcp/scenarios/map-responsiveness-evidence.test.mjs",
+          "gitBlob": "bec1f6269ad790c01c5ab29b8cc74ddd5f32ba8b"
+        },
+        {
+          "path": "tools/mcp/scenarios/p2p-mission-lifecycle.mjs",
+          "gitBlob": "b0e223c77ba45158723196c4142983b32fcdd94d"
+        },
+        {
+          "path": "tools/mcp/scenarios/p2p-mission-lifecycle.test.mjs",
+          "gitBlob": "627835ce34c07929deb806f84633755dc35a3252"
+        },
+        {
+          "path": "tools/mcp/scenarios/native-jsonl-writer.mjs",
+          "gitBlob": "24a96ade0007db1e26d3e68d5267e4eccc159421"
+        },
+        {
+          "path": "tools/mcp/scenarios/native-jsonl-writer.test.mjs",
+          "gitBlob": "9d6b72cd3352c153f492cfc0a160e6e60a6b48fc"
+        }
+      ],
+      "sameJavaScriptAsNativeE7": true,
+      "interpretation": "QA receipt ran E78, not E7; six source/test blobs are identical. No new native run inferred."
+    }
+  },
+  "retainedFailures": [
+    {
+      "native": "01",
+      "runId": "06309d9f5e174faba3f1c4ef67e625a8",
+      "sourceCommit": "a34d1a575a849b785a8e7b8e17b0e0901bc31735",
+      "recordedPassed": false,
+      "summarySha256": "fbfc47e015e0274b637c837d940e7d5d878fda758bfb96f38e9975684c6f75b0",
+      "recordedFeatureStatuses": [
+        {
+          "name": "join-two-native-actors",
+          "status": "PASS"
+        },
+        {
+          "name": "two-moving-players-transparent",
+          "status": "FAIL"
+        }
+      ],
+      "reason": "Stopped-clock setup; no observed local movement; original FAIL retained",
+      "retrospectiveAdoption": null
+    },
+    {
+      "native": "02",
+      "runId": "878d1b48be384d7aa30c516a10fada18",
+      "sourceCommit": "134a164b33ba611f86df767f27ef731624a216ea",
+      "recordedPassed": false,
+      "summarySha256": "5d92820f8f7ddd340b601390a7288a87b41b4556a399a1de0588d15d02dd2377",
+      "recordedFeatureStatuses": [
+        {
+          "name": "join-two-native-actors",
+          "status": "PASS"
+        },
+        {
+          "name": "two-moving-players-transparent",
+          "status": "PASS"
+        },
+        {
+          "name": "two-moving-players-one-way-50ms",
+          "status": "FAIL"
+        }
+      ],
+      "reason": "9/16 requested targets never adopted under later strict review; original recorded final FAIL included incorrect cross-peer typed-allocation floor/timeout",
+      "retrospectiveAdoption": {
+        "inputs": 16,
+        "adopted": 7,
+        "notAdopted": 9,
+        "status": "FAIL"
+      }
+    }
+  ],
+  "limits": [
+    "Near-zero experience NOT_ESTABLISHED",
+    "Genuine Hold stop NOT_OBSERVED",
+    "Completed turn and exact physics onset NOT_ESTABLISHED; only2/16 inputs stationary first",
+    "Model observation is a GameThread-frame sampling upper bound",
+    "Native visual-frame readiness is not physical mouse-to-photon or display scanout",
+    "15/16 remote associations unique; final A delayed input has2 candidate applies, remains AMBIGUOUS",
+    "No wire command ID: do not infer packet duplication or repeated execution from2 matching observations",
+    "No real two-machine/WAN/public-Internet acceptance",
+    "This map PASS does not include Mission, natural24h or A-to-B-to-A migration",
+    "Separate Mission02: A-Mission/B-map-writer PASS; all-away pause FAIL. Root investigation continues; no root cause accepted by this map report.",
+    "Overall P2P NOT_COMPLETE",
+    "Separate natural-day02 FAIL; investigation outside this scoped map report."
+  ],
+  "dataRetention": "Only compact metadata and hashes are committed. Original logs, profiles, JSONL and BMP remain in coordinator retention; old FAILs are not rewritten."
+}

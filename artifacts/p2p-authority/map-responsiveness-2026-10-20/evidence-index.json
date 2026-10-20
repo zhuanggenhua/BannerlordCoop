@@ -1,0 +1,226 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "e7e7f66a7765c34e0e8a99fb8fa2a2e4761c1631",
+  "entries": [
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/p2p-map-movement-r3-03.jsonl.summary.json",
+      "kind": "native-evidence",
+      "bytes": 2307641,
+      "sha256": "b8b84883dade18e755375c5f0e732635663228c925d5b68038c23cd327a8e762"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/p2p-map-movement-r3-03.jsonl.transparent.movement.json",
+      "kind": "native-evidence",
+      "bytes": 4430685,
+      "sha256": "47849dc8bd4151f6fd92224026189d1dd8a7c47fc618eb0b5887b4b6fd8edd3b"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/p2p-map-movement-r3-03.jsonl.one-way-50ms.movement.json",
+      "kind": "native-evidence",
+      "bytes": 4825242,
+      "sha256": "5572562a9aa7bce58ae2c1ad8ab7c4ce5013df08d97a46582783ed25439d345d"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/p2p-map-movement-r3-03.jsonl",
+      "kind": "native-evidence",
+      "bytes": 120100480,
+      "sha256": "bb0e84648208c1a5650a825856aeca1e66545ca0874685b23befb96637b20a3c"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/p2p-map-movement-r3-03.jsonl.server.log",
+      "kind": "native-evidence",
+      "bytes": 6719535,
+      "sha256": "843fcd61cb5ede0af776be186880e4b921e614815a2f548274d9c292c00021e7"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/p2p-map-movement-r3-03.jsonl.client1.log",
+      "kind": "native-evidence",
+      "bytes": 5764205,
+      "sha256": "46a733af92e49a5907e3dc321860171b18ae6328cbe65d0cb97cd36ddc5a899f"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/runs/4bf0d90cf80348a1a79ab5790b12a5e7/server-ce700aff99ca4e43897d6d617e6a573e.bmp",
+      "kind": "native-bmp",
+      "bytes": 11059254,
+      "sha256": "b0d2de4cf1bf80f6dd469e44ca6ca0b1145f99639a715c049e7f7ca3387a876b"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/runs/4bf0d90cf80348a1a79ab5790b12a5e7/client1-0a205f0ef63c44c5a7f84f6ff7d0816e.bmp",
+      "kind": "native-bmp",
+      "bytes": 11059254,
+      "sha256": "b0c9b8bb8d2bfa3f4567059dd3205d67b45fa80875fad879ae747eb1ef3afef4"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/runs/4bf0d90cf80348a1a79ab5790b12a5e7/client1-3eee5b923b344236af498fc56978eac0.bmp",
+      "kind": "native-bmp",
+      "bytes": 11059254,
+      "sha256": "1a71116279956204ddb684a0373630ae8a085ee8aae9da485e2ca88e16a7120b"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/runs/4bf0d90cf80348a1a79ab5790b12a5e7/server-78c49096c9d2451a84c47583a179e569.bmp",
+      "kind": "native-bmp",
+      "bytes": 11059254,
+      "sha256": "4cc0be80039dc7258f6752fff7453bcd7b3cfc1fe4c1f4eec71c5a54aa99122a"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/runs/4bf0d90cf80348a1a79ab5790b12a5e7/server-55590fd562bd4a85adab1bcc911bd9fe.bmp",
+      "kind": "native-bmp",
+      "bytes": 11059254,
+      "sha256": "295d0050c75568d2fbd549e03987e66979b1b939973d27f5555b37bc727fdc32"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/runs/4bf0d90cf80348a1a79ab5790b12a5e7/client1-29b1c77086a148d8992047f29065c5d0.bmp",
+      "kind": "native-bmp",
+      "bytes": 11059254,
+      "sha256": "9a71142c4313725f20b0f801c4c0e376014ed17bda560373f0e43870eaea976b"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/runs/4bf0d90cf80348a1a79ab5790b12a5e7/server-581d47873a524f4a9478abed7f1c9a85.bmp",
+      "kind": "native-bmp",
+      "bytes": 11059254,
+      "sha256": "02c0cc123c2b3ff7265cdf14a1c00633032dd9647692677ab76714906584c143"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/runs/4bf0d90cf80348a1a79ab5790b12a5e7/client1-79d3d1f0413c482894702a548a00bf4b.bmp",
+      "kind": "native-bmp",
+      "bytes": 11059254,
+      "sha256": "1ae2b648887770b6903a2bb0b7ca4e434d79699d5bc6617719e03385f96b0bc6"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/runs/4bf0d90cf80348a1a79ab5790b12a5e7/server-699fc267c2e647a49ae8d6a17518e716.bmp",
+      "kind": "native-bmp",
+      "bytes": 11059254,
+      "sha256": "d194503ce9e00ddb1f95b68a2d730907aa2a33b0f475841eefd1f4ac3d4ecf69"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/runs/4bf0d90cf80348a1a79ab5790b12a5e7/client1-e5465fca6d0649c4b9fb630f02e669a0.bmp",
+      "kind": "native-bmp",
+      "bytes": 11059254,
+      "sha256": "a6b0c5e74a58c33cbc58c157aed41740f17bcde8f4a4c9420f3f863a8746fd6d"
+    },
+    {
+      "storage": "deployment-archive",
+      "path": "map-authority-20261020-034230-cb00adaf/manifest.json",
+      "kind": "deployment-manifest",
+      "bytes": 3731,
+      "sha256": "e10a1711b3302ee5e3f0aaed8cc1d645322f9488fb82b16aecec8d7e44b21d89"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/p2p-map-movement-r3-01.jsonl.summary.json",
+      "kind": "native-evidence",
+      "bytes": 639125,
+      "sha256": "fbfc47e015e0274b637c837d940e7d5d878fda758bfb96f38e9975684c6f75b0"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/p2p-map-movement-r3-02.jsonl.summary.json",
+      "kind": "native-evidence",
+      "bytes": 1412927,
+      "sha256": "5d92820f8f7ddd340b601390a7288a87b41b4556a399a1de0588d15d02dd2377"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".git/codex-coordination/evidence/p2p-reliability-20261019/r3-map-movement03-receipt.json",
+      "kind": "supporting-evidence",
+      "bytes": 788,
+      "sha256": "079157137a602409c7b45cb3ef7d016d2613c4033eff8314cb2ebf281e203fa1"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".git/codex-coordination/evidence/p2p-reliability-r3-20261020/regression04/closing-regression.json",
+      "kind": "supporting-evidence",
+      "bytes": 3576,
+      "sha256": "3abe0d4b8bb8d469e62fcc1047861fa856818476d76dfc629ee807193550c244"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".git/codex-coordination/evidence/p2p-reliability-r3-20261020/map-responsiveness-qa02.log",
+      "kind": "supporting-evidence",
+      "bytes": 8927,
+      "sha256": "c22cc41f5873bddcf6d431fd9a985ef0ebcc36d4e99902b6866c856c8bc29be7"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".git/codex-coordination/evidence/p2p-reliability-r3-20261020/retained/p2p-map-responsive-qa-review-r3/final02/artifacts/map-responsive-review-r3/qa-tests-final-adoption.log",
+      "kind": "supporting-evidence",
+      "bytes": 9049,
+      "sha256": "9a97b8ccdfd4b9802cebf1b29b88df669dc143e1037f6d85a4d6b488cce04fb1"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/p2p-map-movement-r3-02.jsonl.transparent.movement.json",
+      "kind": "supporting-evidence",
+      "bytes": 4028469,
+      "sha256": "d24edc6aeb315c8bad71fe13ca51fbd913cdb99371150bb540a2479133d40576"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/p2p-map-movement-r3-02.jsonl.one-way-50ms.movement.json",
+      "kind": "supporting-evidence",
+      "bytes": 4543268,
+      "sha256": "8c39aced56518443501ca699e0d60584d57801d4fd32bdbff2dc4d7cc23e92c6"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".mcp-local/p2p-mission-r3-02.jsonl.summary.json",
+      "kind": "supporting-evidence",
+      "bytes": 874774,
+      "sha256": "433d45a1fc8705f3da9ab0ddb929941e3b035c3fe3ddd704f3fbd345a182aa0b"
+    },
+    {
+      "storage": "coordination-task-worktree",
+      "taskId": "p2p-map-native-acceptance-review-r3",
+      "path": "artifacts/map-native-acceptance-review-r3/handoff.json",
+      "bytes": 5585,
+      "sha256": "80eac27031a567795f4aed77a15291c1be5fd6dae0cba88ed5a8ca9c536daba7"
+    },
+    {
+      "storage": "coordination-task-worktree",
+      "taskId": "p2p-map-native-acceptance-review-r3",
+      "path": "artifacts/map-native-acceptance-review-r3/audit.json",
+      "bytes": 19945,
+      "sha256": "20a03a680dadfae33c0684eebb4b34b4c04623e61ebf76e2a36f2cf5cf8d49d0"
+    },
+    {
+      "storage": "coordination-task-worktree",
+      "taskId": "p2p-map-native-acceptance-review-r3",
+      "path": "artifacts/map-native-acceptance-review-r3/review.md",
+      "bytes": 4286,
+      "sha256": "55e6b790b7263e8510720f9d1b99d1c846c6ce869bda6b18bad966eb7c752c36"
+    },
+    {
+      "storage": "coordination-task-worktree",
+      "taskId": "p2p-map-turn-allocation-review-r3",
+      "path": "artifacts/map-turn-allocation-review-r3/qa42.log",
+      "sourceCommit": "e78c93918be8827b7c082c5691b3c42a2c00d651",
+      "bytes": 9718,
+      "sha256": "3c16079dece11f58e359717ca47e18f054e2615a36e455f2192d684fb86984d1",
+      "kind": "independent-node-qa"
+    },
+    {
+      "storage": "coordinator-repository",
+      "path": ".git/codex-coordination/evidence/p2p-reliability-r3-20261020/map-qa42-e7.log",
+      "sourceCommit": "e7e7f66a7765c34e0e8a99fb8fa2a2e4761c1631",
+      "bytes": 9737,
+      "sha256": "dd521fe5885f286f53e7740d9a21848429392181d44d36f986333a71667de43f",
+      "kind": "node-qa"
+    }
+  ]
+}
