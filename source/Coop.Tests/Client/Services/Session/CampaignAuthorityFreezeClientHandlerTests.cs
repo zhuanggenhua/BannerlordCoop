@@ -183,6 +183,19 @@ public class CampaignAuthorityFreezeClientHandlerTests
         fixture.Request();fixture.Drain();Assert.Equal(0, fixture.SendCalls);Assert.Empty(fixture.Acks);
     }
 
+    [Fact]
+    public void ApplyFailurePreventsFreezeAcknowledgementAndCancellationCannotResumeIt()
+    {
+        using var fixture = new IdempotencyFixture();
+        CampaignApplyCompletion.For(fixture.Identity).RecordFailure(fixture.Lease, "critical result failed");
+        fixture.Request(); fixture.Drain();
+        Assert.True(fixture.Identity.IsLocallyFrozen(fixture.Lease));
+        Assert.Equal(0, fixture.SendCalls);
+        fixture.Cancel(); fixture.Drain();
+        Assert.True(fixture.Identity.IsLocallyFrozen(fixture.Lease));
+        Assert.Equal(0, fixture.SendCalls);
+    }
+
     private sealed class IdempotencyFixture : IDisposable
     {
         internal readonly TestMessageBroker Broker = new();

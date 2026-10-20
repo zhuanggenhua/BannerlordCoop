@@ -31,6 +31,7 @@ public sealed class CampaignAuthoritySyncEnvelopeClientHandler : IHandler
     {
         this.messageBroker = messageBroker;
         this.sessionIdentity = sessionIdentity;
+        CampaignApplyCompletion.Attach(messageBroker, sessionIdentity);
         this.serializer = serializer;
         messageBroker.Subscribe<NetworkCampaignAuthoritySyncEnvelope>(Handle_AuthoritySyncEnvelope);
     }
@@ -60,12 +61,14 @@ public sealed class CampaignAuthoritySyncEnvelopeClientHandler : IHandler
         }
         catch (Exception ex)
         {
+            CampaignApplyCompletion.For(sessionIdentity).RecordFailure(lease, "Authority result deserialization failed: " + ex);
             Logger.Error(ex, "Could not deserialize campaign authority sync envelope {Sequence}", envelope.Sequence);
             return;
         }
 
         if (innerMessage is not ICampaignAuthorityScopedMessage)
         {
+            CampaignApplyCompletion.For(sessionIdentity).RecordFailure(lease, "Validated authority envelope contained an unclassified result.");
             Logger.Warning("Ignored campaign authority envelope {Sequence} containing non-authority message {MessageType}",
                 envelope.Sequence, innerMessage?.GetType());
             return;

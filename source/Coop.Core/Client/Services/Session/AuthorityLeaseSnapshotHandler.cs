@@ -1,4 +1,5 @@
 ﻿using Common;
+using Common.Session;
 using Common.Network;
 using GameInterface.Services.Entity;
 using GameInterface.Services.CampaignAuthority.Movement;
@@ -33,6 +34,7 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
     {
         this.messageBroker = messageBroker;
         this.sessionIdentity = sessionIdentity;
+        CampaignApplyCompletion.Attach(messageBroker, sessionIdentity);
         this.movement = movement;
         this.clock = clock;
         this.network = network;
@@ -77,6 +79,11 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
                 LogMovementAckStage("snapshot-rejected-room-host", snapshot, peer);
                 return;
             }
+            if (!CampaignApplyCompletion.For(sessionIdentity).CanAcknowledgeThrough(lease, out var applyReason))
+            {
+                Logger.Warning("Refused paused lease movement receipt at epoch {Epoch}: {ApplyReason}", lease.Epoch, applyReason);
+                return;
+            }
             if (RejectMovementAck(asyncTasks == null, "async-drain-unavailable", snapshot, peer) ||
                 RejectMovementAck(!asyncTasks.TryDrain(), "async-drain-incomplete", snapshot, peer)) return;
             var checkpoint = snapshot.MovementCheckpoint;
@@ -91,6 +98,11 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
                 Logger.Warning("Rejected paused lease epoch {Epoch}; final movement baseline is missing or incomplete", lease.Epoch);
                 return;
             }
+        }
+        if (lease.IsPaused && !CampaignApplyCompletion.For(sessionIdentity).CanAcknowledgeThrough(lease, out var finalApplyReason))
+        {
+            Logger.Warning("Refused paused lease commit at epoch {Epoch}: {ApplyReason}", lease.Epoch, finalApplyReason);
+            return;
         }
         if (!sessionIdentity.TryApply(lease, snapshot.RoomHostControllerId))
         {
@@ -125,7 +137,13 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
     }
     private bool RejectMovementAck(bool rejected, string reason, NetworkAuthorityLeaseSnapshot snapshot, NetPeer peer)
     {
-        if (rejected) LogMovementAckStage("snapshot-rejected-" + reason, snapshot, peer);
+        if (rejected)
+        {
+            LogMovementAckStage("snapshot-rejected-" + reason, snapshot, peer);
+            if (reason == "clock-baseline" || reason == "movement-install")
+                CampaignApplyCompletion.For(sessionIdentity).RecordFailure(sessionIdentity.CurrentLease,
+                    "Paused lease checkpoint installation refused at " + reason);
+        }
         return rejected;
     }
 

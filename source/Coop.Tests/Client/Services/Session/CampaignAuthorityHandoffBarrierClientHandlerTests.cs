@@ -23,6 +23,75 @@ namespace Coop.Tests.Client.Services.Session;
 
 public class CampaignAuthorityHandoffBarrierClientHandlerTests
 {
+    private sealed record CriticalApplyProbe : ICampaignAuthorityScopedMessage;
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void BarrierRequiresActualNestedApplyCompletionAndRejectsStickyFailures(bool fail, bool installQueues)
+    {
+        using var broker = new MessageBroker();
+        var network = new Mock<INetwork>();
+        var identity = new SessionIdentity();
+        var lease = new AuthorityLease("room-a", "paused", "", 7, true);
+        Assert.True(identity.TryApply(lease, "controller-a"));
+        var controller = new ControllerIdProvider(); controller.SetControllerId("controller-b");
+        var manager = new ObjectManagerService(Mock.Of<ILogger>());
+        var rosters = new CampaignRosterCheckpoint(new CampaignRosterState[0]);
+        var rosterService = new Mock<ICampaignRosterCheckpointService>();
+        rosterService.Setup(value => value.TryApply(rosters)).Returns(true);
+        var session = new CampaignSessionCheckpoint("campaign", "{}");
+        var sessions = new Mock<ICampaignSessionCheckpointService>();
+        bool installedDescendant = false;
+        sessions.Setup(value => value.TryApply(session)).Callback(() =>
+        {
+            if (installQueues) GameThread.EnqueueSafe(() => GameThread.EnqueueSafe(() => installedDescendant = true));
+        }).Returns(true);
+        var clock = new Mock<IMapTimeTrackerInterface>();
+        clock.Setup(value => value.TryApplyAuthorityHandoffBaseline(777)).Returns(true);
+        var barrier = new NetworkCampaignAuthorityHandoffBarrier("room-a", "paused", 7, "controller-b", 4,
+            new RegistryAllocationCheckpoint(200, new Dictionary<string, int>()), rosters,
+            new CampaignClockCheckpoint(777), session, CampaignHandoffTestServices.Checkpoint());
+        using var handler = new CampaignAuthorityHandoffBarrierClientHandler(broker, network.Object, identity,
+            controller, manager, rosterService.Object, clock.Object, sessions.Object,
+            CampaignHandoffTestServices.Scheduler(), CampaignHandoffTestServices.Drained());
+        bool applied = false;
+        void Apply(MessagePayload<CriticalApplyProbe> _)
+        {
+            if (fail) throw new System.InvalidOperationException("critical setter failed");
+            GameThread.EnqueueSafe(() => GameThread.EnqueueSafe(() => applied = true));
+        }
+        broker.Subscribe<CriticalApplyProbe>(Apply);
+        broker.Publish(this, new ClientCampaignReady());
+        broker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
+        GameThread.Run(() =>
+        {
+            broker.Publish(this, new CriticalApplyProbe());
+            broker.Publish(this, barrier);
+        }, blocking: true);
+        // This fence follows the first barrier. The second nested descendant may be in the next frame.
+        GameThread.Run(() => { }, blocking: true);
+        network.Verify(value => value.SendAll(It.IsAny<NetworkCampaignAuthorityHandoffBarrierApplied>()), Times.Never);
+        GameThread.Run(() => { }, blocking: true);
+        Assert.Equal(!fail, applied);
+        broker.Publish(this, barrier);
+        GameThread.Run(() => { }, blocking: true);
+        network.Verify(value => value.SendAll(It.IsAny<NetworkCampaignAuthorityHandoffBarrierApplied>()),
+            fail || installQueues ? Times.Never() : Times.Once());
+        if (installQueues)
+        {
+            GameThread.Run(() => { }, blocking: true);
+            GameThread.Run(() => { }, blocking: true);
+            Assert.True(installedDescendant);
+            broker.Publish(this, barrier);
+            GameThread.Run(() => { }, blocking: true);
+            network.Verify(value => value.SendAll(It.IsAny<NetworkCampaignAuthorityHandoffBarrierApplied>()), Times.Once());
+            sessions.Verify(value => value.TryApply(session), Times.Once());
+        }
+        System.GC.KeepAlive((System.Action<MessagePayload<CriticalApplyProbe>>)Apply);
+    }
+
     [Fact]
     public void MatchesOnlyTheExactPausedLeaseAndLocalCandidate()
     {

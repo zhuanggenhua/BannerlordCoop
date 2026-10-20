@@ -1,4 +1,4 @@
-using Common;
+﻿using Common;
 using GameInterface.Services.CampaignAuthority.Movement;
 using Common.Logging;
 using Common.Messaging;
@@ -37,6 +37,8 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
     private readonly ICampaignMovementCheckpointService movement;
     private long appliedEpoch;
     private long appliedSequence;
+    private long installedEpoch;
+    private long installedSequence;
     private bool campaignSynchronized;
     private bool mapReady;
 
@@ -56,6 +58,7 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         this.messageBroker = messageBroker;
         this.network = network;
         this.sessionIdentity = sessionIdentity;
+        CampaignApplyCompletion.Attach(messageBroker, sessionIdentity);
         this.controllerIdProvider = controllerIdProvider;
         this.objectManager = objectManager;
         this.rosterCheckpointService = rosterCheckpointService;
@@ -92,7 +95,16 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
 
         // All receive-side campaign applies that defer to GameThread.EnqueueSafe are ahead of this
         // acknowledgement. Reading session and campaign readiness here also avoids polling-thread reads.
-        GameThread.EnqueueSafe(() => ApplyBarrierOnGameThread(barrier), context: nameof(CampaignAuthorityHandoffBarrierClientHandler));
+        GameThread.EnqueueSafe(() =>
+        {
+            try { ApplyBarrierOnGameThread(barrier); }
+            catch (Exception ex)
+            {
+                CampaignApplyCompletion.For(sessionIdentity).RecordFailure(sessionIdentity.CurrentLease,
+                    "Critical handoff checkpoint installation threw: " + ex);
+                throw;
+            }
+        }, context: nameof(CampaignAuthorityHandoffBarrierClientHandler));
     }
 
     private void ApplyBarrierOnGameThread(NetworkCampaignAuthorityHandoffBarrier barrier)
@@ -104,6 +116,12 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
             Logger.Warning("Ignored campaign authority handoff barrier {BarrierSequence} for controller {ControllerId}; " +
                 "campaign sync, map readiness, or paused lease did not match",
                 barrier.BarrierSequence, controllerIdProvider.ControllerId);
+            return;
+        }
+
+        if (!CampaignApplyCompletion.For(sessionIdentity).CanAcknowledgeThrough(lease, out var applyReason))
+        {
+            Logger.Warning("Refused handoff barrier {BarrierSequence}: {ApplyReason}", barrier.BarrierSequence, applyReason);
             return;
         }
 
@@ -125,48 +143,77 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
                 barrier.ClockCheckpoint.Ticks, out installMovement))) return;
 
 
-        if (!objectManager.TryApplyAllocationCheckpoint(barrier.AllocationCheckpoint))
+        if (installedEpoch != lease.Epoch || installedSequence != barrier.BarrierSequence)
         {
-            Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; registry allocation checkpoint is missing or invalid",
-                barrier.BarrierSequence);
+            using (CampaignApplyCompletion.For(sessionIdentity).Observe(typeof(NetworkCampaignAuthorityHandoffBarrier)))
+            using (CampaignExecutionScope.Enter(CampaignExecutionPhase.CheckpointInstall))
+            {
+                if (!TryInstallCheckpoints(barrier, lease, installMovement)) return;
+                installedEpoch = lease.Epoch;
+                installedSequence = barrier.BarrierSequence;
+            }
+        }
+        if (!CampaignApplyCompletion.For(sessionIdentity).CanAcknowledgeThrough(lease, out applyReason))
+        {
+            Logger.Warning("Refused installed handoff barrier {BarrierSequence}: {ApplyReason}", barrier.BarrierSequence, applyReason);
             return;
         }
-
-        if (!rosterCheckpointService.TryApply(barrier.RosterCheckpoint))
-        {
-            Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; world rosters did not match the checkpoint",
-                barrier.BarrierSequence);
-            return;
-        }
-
-        if (!sessionCheckpointService.TryApply(barrier.SessionCheckpoint))
-        {
-            Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; co-op session or registered players did not match",
-                barrier.BarrierSequence);
-            return;
-        }
-
-        if (!schedulerCheckpointService.TryApply(barrier.SchedulerCheckpoint))
-        {
-            Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; native campaign scheduler did not match",
-                barrier.BarrierSequence);
-            return;
-        }
-
-        if (!mapTimeTracker.TryApplyAuthorityHandoffBaseline(barrier.ClockCheckpoint.Ticks))
-        {
-            Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; final campaign clock could not be applied",
-                barrier.BarrierSequence);
-            return;
-        }
-
-        if (installMovement != null && !installMovement()) return;
         appliedEpoch = lease.Epoch;
         appliedSequence = barrier.BarrierSequence;
         network.SendAll(barrier.ToApplied());
         network.FlushPendingMessages();
         Logger.Information("Applied campaign authority handoff barrier {BarrierSequence} for paused epoch {Epoch}",
             barrier.BarrierSequence, barrier.PausedEpoch);
+    }
+
+    private bool TryInstallCheckpoints(NetworkCampaignAuthorityHandoffBarrier barrier, AuthorityLease lease, Func<bool> installMovement)
+    {
+        if (!objectManager.TryApplyAllocationCheckpoint(barrier.AllocationCheckpoint))
+        {
+            CampaignApplyCompletion.For(sessionIdentity).RecordFailure(lease, "Registry allocation checkpoint refused.");
+            Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; registry allocation checkpoint is missing or invalid",
+                barrier.BarrierSequence);
+            return false;
+        }
+
+        if (!rosterCheckpointService.TryApply(barrier.RosterCheckpoint))
+        {
+            CampaignApplyCompletion.For(sessionIdentity).RecordFailure(lease, "World roster checkpoint refused.");
+            Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; world rosters did not match the checkpoint",
+                barrier.BarrierSequence);
+            return false;
+        }
+
+        if (!sessionCheckpointService.TryApply(barrier.SessionCheckpoint))
+        {
+            CampaignApplyCompletion.For(sessionIdentity).RecordFailure(lease, "Shared session checkpoint refused.");
+            Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; co-op session or registered players did not match",
+                barrier.BarrierSequence);
+            return false;
+        }
+
+        if (!schedulerCheckpointService.TryApply(barrier.SchedulerCheckpoint))
+        {
+            CampaignApplyCompletion.For(sessionIdentity).RecordFailure(lease, "Native scheduler checkpoint refused.");
+            Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; native campaign scheduler did not match",
+                barrier.BarrierSequence);
+            return false;
+        }
+
+        if (!mapTimeTracker.TryApplyAuthorityHandoffBaseline(barrier.ClockCheckpoint.Ticks))
+        {
+            CampaignApplyCompletion.For(sessionIdentity).RecordFailure(lease, "World clock checkpoint refused.");
+            Logger.Warning("Rejected campaign handoff barrier {BarrierSequence}; final campaign clock could not be applied",
+                barrier.BarrierSequence);
+            return false;
+        }
+
+        if (installMovement != null && !installMovement())
+        {
+            CampaignApplyCompletion.For(sessionIdentity).RecordFailure(lease, "Final movement installation refused.");
+            return false;
+        }
+        return true;
     }
 
     internal static bool Matches(

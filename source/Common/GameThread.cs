@@ -1,4 +1,5 @@
 ﻿using Common.Logging;
+using Common.Messaging;
 using Common.Util;
 using Serilog;
 using System;
@@ -83,6 +84,7 @@ public class GameThread : IUpdateable
         private string cancellationReason;
         private Action act;
         private bool waiterDetached;
+        private readonly MessageApplyScope.Continuation applyContinuation;
 
         /// <summary>The queued work, or null once it started, completed or expired.</summary>
         internal Action Act { get { lock (completionGate) return act; } }
@@ -100,6 +102,7 @@ public class GameThread : IUpdateable
             Wait = wait;
             Label = label;
             Cancellation = cancellation;
+            applyContinuation = MessageApplyScope.Capture();
         }
 
         /// <summary>Claims the action for the game thread. False when its waiter expired it or it already completed.</summary>
@@ -128,6 +131,7 @@ public class GameThread : IUpdateable
                 completionState = QueuedActionCompletionState.Expired;
                 cancellationReason = reason;
                 act = null;
+                applyContinuation?.Complete(reason);
                 return true;
             }
         }
@@ -137,6 +141,9 @@ public class GameThread : IUpdateable
         {
             lock (completionGate) waiterDetached = true;
         }
+
+        internal bool IsApplyLeaseCurrent => applyContinuation == null || applyContinuation.IsCurrent;
+        internal IDisposable ActivateApplyObservation() => applyContinuation?.Activate() ?? MessageApplyScope.Suspend();
 
         internal void CompleteExecuted() => Complete(QueuedActionCompletionState.Executed, null, null);
 
@@ -189,6 +196,7 @@ public class GameThread : IUpdateable
                 cancellationReason = completedCancellationReason;
                 completionState = state;
                 act = null;
+                applyContinuation?.Complete(completedFailure?.ToString() ?? completedCancellationReason);
                 if (!waiterDetached) Wait?.Set();
             }
         }
@@ -560,6 +568,7 @@ public class GameThread : IUpdateable
         CancellationToken cancellation = m_AmbientCancellation.Value;
         if (cancellation.IsCancellationRequested)
         {
+            MessageApplyScope.Fail("Game-thread apply canceled before queueing.");
             if (blocking)
             {
                 throw new OperationCanceledException(
@@ -611,6 +620,7 @@ public class GameThread : IUpdateable
 
             if (rejected)
             {
+                queuedAction.CompleteCanceled("Game-thread queue closed before apply.");
                 ewh?.Dispose();
                 RejectClosedQueueAction(blocking, resolved);
                 return;
@@ -763,7 +773,8 @@ public class GameThread : IUpdateable
         [CallerMemberName] string callerMember = null)
     {
         CancellationToken cancellation = m_AmbientCancellation.Value;
-        if (cancellation.IsCancellationRequested) return;
+        if (cancellation.IsCancellationRequested)
+        { MessageApplyScope.Fail("Game-thread apply canceled before enqueueing."); return; }
 
         string label = context ?? BuildLabel(callerFile, callerMember);
         QueueContext queueContext = Instance.CurrentQueue;
@@ -853,12 +864,14 @@ public class GameThread : IUpdateable
         }
         catch (Exception e)
         {
+            MessageApplyScope.Fail(e.ToString());
             Logger.Error(e, "Failed to run action on the game thread: {Context}", context ?? "(none)");
         }
     };
 
     private static void RejectClosedQueueAction(bool blocking, string label)
     {
+        MessageApplyScope.Fail("Game-thread apply rejected by closed queue: " + label);
         if (blocking)
         {
             throw new OperationCanceledException(
@@ -985,10 +998,16 @@ public class GameThread : IUpdateable
             return false;
         }
 
+        if (!task.IsApplyLeaseCurrent)
+        {
+            task.CompleteCanceled("Campaign apply source lease changed before queued execution.");
+            return false;
+        }
         if (!task.TryBeginRun(out Action action)) return false;
 
         try
         {
+            using (task.ActivateApplyObservation())
             using (ActivateCancellation(task.Cancellation))
             {
                 action?.Invoke();

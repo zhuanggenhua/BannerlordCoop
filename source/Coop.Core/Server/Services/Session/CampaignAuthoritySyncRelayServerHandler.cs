@@ -53,6 +53,7 @@ public sealed class CampaignAuthoritySyncRelayServerHandler : IHandler
         this.playerManager = playerManager;
         this.network = network;
         this.sessionIdentity = sessionIdentity;
+        CampaignApplyCompletion.Attach(messageBroker, sessionIdentity);
         this.serializer = serializer;
         messageBroker.Subscribe<NetworkCampaignAuthoritySyncEnvelope>(Handle_AuthoritySyncEnvelope);
         messageBroker.Subscribe<PlayerDisconnected>(Handle_PlayerDisconnected);
@@ -89,12 +90,14 @@ public sealed class CampaignAuthoritySyncRelayServerHandler : IHandler
         }
         catch (Exception ex)
         {
+            CampaignApplyCompletion.For(sessionIdentity).RecordFailure(lease, "Authority result deserialization failed: " + ex);
             Logger.Error(ex, "Could not deserialize campaign authority sync envelope {Sequence}", payload.What.Sequence);
             return;
         }
 
         if (innerMessage is not ICampaignAuthorityScopedMessage)
         {
+            CampaignApplyCompletion.For(sessionIdentity).RecordFailure(lease, "Validated authority envelope contained an unclassified result.");
             Logger.Warning("Rejected campaign authority envelope {Sequence} containing non-authority message {MessageType}",
                 payload.What.Sequence, innerMessage?.GetType());
             return;

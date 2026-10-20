@@ -105,6 +105,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         this.controllerIdProvider = controllerIdProvider;
         this.network = network;
         this.sessionIdentity = sessionIdentity;
+        CampaignApplyCompletion.Attach(messageBroker, sessionIdentity);
         this.objectManager = objectManager;
         this.sendCoalescer = sendCoalescer;
         this.rosterCheckpointService = rosterCheckpointService;
@@ -385,6 +386,11 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             if (!IsCampaignInitializationReady()) return;
             if (!sessionIdentity.TryGetConfirmedLease(out var currentLease)) return;
             BroadcastPendingLease();
+            if (!CampaignApplyCompletion.For(sessionIdentity).CanAcknowledgeThrough(currentLease, out var applyReason))
+            {
+                Logger.Warning("Refused campaign lease reconciliation at epoch {Epoch}: {ApplyReason}", currentLease.Epoch, applyReason);
+                return;
+            }
 
             string localControllerId = controllerIdProvider.ControllerId;
             string roomHostControllerId = sessionIdentity.RoomHostControllerId;
@@ -727,7 +733,16 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             return;
         }
         LogFreezeAckStage("ingress", peer, payload.What);
-        GameThread.EnqueueSafe(() => ApplyFreezeAcknowledgement(peer, payload.What),
+        GameThread.EnqueueSafe(() =>
+        {
+            try { ApplyFreezeAcknowledgement(peer, payload.What); }
+            catch (Exception ex)
+            {
+                CampaignApplyCompletion.For(sessionIdentity).RecordFailure(sessionIdentity.CurrentLease,
+                    "Critical freeze checkpoint installation threw: " + ex);
+                throw;
+            }
+        },
             context: nameof(CampaignSimulationAvailabilityServerHandler));
     }
 
@@ -769,35 +784,43 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             }
 
             // Earlier remote world deltas have already applied in this same game-thread FIFO.
+            if (RejectFreezeAck(!CampaignApplyCompletion.For(sessionIdentity).CanAcknowledgeThrough(lease, out _),
+                "critical-apply-incomplete-or-faulted", peer, ack)) return;
             if (RejectFreezeAck(asyncTasks == null, "async-drain-unavailable", peer, ack) ||
                 RejectFreezeAck(!asyncTasks.TryDrain(), "async-drain-incomplete", peer, ack)) return;
             Func<bool> installMovement = null;
             if (movement != null && (RejectFreezeAck(ack.MovementCheckpoint == null, "movement-missing", peer, ack) ||
                 RejectFreezeAck(ack.ClockCheckpoint == null, "movement-clock-missing", peer, ack) ||
                 RejectFreezeAck(!movement.TryPrepare(ack.MovementCheckpoint, lease, ack.ClockCheckpoint.Ticks, out installMovement), "movement-prepare", peer, ack))) return;
-            if (RejectFreezeAck(ack.AllocationCheckpoint == null, "allocation-missing", peer, ack) ||
-                RejectFreezeAck(ack.RosterCheckpoint == null, "roster-missing", peer, ack) ||
-                RejectFreezeAck(ack.SessionCheckpoint == null, "session-missing", peer, ack) ||
-                RejectFreezeAck(ack.SchedulerCheckpoint == null, "scheduler-missing", peer, ack) ||
-                RejectFreezeAck(ack.ClockCheckpoint == null, "clock-missing", peer, ack) ||
-                RejectFreezeAck(ack.ClockCheckpoint.Ticks < 0, "clock-negative", peer, ack) ||
-                RejectFreezeAck(objectManager == null, "allocation-service-unavailable", peer, ack) ||
-                RejectFreezeAck(!objectManager.TryApplyAllocationCheckpoint(ack.AllocationCheckpoint), "allocation-apply", peer, ack) ||
-                RejectFreezeAck(rosterCheckpointService == null, "roster-service-unavailable", peer, ack) ||
-                RejectFreezeAck(!rosterCheckpointService.TryApply(ack.RosterCheckpoint), "roster-apply", peer, ack) ||
-                RejectFreezeAck(sessionCheckpointService == null, "session-service-unavailable", peer, ack) ||
-                RejectFreezeAck(!sessionCheckpointService.TryApply(ack.SessionCheckpoint), "session-apply", peer, ack) ||
-                RejectFreezeAck(schedulerCheckpointService == null, "scheduler-service-unavailable", peer, ack) ||
-                RejectFreezeAck(!schedulerCheckpointService.TryApply(ack.SchedulerCheckpoint), "scheduler-apply", peer, ack) ||
-                RejectFreezeAck(mapTimeTracker == null, "clock-service-unavailable", peer, ack) ||
-                RejectFreezeAck(!mapTimeTracker.TryApplyAuthorityHandoffBaseline(ack.ClockCheckpoint.Ticks), "clock-apply", peer, ack))
+            using (CampaignApplyCompletion.For(sessionIdentity).Observe(typeof(NetworkCampaignAuthorityFreezeAcknowledged)))
+            using (CampaignExecutionScope.Enter(CampaignExecutionPhase.CheckpointInstall))
             {
-                Logger.Error("Rejected frozen campaign checkpoint {HandoffSequence} from {ControllerId}; no replacement authority was activated",
-                    ack.HandoffSequence, player.ControllerId);
-                return;
-            }
+                if (RejectFreezeAck(ack.AllocationCheckpoint == null, "allocation-missing", peer, ack) ||
+                    RejectFreezeAck(ack.RosterCheckpoint == null, "roster-missing", peer, ack) ||
+                    RejectFreezeAck(ack.SessionCheckpoint == null, "session-missing", peer, ack) ||
+                    RejectFreezeAck(ack.SchedulerCheckpoint == null, "scheduler-missing", peer, ack) ||
+                    RejectFreezeAck(ack.ClockCheckpoint == null, "clock-missing", peer, ack) ||
+                    RejectFreezeAck(ack.ClockCheckpoint.Ticks < 0, "clock-negative", peer, ack) ||
+                    RejectFreezeAck(objectManager == null, "allocation-service-unavailable", peer, ack) ||
+                    RejectFreezeAck(!objectManager.TryApplyAllocationCheckpoint(ack.AllocationCheckpoint), "allocation-apply", peer, ack) ||
+                    RejectFreezeAck(rosterCheckpointService == null, "roster-service-unavailable", peer, ack) ||
+                    RejectFreezeAck(!rosterCheckpointService.TryApply(ack.RosterCheckpoint), "roster-apply", peer, ack) ||
+                    RejectFreezeAck(sessionCheckpointService == null, "session-service-unavailable", peer, ack) ||
+                    RejectFreezeAck(!sessionCheckpointService.TryApply(ack.SessionCheckpoint), "session-apply", peer, ack) ||
+                    RejectFreezeAck(schedulerCheckpointService == null, "scheduler-service-unavailable", peer, ack) ||
+                    RejectFreezeAck(!schedulerCheckpointService.TryApply(ack.SchedulerCheckpoint), "scheduler-apply", peer, ack) ||
+                    RejectFreezeAck(mapTimeTracker == null, "clock-service-unavailable", peer, ack) ||
+                    RejectFreezeAck(!mapTimeTracker.TryApplyAuthorityHandoffBaseline(ack.ClockCheckpoint.Ticks), "clock-apply", peer, ack))
+                {
+                    Logger.Error("Rejected frozen campaign checkpoint {HandoffSequence} from {ControllerId}; no replacement authority was activated",
+                        ack.HandoffSequence, player.ControllerId);
+                    return;
+                }
 
-            if (installMovement != null && RejectFreezeAck(!installMovement(), "movement-install", peer, ack)) return;
+                if (installMovement != null && RejectFreezeAck(!installMovement(), "movement-install", peer, ack)) return;
+            }
+            if (RejectFreezeAck(!CampaignApplyCompletion.For(sessionIdentity).CanAcknowledgeThrough(lease, out _),
+                "checkpoint-descendants-incomplete-or-faulted", peer, ack)) return;
             finalMovementCheckpoint = ack.MovementCheckpoint;
             if (RejectFreezeAck(!TryCommitLease(lease, string.Empty, isPaused: true), "paused-lease-commit", peer, ack)) return;
             hasPendingFreeze = false;
@@ -808,10 +831,16 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         }
     }
 
-    private static bool RejectFreezeAck(bool rejected, string stage, NetPeer peer,
+    private bool RejectFreezeAck(bool rejected, string stage, NetPeer peer,
         NetworkCampaignAuthorityFreezeAcknowledged ack)
     {
-        if (rejected) LogFreezeAckStage("rejected-" + stage, peer, ack);
+        if (rejected)
+        {
+            LogFreezeAckStage("rejected-" + stage, peer, ack);
+            if (stage.EndsWith("-apply", StringComparison.Ordinal) || stage == "movement-install")
+                CampaignApplyCompletion.For(sessionIdentity).RecordFailure(sessionIdentity.CurrentLease,
+                    "Critical freeze checkpoint installation refused at " + stage);
+        }
         return rejected;
     }
 

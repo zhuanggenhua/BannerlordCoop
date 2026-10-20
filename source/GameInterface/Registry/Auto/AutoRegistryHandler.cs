@@ -4,6 +4,7 @@ using Common.Messaging;
 using Common.Network;
 using Common.Util;
 using GameInterface.Services.ObjectManager;
+using GameInterface.Services.CampaignAuthority;
 using Serilog;
 using System;
 using TaleWorlds.ObjectSystem;
@@ -87,7 +88,10 @@ class AutoRegistryHandler<T> : IHandler where T : class
     {
         // TODO drop on loading clients
 
-        GameThread.RunSafe(() => CreateClientInstance(payload), context: $"NetworkCreate {typeof(T).Name}");
+        GameThread.RunSafe(() =>
+        {
+            using (CampaignExecutionScope.Enter(CampaignExecutionPhase.Replay)) CreateClientInstance(payload);
+        }, context: $"NetworkCreate {typeof(T).Name}");
     }
 
     private void CreateClientInstance(MessagePayload<NetworkCreateInstance<T>> payload)
@@ -106,6 +110,7 @@ class AutoRegistryHandler<T> : IHandler where T : class
 
         if (!ObjectManager.AddExisting($"{typeof(T).Name}_{id}", newInstance, payload.What.InstanceHandle))
         {
+            MessageApplyScope.Fail("Registry create rejected " + typeof(T).Name + " handle " + payload.What.InstanceHandle);
             Logger.Error("Failed to create new id for {type} with id {id}", typeof(T).Name, payload.What.InstanceId);
             return;
         }
@@ -125,6 +130,7 @@ class AutoRegistryHandler<T> : IHandler where T : class
         }
         catch (Exception ex)
         {
+            MessageApplyScope.Fail("Registry create callback failed: " + ex);
             Logger.Error(ex, "Failed to run OnClientCreated for {MessageType}", payload.What.GetType());
         }
     }
@@ -167,8 +173,11 @@ class AutoRegistryHandler<T> : IHandler where T : class
         // tearing down twice.
         GameThread.RunSafe(() =>
         {
-            if (!ObjectManager.TryGetObjectWithLogging(payload.What.InstanceHandle, out T obj)) return;
-            if (!ObjectManager.TryGetIdWithLogging(obj, out var id)) return;
+            using var replay = CampaignExecutionScope.Enter(CampaignExecutionPhase.Replay);
+            if (!ObjectManager.TryGetObjectWithLogging(payload.What.InstanceHandle, out T obj))
+            { MessageApplyScope.Fail("Registry destroy missing handle " + payload.What.InstanceHandle); return; }
+            if (!ObjectManager.TryGetIdWithLogging(obj, out var id))
+            { MessageApplyScope.Fail("Registry destroy missing id for handle " + payload.What.InstanceHandle); return; }
 
             if (Registry.Debug)
             {
@@ -185,6 +194,7 @@ class AutoRegistryHandler<T> : IHandler where T : class
             }
             catch (Exception ex)
             {
+                MessageApplyScope.Fail("Registry destroy callback failed: " + ex);
                 Logger.Error(ex, "Failed to run OnClientDestroyed for {MessageType}", payload.What.GetType());
             }
 

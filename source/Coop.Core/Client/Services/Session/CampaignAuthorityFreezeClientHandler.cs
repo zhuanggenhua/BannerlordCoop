@@ -61,6 +61,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
         this.messageBroker = messageBroker;
         this.network = network;
         this.sessionIdentity = sessionIdentity;
+        CampaignApplyCompletion.Attach(messageBroker, sessionIdentity);
         this.controllerIdProvider = controllerIdProvider;
         this.objectManager = objectManager;
         this.rosterCheckpointService = rosterCheckpointService;
@@ -170,6 +171,11 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
                 Logger.Warning("Could not capture final movement for freeze {HandoffSequence}; authority remains frozen", request.HandoffSequence);
                 return;
             }
+            if (!CampaignApplyCompletion.For(sessionIdentity).CanAcknowledgeThrough(lease, out var applyReason))
+            {
+                Logger.Warning("Refused frozen authority ACK {HandoffSequence}: {ApplyReason}", request.HandoffSequence, applyReason);
+                return;
+            }
             stage = "allocation-capture";
             var ack = request.ToAcknowledged(objectManager.CaptureAllocationCheckpoint(), rosterCheckpoint,
                 new CampaignClockCheckpoint(ticks), sessionCheckpoint, schedulerCheckpoint, movementCheckpoint);
@@ -226,6 +232,11 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
             attempts.TryGetValue(sessionIdentity, out var attempt);
             if (attempt != null && attempt.Lease == lease && attempt.Sequence == canceled.HandoffSequence &&
                 attempt.Candidate != canceled.CandidateControllerId) return;
+            if (!CampaignApplyCompletion.For(sessionIdentity).CanAcknowledgeThrough(lease, out var applyReason))
+            {
+                Logger.Warning("Refused to cancel authority freeze {HandoffSequence}: {ApplyReason}", canceled.HandoffSequence, applyReason);
+                return;
+            }
             if (!string.Equals(canceled.AuthorityControllerId, controllerIdProvider.ControllerId, System.StringComparison.Ordinal) ||
                 !sessionIdentity.TryCancelLocalAuthorityFreeze(lease, canceled.HandoffSequence))
                 return;

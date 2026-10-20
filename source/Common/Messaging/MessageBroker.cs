@@ -37,6 +37,14 @@ public class MessageBroker : IMessageBroker
         } 
     }
 
+    private IMessageApplyObserver applyObserver;
+    public void ObserveApplies(IMessageApplyObserver observer)
+    {
+        if (applyObserver != null && !ReferenceEquals(applyObserver, observer))
+            throw new InvalidOperationException("A broker cannot observe two campaign sessions.");
+        applyObserver = observer ?? throw new ArgumentNullException(nameof(observer));
+    }
+
     public MessageBroker()
     {
         subscribers = new Dictionary<Type, List<WeakDelegate>>();
@@ -47,13 +55,17 @@ public class MessageBroker : IMessageBroker
         if (message == null)
             return;
 
+        using var apply = message is ICampaignAuthorityScopedMessage
+            ? MessageApplyScope.Begin(applyObserver, typeof(T)) : null;
         if (!subscribers.ContainsKey(typeof(T)))
         {
+            if (apply != null) MessageApplyScope.Fail("No subscriber for classified campaign result.");
             return;
         }
 
         var delegates = subscribers[typeof(T)];
-        if (delegates == null || delegates.Count == 0) return;
+        if (delegates == null || delegates.Count == 0)
+        { if (apply != null) MessageApplyScope.Fail("No subscriber for classified campaign result."); return; }
         var payload = new MessagePayload<T>(source, message);
         lock (bookkeepingLock)
         {
@@ -72,6 +84,7 @@ public class MessageBroker : IMessageBroker
                     // (the classic trap: a closure/lambda subscription nothing kept alive).
                     Logger.Warning("Dropping dead subscriber {Method} for {MessageType}: its target was garbage collected",
                         weakDelegate.Method?.Name ?? "<unknown>", typeof(T).Name);
+                    MessageApplyScope.Fail("Classified campaign result lost a collected subscriber.");
                     delegates.RemoveAt(i--);
                     continue;
                 }
@@ -83,12 +96,14 @@ public class MessageBroker : IMessageBroker
                 }
                 catch (TargetInvocationException ex) when (ex.InnerException is not null)
                 {
+                    MessageApplyScope.Fail(ex.InnerException.ToString());
                     // MethodInfo.Invoke wraps what the handler threw, and the wrapper's own frames end here
                     Logger.Error(ex.InnerException, "Failed to run {Method} for {MessageType}",
                         weakDelegate.Method?.Name ?? "<unknown>", typeof(T).Name);
                 }
                 catch (Exception ex)
                 {
+                    MessageApplyScope.Fail(ex.ToString());
                     Logger.Error(ex, "Failed to run {Method} for {MessageType}",
                         weakDelegate.Method?.Name ?? "<unknown>", typeof(T).Name);
                 }

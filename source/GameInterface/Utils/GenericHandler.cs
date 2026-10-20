@@ -4,6 +4,7 @@ using Common.Messaging;
 using Common.Network;
 using Common.Util;
 using GameInterface.Services.ObjectManager;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Utils.LocalEvents;
 using GameInterface.Utils.NetworkEvents;
 using Serilog;
@@ -89,7 +90,8 @@ namespace GameInterface.Utils
 
                 MarshalApply(() =>
                 {
-                    if (!objectManager.TryGetObjectWithLogging(data.InstanceId, out TInstance instance)) return;
+                    if (!objectManager.TryGetObjectWithLogging(data.InstanceId, out TInstance instance))
+                    { MessageApplyScope.Fail("Missing " + typeof(TInstance).Name + " instance " + data.InstanceId); return; }
                     messageHandler(instance, data);
                 });
             };
@@ -106,10 +108,12 @@ namespace GameInterface.Utils
 
                 MarshalApply(() =>
                 {
-                    if (!objectManager.TryGetObjectWithLogging(data.InstanceId, out TInstance instance)) return;
+                    if (!objectManager.TryGetObjectWithLogging(data.InstanceId, out TInstance instance))
+                    { MessageApplyScope.Fail("Missing " + typeof(TInstance).Name + " instance " + data.InstanceId); return; }
 
                     TValue value = null;
-                    if (data.ValueId != 0 && !objectManager.TryGetObjectWithLogging(data.ValueId, out value)) return;
+                    if (data.ValueId != 0 && !objectManager.TryGetObjectWithLogging(data.ValueId, out value))
+                    { MessageApplyScope.Fail("Missing " + typeof(TValue).Name + " reference " + data.ValueId); return; }
 
                     messageHandler(instance, value, data);
                 });
@@ -129,6 +133,7 @@ namespace GameInterface.Utils
         {
             GameThread.RunSafe(() =>
             {
+                using (CampaignExecutionScope.Enter(CampaignExecutionPhase.Replay))
                 using (new AllowedThread())
                 {
                     apply();
