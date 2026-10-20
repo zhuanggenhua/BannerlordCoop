@@ -281,6 +281,7 @@ internal class UiDebugCommands
             };
             CampaignVec2 target = default;
             bool targetFound = false;
+            int skippedPlayerNavigation = 0;
             foreach (var offset in offsets)
             {
                 var candidate = new CampaignVec2(
@@ -292,19 +293,25 @@ internal class UiDebugCommands
                         mainParty.CurrentNavigationFace.FaceIndex,
                         false))
                     continue;
+                if (!Helpers.NavigationHelper.CanPlayerNavigateToPosition(candidate, out _))
+                {
+                    skippedPlayerNavigation++;
+                    continue;
+                }
 
                 target = candidate;
                 targetFound = true;
                 break;
             }
             if (!targetFound)
-                return Failed("No nearby navigable map-click target was found.");
+                return Failed($"No nearby navigable map-click target was found; skippedPlayerNavigation={skippedPlayerNavigation}.");
 
             mapScreen.HandleLeftMouseButtonClick(null, target, target.Face, false);
 
             return Succeeded($"Issued a real campaign-map click from {current.X:R},{current.Y:R} " +
                 $"to {target.X:R},{target.Y:R}; time={Campaign.Current.TimeControlMode}; " +
-                $"behavior={mainParty.DefaultBehavior}; target={mainParty.TargetPosition.X:R},{mainParty.TargetPosition.Y:R}.");
+                $"behavior={mainParty.DefaultBehavior}; target={mainParty.TargetPosition.X:R},{mainParty.TargetPosition.Y:R}; " +
+                $"skippedPlayerNavigation={skippedPlayerNavigation}.");
         }
     }
 
