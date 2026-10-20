@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { captureProcessIdentities, collectSessionLogs, hasCompleteSessionEvidence, stopSession, options, assertSemantic, assertPersistent, assertPreHandoffSemantic, completeNaturalDayHandoff, assertCycles, assertCycleWindow, assertSchedulerHandoff, assertColdLease, freshSaveName, combineCyclePages } from './p2p-world-lifecycle.mjs';
+import { captureProcessIdentities, collectSessionLogs, hasCompleteSessionEvidence, stopSession, options, assertSemantic, assertPersistent, assertPreHandoffSemantic, completeNaturalDayHandoff, assertCycles, assertAiSimulationEvidence, assertCycleWindow, assertSchedulerHandoff, assertColdLease, freshSaveName, combineCyclePages } from './p2p-world-lifecycle.mjs';
 const hash = 'a'.repeat(64);
 const semantic = () => ({campaign:'campaign',ticks:120,partyCount:25,activePartyCount:23,missingPartyIds:0,duplicatePartyIds:[],
     worldIdentityHash:hash,worldRostersHash:hash,activeWorldRostersHash:hash,heroGoldHash:hash,volunteerHash:hash,aliveHeroes:10,
@@ -8,7 +8,19 @@ const semantic = () => ({campaign:'campaign',ticks:120,partyCount:25,activeParty
     players:[{controller:'a',gold:90},{controller:'b',gold:80}]});
 const row = (node,day,kind='DailyTickParty') => ({Kind:kind,Party:kind==='DailyTickParty'?'lord_2_4':null,Day:day,Hour:day*24,
     Node:node,WriterController:node,LeaseKnown:true,LocalWriter:true,Epoch:node==='a'?3:5,RoomId:'room',AuthorityId:'world-'+node,Count:1,DueTicks:day*24});
-const receipt = (node,rows) => ({node,instance:node,campaign:'campaign',overflowed:false,rows,tickerAudits:[],duplicateRealTicks:0,failedRealTicks:0});
+const aiClasses=['writerNpc','writerPlayer','observerLocalNavigation','receiveApply','unqualified','unknown'];
+function aiEvidence(kind='writerNpc',completed=1,priorUnknown=0) {
+    const simulation={'MobilePartyAi.Tick.observed':completed+priorUnknown,'MobilePartyAi.Tick.beforeOriginal.failed':0};
+    for(const outcome of ['completed','failed','skipped']) {
+        simulation['MobilePartyAi.Tick.'+outcome]=outcome==='completed'?completed+priorUnknown:0;
+        for(const name of [...aiClasses,'unexpectedWorld']) simulation['MobilePartyAi.Tick.'+name+'.'+outcome]=0;
+    }
+    simulation['MobilePartyAi.Tick.'+kind+'.completed']=completed;
+    simulation['MobilePartyAi.Tick.unknown.completed']+=priorUnknown;
+    simulation['MobilePartyAi.Tick.unexpectedWorld.completed']=priorUnknown;
+    return {simulation,aiSimulation:{schemaVersion:1,classes:aiClasses,firstEntries:[]}};
+}
+const receipt = (node,rows) => ({node,instance:node,campaign:'campaign',overflowed:false,rows,tickerAudits:[],duplicateRealTicks:0,failedRealTicks:0,...aiEvidence(node==='a'?'writerNpc':'observerLocalNavigation')});
 const receipts = () => [receipt('a',[row('a',2),row('a',2,'DailyTick'),row('a',2,'HourlyTick')]),
     receipt('b',[row('b',3),row('b',3,'DailyTick'),row('b',3,'HourlyTick')])];
 const initial = [{controller:'a',roomHost:'a',mainHero:'hero-a',mainParty:'party-a'},{controller:'b',roomHost:'a',mainHero:'hero-b',mainParty:'party-b'}];
@@ -66,13 +78,14 @@ test('natural window requires every real hourly/daily slot and all scheduler tic
         '_militiaMobilePartyPartialHourlyAiEventTicker','_villagerMobilePartyPartialHourlyAiEventTicker',
         '_customMobilePartyPartialHourlyAiEventTicker','_banditMobilePartyPartialHourlyAiEventTicker',
         '_lordMobilePartyPartialHourlyAiEventTicker','_partiesWithoutPartyComponentsPartialHourlyAiEventTicker','_patrolPartyPartialHourlyAiEventTicker'];
-    const before=[{...receipt('a',[]),ticks:100,hours:100,hourly:{next:101,period:1},daily:{next:120,period:24},simulation:{}}, {...receipt('b',[]),simulation:{}}];
+    const before=[{...receipt('a',[]),ticks:100,hours:100,hourly:{next:101,period:1},daily:{next:120,period:24},}, {...receipt('b',[]),}];
     const after=structuredClone(before);Object.assign(after[0],{hours:124,hourly:{next:125,period:1},daily:{next:144,period:24},aiTicks:20,realTicks:80});
     after[0].rows=Array.from({length:24},(_,i)=>({...row('a',5,'HourlyTick'),DueTicks:101+i}));
     after[0].rows.push({...row('a',5,'DailyTick'),DueTicks:120});
     after[0].tickerAudits=names.map(Ticker=>({Ticker,Batches:10,Completed:100}));
     after[0].ticks=124;
-    after[0].simulation=Object.fromEntries(['MobilePartyAi.Tick.completed','Campaign.RealTick.completed','Campaign.Tick.completed','Campaign.LateAITickAux.completed','Campaign.WaitAsyncTasks.completed'].map(name=>[name,5]));
+    Object.assign(after[0],aiEvidence('writerNpc',6));Object.assign(after[1],aiEvidence('observerLocalNavigation',6));
+    Object.assign(after[0].simulation,Object.fromEntries(['Campaign.RealTick.completed','Campaign.Tick.completed','Campaign.LateAITickAux.completed','Campaign.WaitAsyncTasks.completed'].map(name=>[name,5])));
     after[0].effects=[{Kind:'ClanFinance',Ticks:120,GoldBefore:100,GoldAfter:100},{Kind:'Wage',Ticks:120,Wage:0}];
     assert.equal(assertCycleWindow(before,after,'a').hourly,24);
     assert.equal(assertCycleWindow(before,after,'a').economy.paymentAcceptance,'NOT_OBSERVED');
@@ -102,12 +115,13 @@ function naturalHandoffFixture() {
             .map(n=>n==='patrol'?'_patrolPartyPartialHourlyAiEventTicker':'_'+n+(n==='partiesWithoutPartyComponents'?'':'MobileParty')+'PartialHourlyAiEventTicker')];
     const scheduler={LastGameTimeTicks:124,tickers:[{Name:'daily',Index:5,TickDebt:0.75,count:10,orderedIdsHash:hash}]};
     const beforeCycles=['a','b'].map(node=>({...receipt(node,[]),hours:100,ticks:100,
-        hourly:{next:101,period:1},daily:{next:120,period:24},simulation:{},scheduler:structuredClone(scheduler)}));
+        hourly:{next:101,period:1},daily:{next:120,period:24},scheduler:structuredClone(scheduler)}));
     const preCycles=structuredClone(beforeCycles);for(const c of preCycles)Object.assign(c,{hours:124,ticks:124,hourly:{next:125,period:1},daily:{next:144,period:24}});
     preCycles[0].rows=Array.from({length:24},(_,i)=>({...row('a',5,'HourlyTick'),DueTicks:101+i}));
     preCycles[0].rows.push({...row('a',5,'DailyTick'),DueTicks:120});
     preCycles[0].tickerAudits=tickerNames.map(Ticker=>({Ticker,Batches:10,Expected:100,Completed:100,ExpectedHash:hash,CompletedHash:hash,Mismatches:0,LeaseKnown:true,LocalWriter:true}));
-    preCycles[0].simulation=Object.fromEntries(['MobilePartyAi.Tick.completed','Campaign.RealTick.completed','Campaign.Tick.completed','Campaign.LateAITickAux.completed','Campaign.WaitAsyncTasks.completed'].map(n=>[n,5]));
+    Object.assign(preCycles[0],aiEvidence('writerNpc',6));Object.assign(preCycles[1],aiEvidence('observerLocalNavigation',6));
+    Object.assign(preCycles[0].simulation,Object.fromEntries(['Campaign.RealTick.completed','Campaign.Tick.completed','Campaign.LateAITickAux.completed','Campaign.WaitAsyncTasks.completed'].map(n=>[n,5])));
     preCycles[0].effects=[{Kind:'ClanFinance',Ticks:120,GoldBefore:100,GoldAfter:100,Known:true,LocalWriter:true,Error:null,Entity:'clan'},
         {Kind:'Wage',Ticks:120,Wage:0,Known:true,LocalWriter:true,Error:null,Entity:'clan'}];
     const world={campaign:'campaign',unregisteredParties:0,partyIdentityHash:hash,rosterCountsHash:hash,rosterXpHash:hash,volunteerHash:hash,heroGoldHash:hash,nextHandle:100,ticks:124};
@@ -321,4 +335,30 @@ test('dual-client acceptance requires both known identities, both strict logs, r
         s=>s.cleanupConfirmed=false,s=>s.logVerificationError='archive failed',s=>s.processes.pop()]) {
         const bad=structuredClone(session);change(bad);assert.equal(hasCompleteSessionEvidence(bad),false);
     }
+});
+
+test('AI probe requires version, every counter, exact partitions and actual observed entries',()=>{
+    const good={...aiEvidence()};assertAiSimulationEvidence(good);
+    for(const change of [v=>delete v.aiSimulation,v=>v.aiSimulation.schemaVersion=0,v=>v.aiSimulation.classes.pop(),
+        v=>delete v.simulation['MobilePartyAi.Tick.unknown.failed'],v=>v.simulation['MobilePartyAi.Tick.writerNpc.completed']++,
+        v=>v.simulation['MobilePartyAi.Tick.observed']=0,v=>v.simulation['MobilePartyAi.Tick.completed']=NaN]){
+        const bad=structuredClone(good);change(bad);assert.throws(()=>assertAiSimulationEvidence(bad));
+    }
+    assert.throws(()=>assertAiSimulationEvidence(aiEvidence('writerNpc',0)));
+});
+test('confirmed natural window allows own navigation but rejects newly unqualified NPC work',async()=>{
+    const clean=naturalHandoffFixture();await completeNaturalDayHandoff(clean.args);
+    for(const kind of ['unknown','unqualified','unexpectedWorld','writerNpc','writerPlayer']){
+        const f=naturalHandoffFixture(),sim=f.preCycles[1].simulation;
+        if(kind==='unexpectedWorld')sim['MobilePartyAi.Tick.unexpectedWorld.completed']++;
+        else {sim['MobilePartyAi.Tick.'+kind+'.completed']++;sim['MobilePartyAi.Tick.completed']++;sim['MobilePartyAi.Tick.observed']++;}
+        await assert.rejects(completeNaturalDayHandoff(f.args));
+    }
+    const f=naturalHandoffFixture();
+    for(const pair of [f.beforeCycles,f.preCycles,f.tailCycles])for(const receipt of pair) {
+        receipt.simulation['MobilePartyAi.Tick.unknown.completed']+=100;
+        receipt.simulation['MobilePartyAi.Tick.unexpectedWorld.completed']+=100;
+        receipt.simulation['MobilePartyAi.Tick.completed']+=100;receipt.simulation['MobilePartyAi.Tick.observed']+=100;
+    }
+    await completeNaturalDayHandoff(f.args);
 });

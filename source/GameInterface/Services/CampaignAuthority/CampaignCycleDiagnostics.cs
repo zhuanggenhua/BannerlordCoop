@@ -20,6 +20,9 @@ using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.ObjectSystem;
 using TaleWorlds.CampaignSystem.GameComponents;
 using GameInterface.Services.Clans.Interfaces;
+using Common.Util;
+using GameInterface.Services.Players;
+using GameInterface.Services.ObjectManager;
 
 namespace GameInterface.Services.CampaignAuthority;
 
@@ -31,6 +34,7 @@ internal sealed class CampaignCycleDiagnostics
     private readonly Dictionary<string, CampaignTickerAudit> audits = new(StringComparer.Ordinal);
     private readonly List<CampaignEconomicRow> effects = new();
     private readonly Dictionary<string, long> simulation = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, CampaignAiTickEvidence> firstAiEvidence = new(StringComparer.Ordinal);
     private int? lastRealTickFrame;
     public string InstanceId { get; } = Guid.NewGuid().ToString("N");
     public bool Overflowed { get; private set; }
@@ -101,6 +105,42 @@ internal sealed class CampaignCycleDiagnostics
     { lock (gate) { simulation.TryGetValue(name, out long count); simulation[name] = count + 1; } }
     public Dictionary<string, long> SimulationSnapshot()
     { lock (gate) return new Dictionary<string, long>(simulation); }
+    internal (Dictionary<string, long> Counts, CampaignAiTickEvidence[] FirstEntries) SimulationEvidenceSnapshot()
+    {
+        lock (gate)
+        {
+            var counts = new Dictionary<string, long>(simulation);
+            foreach (string key in CampaignAiTickEvidence.CounterKeys)
+                if (!counts.ContainsKey(key)) counts.Add(key, 0);
+            return (counts, firstAiEvidence.Values.Select(value => value.Copy()).ToArray());
+        }
+    }
+    internal void AiTick(CampaignAiTickEvidence entry, CampaignAiTickEvidence exit, bool ranOriginal, Exception error)
+    {
+        string outcome = !ranOriginal ? "skipped" : error == null ? "completed" : "failed";
+        entry.RanOriginal = ranOriginal;entry.Outcome = outcome;entry.Error = error?.ToString();
+        entry.FinishedUtc = DateTime.UtcNow;entry.ExitLease = exit.Lease;entry.ExitFrozen = exit.Frozen;
+        entry.ExitReason = exit.Reason;entry.ExitDiagnosticError = exit.DiagnosticError;
+        entry.ExitRole = exit.Role;entry.ExitPartyRole = exit.PartyRole;entry.ExitClassification = exit.Classification;
+        entry.ExitPartyId = exit.PartyId;entry.ExitPartyStringId = exit.PartyStringId;
+        entry.ExitObjectController = exit.ObjectController;entry.ExitAiIdentity = exit.AiIdentity;
+        entry.ContextChanged = !entry.SameContext(exit);
+        entry.UnexpectedWorld |= entry.ContextChanged;
+        lock (gate)
+        {
+            Simulation("MobilePartyAi.Tick.observed");
+            Simulation("MobilePartyAi.Tick." + outcome);
+            Simulation("MobilePartyAi.Tick." + entry.Classification + "." + outcome);
+            if (entry.UnexpectedWorld && ranOriginal) Simulation("MobilePartyAi.Tick.unexpectedWorld." + outcome);
+            if (!ranOriginal && error != null) Simulation("MobilePartyAi.Tick.beforeOriginal.failed");
+            string key = entry.Classification + "|" + outcome + "|" + entry.UnexpectedWorld;
+            if (!firstAiEvidence.ContainsKey(key))
+            {
+                if (firstAiEvidence.Count >= capacity) Overflowed = true;
+                else firstAiEvidence.Add(key, entry.Copy());
+            }
+        }
+    }
     public void RealTickFrame(int frame)
     {
         lock (gate)
@@ -159,6 +199,34 @@ internal sealed class CampaignTickerAudit
     public string MembershipChangesHash { get; set; } = "";
     public string FirstMembershipChange { get; set; }
     public CampaignTickerAudit Copy() => (CampaignTickerAudit)MemberwiseClone();
+}
+
+internal sealed class CampaignAiTickEvidence
+{
+    internal static readonly string[] Classes = { "writerNpc", "writerPlayer", "observerLocalNavigation", "receiveApply", "unqualified", "unknown" };
+    public string Classification = "unknown", BaseClassification = "unknown", Role = "unknown", PartyRole = "unknown";
+    internal static readonly string[] Outcomes = { "completed", "failed", "skipped" };
+    internal static readonly string[] CounterKeys = Outcomes.SelectMany(outcome =>
+        Classes.Concat(new[] { "unexpectedWorld" }).Select(kind => "MobilePartyAi.Tick." + kind + "." + outcome)
+            .Concat(new[] { "MobilePartyAi.Tick." + outcome }))
+        .Concat(new[] { "MobilePartyAi.Tick.observed", "MobilePartyAi.Tick.beforeOriginal.failed" }).ToArray();
+    internal object ActualParty, ActualAi;
+    public string Node, PartyId, PartyStringId, ObjectController, Reason, DiagnosticError, Error, Outcome;
+    public string ExitReason, ExitDiagnosticError, ExitRole, ExitPartyRole, ExitClassification, ExitPartyId, ExitPartyStringId, ExitObjectController;
+    public int ExitAiIdentity;
+    public AuthorityLease Lease, ExitLease;
+    public bool LeaseKnown, Frozen, ExitFrozen, LocalWriter, MainParty, CurrentAi, AllowedThread, UnexpectedWorld = true;
+    public bool RanOriginal, ContextChanged;
+    public int AiIdentity, ThreadId;
+    public DateTime StartedUtc, FinishedUtc;
+    public CampaignAiTickEvidence Copy() => (CampaignAiTickEvidence)MemberwiseClone();
+    internal bool SameContext(CampaignAiTickEvidence other) => other != null && LeaseKnown == other.LeaseKnown &&
+        Lease == other.Lease && Frozen == other.Frozen && Node == other.Node && LocalWriter == other.LocalWriter &&
+        PartyId == other.PartyId && PartyStringId == other.PartyStringId && ObjectController == other.ObjectController &&
+        MainParty == other.MainParty && CurrentAi == other.CurrentAi && AiIdentity == other.AiIdentity &&
+        AllowedThread == other.AllowedThread && BaseClassification == other.BaseClassification &&
+        ReferenceEquals(ActualParty, other.ActualParty) && ReferenceEquals(ActualAi, other.ActualAi) &&
+        DiagnosticError == other.DiagnosticError && Reason == other.Reason;
 }
 
 internal sealed class CampaignEconomicRow
@@ -711,9 +779,93 @@ internal static class CampaignSimulationEvidencePatches
         foreach (string name in new[] { "RealTick", "Tick", "LateAITickAux", "WaitAsyncTasks" }) yield return AccessTools.Method(typeof(Campaign), name);
         yield return AccessTools.Method(typeof(MobilePartyAi), "Tick");
     }
-    [HarmonyFinalizer]
-    private static Exception Finalizer(MethodBase __originalMethod, bool __runOriginal, Exception __exception)
+    [HarmonyCleanup]
+    private static Exception Cleanup(MethodBase original, Exception exception, Harmony harmony)
     {
+        if (original == null && exception == null)
+            harmony.Patch(AccessTools.Method(typeof(Campaign), "RealTick"),
+                transpiler: new HarmonyMethod(typeof(CampaignSimulationEvidencePatches), nameof(RealTickIdentity)));
+        return exception;
+    }
+    private static IEnumerable<CodeInstruction> RealTickIdentity(IEnumerable<CodeInstruction> instructions) => instructions;
+
+    internal static CampaignAiTickEvidence CaptureAi(MobilePartyAi ai)
+    {
+        var row = new CampaignAiTickEvidence { StartedUtc = DateTime.UtcNow, ThreadId = Thread.CurrentThread.ManagedThreadId,
+            AiIdentity = ai == null ? 0 : RuntimeHelpers.GetHashCode(ai), AllowedThread = AllowedThread.IsThisThreadAllowed() };
+        try
+        {
+            if (ai?._mobileParty == null) { row.Reason = "Missing actual AI party";return row; }
+            var party = ai._mobileParty;row.ActualParty = party;row.ActualAi = ai;row.PartyStringId = party.StringId;
+            row.MainParty = ReferenceEquals(party, MobileParty.MainParty);row.CurrentAi = ReferenceEquals(ai, party.Ai);
+            if (!ContainerProvider.TryResolve<IControllerIdProvider>(out var controller) || string.IsNullOrWhiteSpace(controller.ControllerId) ||
+                !ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authority) ||
+                !ContainerProvider.TryResolve<ISessionIdentity>(out var identity) ||
+                !ContainerProvider.TryResolve<IObjectManager>(out var objects) ||
+                !ContainerProvider.TryResolve<IPlayerManager>(out var players))
+            { row.Reason = "Missing controller/session/registry evidence";return row; }
+            row.Node = controller.ControllerId;
+            if (!objects.TryGetId(party, out row.PartyId) || !objects.TryGetObject<MobileParty>(row.PartyId, out var registered) ||
+                !ReferenceEquals(registered, party) || !row.CurrentAi)
+            { row.Reason = "Unknown party registration or stale AI instance";return row; }
+            var registrations = players.Players.Where(player => player.MobilePartyId == row.PartyId).ToArray();
+            bool marked = PlayerManager.TryGetControlledObjectInfo(party, out var control);
+            if (registrations.Length > 1 || (registrations.Length == 0 && (marked || row.MainParty)))
+            { row.Reason = "Unproven registered player identity";return row; }
+            if (registrations.Length == 1)
+            {
+                row.ObjectController = registrations[0].ControllerId;
+                if (!marked || control.ObjectControllerId != row.ObjectController || control.ControllerIdProvider?.ControllerId != row.Node)
+                { row.Reason = "Player control marker disagrees with registration";return row; }
+                row.PartyRole = row.ObjectController == row.Node ? "localPlayer" : "remotePlayer";
+            }
+            else row.PartyRole = "npc";
+            row.LeaseKnown = authority.TryGetCurrentLease(out row.Lease) && row.Lease.IsValid &&
+                identity.TryGetConfirmedLease(out var confirmed) && confirmed == row.Lease;
+            if (!row.LeaseKnown) { row.Reason = "No coherent confirmed lease";return row; }
+            row.Frozen = identity.IsLocallyFrozen(row.Lease);
+            row.LocalWriter = authority.TryGetLocalAuthorityLease(out var local) && local == row.Lease;
+            if (row.Frozen || row.Lease.IsPaused || row.LocalWriter != (row.Node == row.Lease.AuthorityControllerId))
+            { row.Role = "unqualified";row.Classification = "unqualified";row.Reason = "Frozen, paused or contradictory local authority";return row; }
+            row.Role = row.LocalWriter ? "writer" : "observer";
+            if (row.LocalWriter) row.Classification = row.PartyRole == "npc" ? "writerNpc" : "writerPlayer";
+            else row.Classification = row.PartyRole == "localPlayer" && row.MainParty ? "observerLocalNavigation" : "unqualified";
+            row.UnexpectedWorld = row.Classification == "unqualified" || (row.AllowedThread && row.LocalWriter && row.PartyRole == "npc");
+        }
+        catch (Exception error) { row.Classification = "unknown";row.UnexpectedWorld = true;row.Reason = "AI evidence capture failed";row.DiagnosticError = error.ToString(); }
+        finally
+        {
+            row.BaseClassification = row.Classification;
+            if (row.AllowedThread) row.Classification = "receiveApply";
+        }
+        return row;
+    }
+
+    internal sealed class AiEntry
+    {
+        public CampaignCycleDiagnostics Collector;
+        public CampaignAiTickEvidence Evidence;
+    }
+    [HarmonyPrefix]
+    private static void Prefix(object __instance, MethodBase __originalMethod, out AiEntry __state)
+    {
+        __state = null;
+        if (__originalMethod.DeclaringType != typeof(MobilePartyAi) || Campaign.Current == null) return;
+        __state = new AiEntry { Collector = CampaignCycleDispatchPatches.For(Campaign.Current), Evidence = CaptureAi((MobilePartyAi)__instance) };
+    }
+    [HarmonyFinalizer]
+    private static Exception Finalizer(object __instance, MethodBase __originalMethod, bool __runOriginal, Exception __exception, AiEntry __state)
+    {
+        if (__originalMethod.DeclaringType == typeof(MobilePartyAi))
+        {
+            if (__state != null) __state.Collector.AiTick(__state.Evidence, CaptureAi((MobilePartyAi)__instance), __runOriginal, __exception);
+            else if (Campaign.Current != null)
+            {
+                var unknown = new CampaignAiTickEvidence { Reason = "Missing AI entry boundary" };
+                CampaignCycleDispatchPatches.For(Campaign.Current).AiTick(unknown, CaptureAi((MobilePartyAi)__instance), __runOriginal, __exception);
+            }
+            return __exception;
+        }
         if (Campaign.Current != null && __runOriginal)
         {
             var collector = CampaignCycleDispatchPatches.For(Campaign.Current);

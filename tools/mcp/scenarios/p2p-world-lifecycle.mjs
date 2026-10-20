@@ -76,12 +76,48 @@ export function assertColdLease(before, after, initial) {
         'Cold restart reused room/authority/epoch without a new fence');
     return epoch(after[0]) > epoch(before) ? 'new-epoch-fence' : 'new-authority-fence';
 }
+const AI_CLASSES=['writerNpc','writerPlayer','observerLocalNavigation','receiveApply','unqualified','unknown'];
+const AI_OUTCOMES=['completed','failed','skipped'];
+const aiKey=(kind,outcome)=>'MobilePartyAi.Tick.'+(kind?kind+'.':'')+outcome;
+export function assertAiSimulationEvidence(receipt) {
+    assert.equal(receipt.aiSimulation?.schemaVersion,1,'AI role probe schema unavailable');
+    assert.deepEqual(receipt.aiSimulation.classes,AI_CLASSES,'AI role partitions unavailable');
+    assert.ok(Array.isArray(receipt.aiSimulation.firstEntries) && receipt.aiSimulation.firstEntries.length<=36,'AI first evidence unavailable');
+    const counters=receipt.simulation;
+    const count=name=>{
+        assert.ok(Object.hasOwn(counters??{},name),'AI probe counter unavailable: '+name);
+        assert.ok(Number.isSafeInteger(counters[name]) && counters[name]>=0,'Invalid AI probe counter: '+name);
+        return counters[name];
+    };
+    for(const outcome of AI_OUTCOMES) {
+        const sum=AI_CLASSES.reduce((total,kind)=>total+count(aiKey(kind,outcome)),0);
+        assert.equal(count(aiKey('',outcome)),sum,'AI role partition differs from raw '+outcome);
+        assert.ok(count(aiKey('unexpectedWorld',outcome))<=count(aiKey('',outcome)),'Unsafe AI count exceeds raw '+outcome);
+    }
+    assert.equal(count(aiKey('','observed')),AI_OUTCOMES.reduce((sum,outcome)=>sum+count(aiKey('',outcome)),0),'AI probe coverage differs from raw');
+    assert.ok(count(aiKey('','observed'))>0,'AI probe has no actual entry coverage');
+    count(aiKey('beforeOriginal','failed'));
+    return counters;
+}
+function assertAiWindow(before,after,writer) {
+    const start=assertAiSimulationEvidence(before),end=assertAiSimulationEvidence(after);
+    for(const key of Object.keys(start).filter(key=>key.startsWith('MobilePartyAi.Tick.')))
+        assert.ok(end[key]>=start[key],'AI counter moved backwards: '+key);
+    for(const kind of ['unexpectedWorld','unknown','unqualified'])
+        for(const outcome of ['completed','failed'])
+            assert.equal(end[aiKey(kind,outcome)],start[aiKey(kind,outcome)],'Unqualified AI in confirmed window: '+kind+'.'+outcome);
+    const positive=writer?'writerNpc':'observerLocalNavigation';
+    assert.ok(end[aiKey(positive,'completed')]>start[aiKey(positive,'completed')],'Qualified AI not observed: '+positive);
+    if(!writer)for(const kind of ['writerNpc','writerPlayer'])
+        assert.equal(end[aiKey(kind,'completed')],start[aiKey(kind,'completed')],'Observer advanced authoritative AI: '+kind);
+}
 export function assertCycles(receipts) {
     assert.equal(receipts.length, 2); assert.equal(receipts[0].campaign, receipts[1].campaign);
     assert.notEqual(receipts[0].instance, receipts[1].instance);
     const counts = new Map(), rows = [];
     for (const receipt of receipts) {
         assert.equal(receipt.overflowed, false);
+        assertAiSimulationEvidence(receipt);
         for (const row of receipt.rows) {
             assert.equal(field(row,'leaseKnown'), true, 'Native cycle dispatched without known lease');
             assert.equal(field(row,'localWriter'), true, 'Observer dispatched native world cycle');
@@ -149,6 +185,7 @@ export function assertCycleWindow(before, after, node) {
         if(!ticker.includes('PartialHourlyAi'))assert.ok(completed>0,'Native ticker completed no callbacks: '+ticker);
         coverage.tickers[ticker]={batches,completed};
     }
+    assertAiWindow(start,end,true);
     for(const name of ['MobilePartyAi.Tick.completed','Campaign.RealTick.completed','Campaign.Tick.completed','Campaign.LateAITickAux.completed','Campaign.WaitAsyncTasks.completed'])
         assert.ok((end.simulation[name]??0)>(start.simulation[name]??0),'Native simulation did not complete: '+name);
     const effects=(end.effects??[]).filter(row=>field(row,'ticks')>=start.ticks && field(row,'ticks')<=end.ticks);
@@ -160,7 +197,8 @@ export function assertCycleWindow(before, after, node) {
         paymentAcceptance:'NOT_OBSERVED',paymentLimit:'Wage model evaluations and net clan gold changes do not identify the exact wage deduction causal action.'};
     for(const receipt of after.filter(value=>value.node!==node)) {
         const prior=before.find(value=>value.node===receipt.node);
-        for(const name of ['MobilePartyAi.Tick.completed','Campaign.Tick.completed'])
+        assertAiWindow(prior,receipt,false);
+        for(const name of ['Campaign.Tick.completed'])
             assert.equal(receipt.simulation[name]??0,prior.simulation[name]??0,'Observer advanced authoritative simulation: '+name);
     }
     return coverage;

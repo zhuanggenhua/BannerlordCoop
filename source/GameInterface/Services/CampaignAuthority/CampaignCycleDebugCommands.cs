@@ -37,6 +37,7 @@ public sealed class CampaignCycleDebugCommands : ICoopCommand
         if (args.Count > 0 && (!int.TryParse(args[0], out offset) || offset < 0 || offset > rows.Length))
             return new(false, "Invalid cycle evidence offset.", "invalid_cycle_offset");
         var page = rows.Skip(offset).Take(256).ToArray();
+        var simulationEvidence = collector.SimulationEvidenceSnapshot();
         var output = JsonConvert.SerializeObject(new
         {
             instance = collector.InstanceId, campaign = Campaign.Current.UniqueGameId,
@@ -50,7 +51,8 @@ public sealed class CampaignCycleDebugCommands : ICoopCommand
             daily = new { next = Campaign.Current._dailyTickEvent.NextTriggerTime.NumTicks,
                 period = Campaign.Current._dailyTickEvent.TriggerPeriod.NumTicks },
             tickerAudits = collector.AuditSnapshot(),
-            simulation = collector.SimulationSnapshot(),
+            simulation = simulationEvidence.Counts,
+            aiSimulation = new { schemaVersion = 1, classes = CampaignAiTickEvidence.Classes, firstEntries = simulationEvidence.FirstEntries },
             scheduler = !captured ? null : new
             {
                 checkpoint.LastGameTimeTicks, checkpoint.MinimumIntervalTicks,
