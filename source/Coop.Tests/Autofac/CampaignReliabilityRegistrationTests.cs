@@ -49,6 +49,18 @@ public class CampaignReliabilityRegistrationTests
         Assert.NotSame(graph, second.Resolve<ICampaignObjectGraphReadiness>());
         Assert.NotSame(lifetime, second.Resolve<ICampaignLifetimeCompletionDrain>());
         Assert.NotSame(first.Resolve<ICampaignMovementCheckpointService>(), second.Resolve<ICampaignMovementCheckpointService>());
+#if DEBUG
+        var probe = first.Resolve<global::GameInterface.Services.LiveTesting.MovementLatency.IMovementLatencyProbe>();
+        Assert.Same(probe, first.Resolve<global::GameInterface.Services.LiveTesting.MovementLatency.IMovementLatencyProbe>());
+        Assert.NotSame(probe, second.Resolve<global::GameInterface.Services.LiveTesting.MovementLatency.IMovementLatencyProbe>());
+        var commandTypes = new[] {
+            typeof(global::GameInterface.Services.LiveTesting.MovementLatency.MovementLatencyCommands.BeginCommand),
+            typeof(global::GameInterface.Services.LiveTesting.MovementLatency.MovementLatencyCommands.ReadCommand),
+            typeof(global::GameInterface.Services.LiveTesting.MovementLatency.MovementLatencyCommands.StopCommand),
+        };
+        foreach (var type in commandTypes)
+            Assert.Contains(container.ComponentRegistry.Registrations, registration => registration.Activator.LimitType == type);
+#endif
     }
 
     private static object Field(object instance, string name) => AccessTools.Field(instance.GetType(), name).GetValue(instance);

@@ -233,6 +233,7 @@ public class GameInterfaceModule : Module
 
 #if DEBUG
         builder.RegisterModule<global::GameInterface.Services.LiveTesting.LiveTestUiModule>();
+        builder.RegisterModule<global::GameInterface.Services.LiveTesting.MovementLatency.MovementLatencyModule>();
 #endif
         builder.RegisterModule<ServiceModule>();
         builder.RegisterModule<ObjectManagerModule>();
