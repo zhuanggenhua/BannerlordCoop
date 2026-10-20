@@ -71,7 +71,7 @@ internal sealed class CampaignSessionCheckpointService : ICampaignSessionCheckpo
             var snapshot = BuildSession(provider.CoopSession, detachedPlayers, lease,
                 identity.RoomHostControllerId, CoopSession.Empty.InventoryPlayerData);
             CampaignNativeBehaviorCheckpoint native = null;
-            if (nativeState != null && !nativeState.TryCapture(out native)) return false;
+            if (nativeState != null && (!nativeState.TryCapture(out native) || native == null)) return false;
             checkpoint = new CampaignSessionCheckpoint(campaignId, JsonSerializer.Serialize(snapshot, JsonOptions), native);
             return true;
         }
@@ -100,7 +100,7 @@ internal sealed class CampaignSessionCheckpointService : ICampaignSessionCheckpo
             !ValidatePlayers(snapshot.Players, out var registered)) return false;
 
         Action installNative = null;
-        if (nativeState != null && !nativeState.TryPrepare(checkpoint.NativeBehaviors, out installNative)) return false;
+        if (nativeState != null && (!nativeState.TryPrepare(checkpoint.NativeBehaviors, out installNative) || installNative == null)) return false;
         var localInventory = provider.CoopSession?.InventoryPlayerData ?? CoopSession.Empty.InventoryPlayerData;
         var merged = BuildSession(snapshot, registered.Values.ToArray(), lease, identity.RoomHostControllerId, localInventory);
         return identity.TryExecuteWithLease(lease, () =>
