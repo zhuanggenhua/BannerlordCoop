@@ -40,7 +40,8 @@ internal class PatchBootstrap : IDisposable
         builder.RegisterModule<GameInterfaceModule>();
         // Production composition registers this in Coop.Core.CommonModule; patch tests
         // load GameInterfaceModule directly, so provide the same campaign role service.
-        builder.RegisterType<CampaignAuthorityContext>().As<ICampaignAuthorityContext>().InstancePerLifetimeScope();
+        builder.RegisterType<CampaignAuthorityContext>().As<ICampaignAuthorityContext>()
+            .As<ICampaignWorldExecution>().InstancePerLifetimeScope();
         Container = builder.Build();
 
         // This will not allow changing of the container in ContainerProvider until containerLock is disposed

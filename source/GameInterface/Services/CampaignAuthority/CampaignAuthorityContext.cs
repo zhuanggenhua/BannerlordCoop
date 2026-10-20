@@ -13,7 +13,7 @@ public interface ICampaignAuthorityContext
     bool TryExecuteWithCurrentLease(AuthorityLease lease, Action action);
 }
 
-public sealed class CampaignAuthorityContext : ICampaignAuthorityContext
+public sealed partial class CampaignAuthorityContext : ICampaignAuthorityContext
 {
     private readonly ISessionIdentity sessionIdentity;
     private readonly IControllerIdProvider controllerIdProvider;

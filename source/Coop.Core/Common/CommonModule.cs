@@ -26,7 +26,8 @@ public abstract class CommonModule : Module
     protected override void Load(ContainerBuilder builder)
     {
         builder.RegisterType<SessionIdentity>().As<ISessionIdentity>().InstancePerLifetimeScope();
-        builder.RegisterType<CampaignAuthorityContext>().As<ICampaignAuthorityContext>().InstancePerLifetimeScope();
+        builder.RegisterType<CampaignAuthorityContext>().As<ICampaignAuthorityContext>()
+            .As<ICampaignWorldExecution>().InstancePerLifetimeScope();
         builder.RegisterType<CampaignAuthorityMessageSender>()
             .As<ICampaignAuthorityMessageSender>()
             .InstancePerLifetimeScope();
