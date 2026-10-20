@@ -34,6 +34,7 @@ using GameInterface.Services.Missions;
 using GameInterface.Services.Players;
 using LiteNetLib;
 using Missions;
+using Missions.Services.Network;
 using System.Runtime.CompilerServices;
 
 namespace Coop.Core.Server;
@@ -67,7 +68,11 @@ public class ServerModule : CommonModule
         builder.RegisterType<ServerLogic>().As<IServerLogic>().As<ILogic>().InstancePerLifetimeScope();
         builder.RegisterType<CoopServer>().As<ICoopServer>().As<INetwork>().As<INetEventListener>().InstancePerLifetimeScope();
         if (ModInformation.IsListenAuthority)
+        {
             builder.RegisterType<LocalMissionRoomNetwork>().As<IRelayNetwork>().InstancePerLifetimeScope();
+            builder.RegisterType<LocalMissionRelayReceiver>()
+                .As<ILocalMissionRelayReceiver>().As<IMissionPacketSourcePolicy>().InstancePerLifetimeScope();
+        }
         builder.RegisterType<UdpBindDiagnostics>().As<IUdpBindDiagnostics>().InstancePerDependency();
         builder.RegisterType<SendCoalescer>().As<ISendCoalescer>().InstancePerLifetimeScope();
         builder.RegisterType<CoopSaveManager>().As<ICoopSaveManager>().InstancePerLifetimeScope();

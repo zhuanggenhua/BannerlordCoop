@@ -103,6 +103,7 @@ public class AgentMovementHandler : IAgentMovementHandler
     private readonly IMovementPriorityScheduler movementPriorityScheduler;
     private readonly IMissionContext missionContext;
     private readonly IRelayNetwork relayNetwork;
+    private readonly IMissionPacketSourcePolicy packetSourcePolicy;
     // A puppet's horse, remembered when its owner dismounts, so a later re-mount can put it back on the
     // same one. Touched only on the game thread (inside HandlePacket's apply), so no lock; per-mission
     // (this handler is transient), so it can't leak across missions.
@@ -439,7 +440,8 @@ public class AgentMovementHandler : IAgentMovementHandler
         IMovementRateController movementRateController,
         IMovementPriorityScheduler movementPriorityScheduler,
         IMissionContext missionContext,
-        IRelayNetwork relayNetwork = null)
+        IRelayNetwork relayNetwork = null,
+        IMissionPacketSourcePolicy packetSourcePolicy = null)
     {
         if (movementRateController == null) throw new ArgumentNullException(nameof(movementRateController));
         if (movementPriorityScheduler == null) throw new ArgumentNullException(nameof(movementPriorityScheduler));
@@ -460,6 +462,7 @@ public class AgentMovementHandler : IAgentMovementHandler
         this.movementPriorityScheduler = movementPriorityScheduler;
         this.missionContext = missionContext;
         this.relayNetwork = relayNetwork;
+        this.packetSourcePolicy = packetSourcePolicy;
         _interpolator = new AgentPositionInterpolator(agentRegistry);
         // Server-mediated membership. A peer entering is the cue to clear any STALE party it left behind
         // on a missed disconnect (so its rejoin re-spawns clean); a leave/disconnect releases its party.
@@ -1695,7 +1698,7 @@ public class AgentMovementHandler : IAgentMovementHandler
     private void QueueReceivedMovement(
         NetPeer peer, string packetSenderId, ReceivedMovement[] snapshots)
     {
-        if (!TryCaptureSender(peer, packetSenderId, out string senderId, out bool directPeer))
+        if (!TryCaptureSender(peer, packetSenderId, out string senderId, out bool directPeer, out var sourceReceipt))
             return;
 
         long queuedAt = Stopwatch.GetTimestamp();
@@ -1708,7 +1711,7 @@ public class AgentMovementHandler : IAgentMovementHandler
                 long applyStartedAt = Stopwatch.GetTimestamp();
                 try
                 {
-                    ApplyMovement(peer, senderId, directPeer, snapshots);
+                    ApplyMovement(peer, senderId, directPeer, snapshots, sourceReceipt);
                 }
                 finally
                 {
@@ -1722,10 +1725,12 @@ public class AgentMovementHandler : IAgentMovementHandler
     }
 
     private bool TryCaptureSender(
-        NetPeer peer, string packetSenderId, out string senderId, out bool directPeer)
+        NetPeer peer, string packetSenderId, out string senderId, out bool directPeer,
+        out MissionPacketSourceReceipt sourceReceipt)
     {
         senderId = null;
         directPeer = false;
+        sourceReceipt = null;
         if (peer == null) return false;
 
         foreach (string controllerId in missionContext.ControllersInMission)
@@ -1743,8 +1748,12 @@ public class AgentMovementHandler : IAgentMovementHandler
         }
 
         // The campaign relay forwards the inner packet, so its sender must travel in that packet.
-        if (string.IsNullOrEmpty(packetSenderId) || !IsRelayPeer(peer))
-            return false;
+        if (string.IsNullOrEmpty(packetSenderId)) return false;
+        if (!IsRelayPeer(peer))
+        {
+            if (packetSourcePolicy == null || !packetSourcePolicy.TryCapture(peer, packetSenderId, out sourceReceipt) ||
+                sourceReceipt == null || !ReferenceEquals(sourceReceipt.Peer, peer) || sourceReceipt.ControllerId != packetSenderId) return false;
+        }
 
         senderId = packetSenderId;
         return IsMissionMember(senderId);
@@ -1770,14 +1779,16 @@ public class AgentMovementHandler : IAgentMovementHandler
     // Validate authority and sample order on the game thread before changing any puppet state.
     private void ApplyMovement(
         NetPeer peer, string senderId, bool directPeer,
-        IReadOnlyList<ReceivedMovement> snapshots)
+        IReadOnlyList<ReceivedMovement> snapshots, MissionPacketSourceReceipt sourceReceipt)
     {
         if (_disposed || Mission.Current == null || !IsMissionMember(senderId)) return;
 
         // A removed direct mapping must not become an anonymous relay while this apply is queued.
-        if (directPeer
-            ? !missionContext.TryGetPeer(senderId, out NetPeer mappedPeer) || !ReferenceEquals(mappedPeer, peer)
-            : !IsRelayPeer(peer))
+        if (sourceReceipt != null
+            ? packetSourcePolicy == null || !packetSourcePolicy.IsCurrent(sourceReceipt)
+            : directPeer
+                ? !missionContext.TryGetPeer(senderId, out NetPeer mappedPeer) || !ReferenceEquals(mappedPeer, peer)
+                : !IsRelayPeer(peer))
             return;
 
         using (new AllowedThread())

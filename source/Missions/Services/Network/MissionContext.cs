@@ -1,4 +1,4 @@
-using Common.Messaging;
+﻿using Common.Messaging;
 using GameInterface.Services.Entity;
 using GameInterface.Services.Locations.Messages;
 using LiteNetLib;
@@ -28,6 +28,9 @@ public interface IMissionContext : IDisposable
     /// into a later re-entry (BR-054), where it is rebuilt from the server's fresh membership re-announce.
     /// </summary>
     void EndInstance();
+    /// <summary>Starts a fresh local Mission network visit; unchanged room membership does not call this.</summary>
+    void BeginInstance(string instanceId);
+    bool TryGetInstanceGeneration(string instanceId, out long generation);
 }
 
 /// <summary>
@@ -46,6 +49,9 @@ public class MissionContext : IMissionContext, IHandler
     private readonly Dictionary<NetPeer, string> peerToId = new();
 
     private readonly object gate = new();
+    private string activeInstanceId;
+    private long instanceGeneration;
+    private bool disposed;
 
     public IReadOnlyCollection<string> ControllersInMission
     {
@@ -78,6 +84,7 @@ public class MissionContext : IMissionContext, IHandler
 
     public void Dispose()
     {
+        lock (gate) disposed = true;
         messageBroker.Unsubscribe<NetworkMissionPeerEntered>(Handle_MissionPeerEntered);
         messageBroker.Unsubscribe<MissionPeerLeft>(Handle_MissionPeerLeft);
         messageBroker.Unsubscribe<MissionPeerDisconnected>(Handle_MissionPeerDisconnected);
@@ -91,6 +98,8 @@ public class MissionContext : IMissionContext, IHandler
     {
         lock (gate)
         {
+            activeInstanceId = null;
+            instanceGeneration = checked(instanceGeneration + 1);
             controllersInMission.Clear();
             idToPeer.Clear();
             peerToId.Clear();
@@ -101,6 +110,26 @@ public class MissionContext : IMissionContext, IHandler
     // exposed for the battle exit chokepoint (BattleInstanceLifecycle.Leave). A re-entry rebuilds it from the
     // server's membership re-announce, so this must not leave a stale controller behind.
     public void EndInstance() => Clear();
+
+    public void BeginInstance(string instanceId)
+    {
+        if (string.IsNullOrEmpty(instanceId)) throw new ArgumentException("A Mission instance is required", nameof(instanceId));
+        lock (gate)
+        {
+            if (disposed) throw new ObjectDisposedException(nameof(MissionContext));
+            activeInstanceId = instanceId;
+            instanceGeneration = checked(instanceGeneration + 1);
+        }
+    }
+
+    public bool TryGetInstanceGeneration(string instanceId, out long generation)
+    {
+        lock (gate)
+        {
+            generation = instanceGeneration;
+            return !disposed && activeInstanceId != null && activeInstanceId == instanceId;
+        }
+    }
 
     public void MapPeer(string controllerId, NetPeer peer)
     {

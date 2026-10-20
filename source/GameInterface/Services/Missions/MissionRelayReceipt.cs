@@ -12,6 +12,7 @@ public interface IMissionRelaySourceVerifier
 
 public interface ILocalMissionRelayReceiver
 {
+    /// <summary>True admits a qualified packet to the local queue; it is not an apply receipt or ACK.</summary>
     bool TryReceive(MissionRelayReceipt receipt, byte[] payload);
 }
 

@@ -289,6 +289,7 @@ public class LiteNetP2PClient : INatPunchListener, INetEventListener, IUpdateabl
             ClearPendingReliablePayloads();
             introductionRequestId = Guid.Empty;
         }
+        missionContext.BeginInstance(instanceId);
         steamBridge.Start(netManager.LocalPort);
     }
 
