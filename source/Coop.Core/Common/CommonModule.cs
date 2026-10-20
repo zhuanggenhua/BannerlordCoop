@@ -25,7 +25,8 @@ public abstract class CommonModule : Module
 {
     protected override void Load(ContainerBuilder builder)
     {
-        builder.RegisterType<SessionIdentity>().As<ISessionIdentity>().InstancePerLifetimeScope();
+        // One co-op root container is one room/session; child scopes share its identity.
+        builder.RegisterType<SessionIdentity>().As<ISessionIdentity>().SingleInstance();
         builder.RegisterType<CampaignAuthorityContext>().As<ICampaignAuthorityContext>()
             .As<ICampaignWorldExecution>().InstancePerLifetimeScope();
         builder.RegisterType<CampaignAuthorityMessageSender>()

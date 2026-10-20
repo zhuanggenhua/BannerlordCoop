@@ -9,6 +9,13 @@ public interface IMessageApplyObserver
     MessageApplyReceipt Begin(Type messageType);
 }
 
+/// <summary>Idle registrations grant no execution; confirmed competing sessions are rejected.</summary>
+public interface IMessageApplySessionObserver : IMessageApplyObserver
+{
+    bool IsConfirmed { get; }
+    void RejectBinding(string reason);
+}
+
 /// <summary>One classified result and its synchronous/game-thread descendants.</summary>
 public sealed class MessageApplyReceipt
 {
@@ -34,6 +41,8 @@ public sealed class MessageApplyScope : IDisposable
     private bool disposed;
     private MessageApplyScope(MessageApplyReceipt receipt, bool release)
     { previous = current; current = this.receipt = receipt; this.release = release; }
+    internal static bool HasCurrent => current != null;
+    internal static bool IsCurrent => current == null || current.IsCurrent;
     internal static MessageApplyScope Begin(IMessageApplyObserver observer, Type type) =>
         observer == null ? null : new MessageApplyScope(observer.Begin(type), true);
     internal static IDisposable Suspend() => new MessageApplyScope(null, false);

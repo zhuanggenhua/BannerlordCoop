@@ -20,6 +20,7 @@ using Xunit;
 
 namespace Coop.Tests.Server.States;
 
+[Collection(ModInformationRoleCollection.Name)]
 public class ListenAuthorityStartupTests
 {
     [Fact]

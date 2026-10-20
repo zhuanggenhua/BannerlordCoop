@@ -32,6 +32,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private static readonly ILogger Logger = LogManager.GetLogger<CampaignSimulationAvailabilityServerHandler>();
     private static long nextBarrierSequence;
 
+    private readonly CampaignApplyCompletion.Binding applyBinding;
     private readonly IMessageBroker messageBroker;
     private readonly ICampaignAuthorityAvailabilityCoordinator coordinator;
     private readonly IConnectionCollection connections;
@@ -143,7 +144,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         this.controllerIdProvider = controllerIdProvider;
         this.network = network;
         this.sessionIdentity = sessionIdentity;
-        CampaignApplyCompletion.Attach(messageBroker, sessionIdentity);
+        applyBinding = CampaignApplyCompletion.Attach(messageBroker, sessionIdentity);
         this.objectManager = objectManager;
         this.sendCoalescer = sendCoalescer;
         this.rosterCheckpointService = rosterCheckpointService;
@@ -166,6 +167,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
 
     public void Dispose()
     {
+        applyBinding?.Dispose();
         Interlocked.Exchange(ref disposed, 1);
         reconciliationTimer.Dispose();
         mapTimeTracker?.SetObserverClockSuspended(false);

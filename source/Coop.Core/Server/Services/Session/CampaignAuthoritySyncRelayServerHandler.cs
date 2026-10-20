@@ -31,6 +31,7 @@ public sealed class CampaignAuthoritySyncRelayServerHandler : IHandler
 
     private static readonly ILogger Logger = LogManager.GetLogger<CampaignAuthoritySyncRelayServerHandler>();
 
+    private readonly CampaignApplyCompletion.Binding applyBinding;
     private readonly IMessageBroker messageBroker;
     private readonly IConnectionCollection connections;
     private readonly IPlayerManager playerManager;
@@ -53,7 +54,7 @@ public sealed class CampaignAuthoritySyncRelayServerHandler : IHandler
         this.playerManager = playerManager;
         this.network = network;
         this.sessionIdentity = sessionIdentity;
-        CampaignApplyCompletion.Attach(messageBroker, sessionIdentity);
+        applyBinding = CampaignApplyCompletion.Attach(messageBroker, sessionIdentity);
         this.serializer = serializer;
         messageBroker.Subscribe<NetworkCampaignAuthoritySyncEnvelope>(Handle_AuthoritySyncEnvelope);
         messageBroker.Subscribe<PlayerDisconnected>(Handle_PlayerDisconnected);
@@ -61,6 +62,7 @@ public sealed class CampaignAuthoritySyncRelayServerHandler : IHandler
 
     public void Dispose()
     {
+        applyBinding?.Dispose();
         messageBroker.Unsubscribe<NetworkCampaignAuthoritySyncEnvelope>(Handle_AuthoritySyncEnvelope);
         messageBroker.Unsubscribe<PlayerDisconnected>(Handle_PlayerDisconnected);
         lock (gate) watermarks.Clear();
@@ -73,6 +75,7 @@ public sealed class CampaignAuthoritySyncRelayServerHandler : IHandler
 
     private void ApplyEnvelopeOnGameThread(MessagePayload<NetworkCampaignAuthoritySyncEnvelope> payload)
     {
+        if (applyBinding?.IsActive == false) return;
         if (payload.Who is not NetPeer peer || !payload.What.IsValid ||
             !connections.HasCompletedCampaignSynchronization(peer) ||
             !playerManager.TryGetPlayer(peer, out Player player) ||
@@ -111,7 +114,8 @@ public sealed class CampaignAuthoritySyncRelayServerHandler : IHandler
         }
 
         // AutoSync receive handlers marshal the actual object lookup and apply to the game thread.
-        messageBroker.PublishRuntime(peer, innerMessage);
+        using (applyBinding?.Observe(innerMessage.GetType()))
+            messageBroker.PublishRuntime(peer, innerMessage);
         network.SendAllBut(peer, payload.What);
     }
 

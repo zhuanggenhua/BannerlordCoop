@@ -20,6 +20,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
 {
     private static readonly ILogger Logger = LogManager.GetLogger<CampaignAuthorityFreezeClientHandler>();
 
+    private readonly CampaignApplyCompletion.Binding applyBinding;
     private readonly IMessageBroker messageBroker;
     private readonly INetwork network;
     private readonly ISessionIdentity sessionIdentity;
@@ -61,7 +62,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
         this.messageBroker = messageBroker;
         this.network = network;
         this.sessionIdentity = sessionIdentity;
-        CampaignApplyCompletion.Attach(messageBroker, sessionIdentity);
+        applyBinding = CampaignApplyCompletion.Attach(messageBroker, sessionIdentity);
         this.controllerIdProvider = controllerIdProvider;
         this.objectManager = objectManager;
         this.rosterCheckpointService = rosterCheckpointService;
@@ -78,6 +79,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
 
     public void Dispose()
     {
+        applyBinding?.Dispose();
         messageBroker.Unsubscribe<NetworkCampaignAuthorityFreezeRequest>(Handle_FreezeRequest);
         messageBroker.Unsubscribe<NetworkCampaignAuthorityFreezeCanceled>(Handle_FreezeCanceled);
     }
@@ -90,6 +92,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
 
     private void ApplyFreezeRequest(NetworkCampaignAuthorityFreezeRequest request)
     {
+        if (applyBinding?.IsActive == false) return;
         if (!sessionIdentity.TryGetConfirmedLease(out var lease) ||
             !Matches(request, lease, controllerIdProvider.ControllerId))
         {
@@ -229,6 +232,7 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
             canceled.RoomId, canceled.AuthorityId, canceled.AuthorityControllerId, canceled.Epoch);
         GameThread.EnqueueSafe(() =>
         {
+            if (applyBinding?.IsActive == false) return;
             attempts.TryGetValue(sessionIdentity, out var attempt);
             if (attempt != null && attempt.Lease == lease && attempt.Sequence == canceled.HandoffSequence &&
                 attempt.Candidate != canceled.CandidateControllerId) return;

@@ -24,6 +24,7 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
 {
     private static readonly ILogger Logger = LogManager.GetLogger<CampaignAuthorityHandoffBarrierClientHandler>();
 
+    private readonly CampaignApplyCompletion.Binding applyBinding;
     private readonly IMessageBroker messageBroker;
     private readonly INetwork network;
     private readonly ISessionIdentity sessionIdentity;
@@ -58,7 +59,7 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         this.messageBroker = messageBroker;
         this.network = network;
         this.sessionIdentity = sessionIdentity;
-        CampaignApplyCompletion.Attach(messageBroker, sessionIdentity);
+        applyBinding = CampaignApplyCompletion.Attach(messageBroker, sessionIdentity);
         this.controllerIdProvider = controllerIdProvider;
         this.objectManager = objectManager;
         this.rosterCheckpointService = rosterCheckpointService;
@@ -74,6 +75,7 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
 
     public void Dispose()
     {
+        applyBinding?.Dispose();
         messageBroker.Unsubscribe<ClientCampaignReady>(Handle_ClientCampaignReady);
         messageBroker.Unsubscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Unsubscribe<NetworkCampaignAuthorityHandoffBarrier>(Handle_HandoffBarrier);
@@ -109,6 +111,7 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
 
     private void ApplyBarrierOnGameThread(NetworkCampaignAuthorityHandoffBarrier barrier)
     {
+        if (applyBinding?.IsActive == false) return;
         if (!campaignSynchronized || !mapReady ||
             !sessionIdentity.TryGetConfirmedLease(out var lease) || !lease.IsPaused ||
             !Matches(barrier, lease, controllerIdProvider.ControllerId))

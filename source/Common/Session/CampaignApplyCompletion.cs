@@ -2,11 +2,12 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Threading;
 
 namespace Common.Session;
 
 /// <summary>Apply evidence owned by an existing session, never a second authority/registry manager.</summary>
-public sealed class CampaignApplyCompletion : IMessageApplyObserver
+public sealed class CampaignApplyCompletion : IMessageApplySessionObserver
 {
     private sealed class State { internal int Pending; internal string Fault; }
     private static readonly ConditionalWeakTable<ISessionIdentity, CampaignApplyCompletion> sessions = new();
@@ -17,9 +18,54 @@ public sealed class CampaignApplyCompletion : IMessageApplyObserver
     private CampaignApplyCompletion(ISessionIdentity identity) { this.identity = identity; }
     public static CampaignApplyCompletion For(ISessionIdentity identity) =>
         sessions.GetValue(identity ?? throw new ArgumentNullException(nameof(identity)), value => new CampaignApplyCompletion(value));
-    public static void Attach(IMessageBroker broker, ISessionIdentity identity)
+    private int bindingCount;
+    private long bindingGeneration;
+    private bool wasBound;
+    public bool IsConfirmed => identity.IsConfirmed;
+    public void RejectBinding(string reason)
     {
-        if (identity != null && broker is MessageBroker concrete) concrete.ObserveApplies(For(identity));
+        identity.TryGetConfirmedLease(out var lease);
+        RecordFailure(lease, reason);
+    }
+
+    public sealed class Binding : IDisposable
+    {
+        private IDisposable registration;
+        private readonly CampaignApplyCompletion owner;
+        private readonly long generation;
+        internal Binding(CampaignApplyCompletion owner, IDisposable registration, long generation)
+        { this.owner = owner; this.registration = registration; this.generation = generation; }
+        public bool IsActive => Volatile.Read(ref registration) != null && owner.IsBindingCurrent(generation);
+        public IDisposable Observe(Type messageType)
+        {
+            if (!IsActive) throw new ObjectDisposedException(nameof(Binding));
+            return owner.Observe(messageType);
+        }
+        public void Dispose() => Interlocked.Exchange(ref registration, null)?.Dispose();
+    }
+    public static Binding Attach(IMessageBroker broker, ISessionIdentity identity)
+    {
+        if (identity == null || broker is not MessageBroker concrete) return null;
+        var owner = For(identity);
+        long generation;
+        lock (owner.gate)
+        {
+            owner.bindingCount++; owner.wasBound = true;
+            generation = owner.bindingGeneration;
+        }
+        try { return new Binding(owner, concrete.ObserveApplies(owner, owner.ReleaseBinding), generation); }
+        catch { owner.ReleaseBinding(); throw; }
+    }
+    private void ReleaseBinding()
+    {
+        lock (gate)
+        {
+            if (--bindingCount == 0) bindingGeneration++;
+        }
+    }
+    private bool IsBindingCurrent(long generation)
+    {
+        lock (gate) return !wasBound || bindingCount > 0 && bindingGeneration == generation;
     }
     public IDisposable Observe(Type messageType) => MessageApplyScope.Begin(this, messageType);
     public IDisposable ObserveSource(Type messageType, AuthorityLease sourceLease)
@@ -49,11 +95,14 @@ public sealed class CampaignApplyCompletion : IMessageApplyObserver
     {
         lock (gate)
         {
+            if (wasBound && bindingCount == 0)
+                throw new ObjectDisposedException(nameof(Binding), "The campaign apply binding has ended.");
+            var generation = bindingGeneration;
             if (!states.TryGetValue(lease, out var state)) states.Add(lease, state = new State());
             state.Pending++;
             return new MessageApplyReceipt(reason =>
             { lock (gate) state.Fault ??= messageType.FullName + ": " + reason; NotifyProgress(); }, () =>
-            { lock (gate) state.Pending--; NotifyProgress(); }, isCurrent);
+            { lock (gate) state.Pending--; NotifyProgress(); }, () => IsBindingCurrent(generation) && isCurrent());
         }
     }
     public void RecordFailure(AuthorityLease lease, string reason)

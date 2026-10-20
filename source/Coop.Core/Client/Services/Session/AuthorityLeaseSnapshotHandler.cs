@@ -20,6 +20,7 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
 {
     private static readonly ILogger Logger = LogManager.GetLogger<AuthorityLeaseSnapshotHandler>();
 
+    private readonly CampaignApplyCompletion.Binding applyBinding;
     private readonly IMessageBroker messageBroker;
     private readonly ISessionIdentity sessionIdentity;
     private readonly ICampaignMovementCheckpointService movement;
@@ -87,7 +88,7 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
     {
         this.messageBroker = messageBroker;
         this.sessionIdentity = sessionIdentity;
-        CampaignApplyCompletion.Attach(messageBroker, sessionIdentity);
+        applyBinding = CampaignApplyCompletion.Attach(messageBroker, sessionIdentity);
         this.movement = movement;
         this.clock = clock;
         this.network = network;
@@ -99,6 +100,7 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
 
     public void Dispose()
     {
+        applyBinding?.Dispose();
         Interlocked.Exchange(ref disposed, 1);
         Interlocked.Exchange(ref deferredSnapshot, null);
         CampaignApplyCompletion.For(sessionIdentity).Progressed -= OnApplyProgressed;

@@ -14,6 +14,7 @@ public sealed class CampaignAuthoritySyncEnvelopeClientHandler : IHandler
 {
     private static readonly ILogger Logger = LogManager.GetLogger<CampaignAuthoritySyncEnvelopeClientHandler>();
 
+    private readonly CampaignApplyCompletion.Binding applyBinding;
     private readonly IMessageBroker messageBroker;
     private readonly ISessionIdentity sessionIdentity;
     private readonly ICommonSerializer serializer;
@@ -31,12 +32,16 @@ public sealed class CampaignAuthoritySyncEnvelopeClientHandler : IHandler
     {
         this.messageBroker = messageBroker;
         this.sessionIdentity = sessionIdentity;
-        CampaignApplyCompletion.Attach(messageBroker, sessionIdentity);
+        applyBinding = CampaignApplyCompletion.Attach(messageBroker, sessionIdentity);
         this.serializer = serializer;
         messageBroker.Subscribe<NetworkCampaignAuthoritySyncEnvelope>(Handle_AuthoritySyncEnvelope);
     }
 
-    public void Dispose() => messageBroker.Unsubscribe<NetworkCampaignAuthoritySyncEnvelope>(Handle_AuthoritySyncEnvelope);
+    public void Dispose()
+    {
+        applyBinding?.Dispose();
+        messageBroker.Unsubscribe<NetworkCampaignAuthoritySyncEnvelope>(Handle_AuthoritySyncEnvelope);
+    }
 
     private void Handle_AuthoritySyncEnvelope(MessagePayload<NetworkCampaignAuthoritySyncEnvelope> payload)
     {
@@ -45,6 +50,7 @@ public sealed class CampaignAuthoritySyncEnvelopeClientHandler : IHandler
 
     private void ApplyEnvelopeOnGameThread(MessagePayload<NetworkCampaignAuthoritySyncEnvelope> payload)
     {
+        if (applyBinding?.IsActive == false) return;
         var envelope = payload.What;
         if (!envelope.IsValid || !sessionIdentity.TryGetConfirmedLease(out var lease) || lease.IsPaused ||
             !MatchesCurrentAuthority(envelope, lease))
@@ -82,7 +88,8 @@ public sealed class CampaignAuthoritySyncEnvelopeClientHandler : IHandler
         }
 
         // Lease snapshots and envelopes share this queue, so the preceding epoch finishes first.
-        messageBroker.PublishRuntime(payload.Who, innerMessage);
+        using (applyBinding?.Observe(innerMessage.GetType()))
+            messageBroker.PublishRuntime(payload.Who, innerMessage);
     }
 
     private bool TryAdvanceWatermark(NetworkCampaignAuthoritySyncEnvelope envelope)
