@@ -82,6 +82,9 @@ internal sealed class CampaignCycleDiagnostics
             total.Expected += batch.Expected;
             total.Completed += batch.Completed;
             total.Mismatches += batch.Mismatches;
+            total.MembershipChanges += batch.MembershipChanges;
+            total.MembershipChangesHash = Hash(total.MembershipChangesHash + batch.MembershipChangesHash);
+            if (total.FirstMembershipChange == null) total.FirstMembershipChange = batch.FirstMembershipChange;
             total.ExpectedHash = Hash(total.ExpectedHash + batch.ExpectedHash);
             total.CompletedHash = Hash(total.CompletedHash + batch.CompletedHash);
             if (batch.Mismatches != 0 && total.FirstFailure == null) total.FirstFailure = batch.FirstFailure;
@@ -152,6 +155,9 @@ internal sealed class CampaignTickerAudit
     public string ExpectedHash { get; set; } = "";
     public string CompletedHash { get; set; } = "";
     public string FirstFailure { get; set; }
+    public long MembershipChanges { get; set; }
+    public string MembershipChangesHash { get; set; } = "";
+    public string FirstMembershipChange { get; set; }
     public CampaignTickerAudit Copy() => (CampaignTickerAudit)MemberwiseClone();
 }
 
@@ -216,6 +222,19 @@ internal static class CampaignTickerEvidencePatches
     // CLR4 cannot build Harmony wrappers for these native closed generic methods.
     // Detour only the five nongeneric callers; keep the original generic methods intact.
     internal static IEnumerable<MethodBase> TargetMethods() => GroupTargetMethods();
+
+    // CLR4 may have compiled the parent's direct calls before these five callers
+    // were detoured. Rebuild it only after every target in this class succeeded.
+    [HarmonyCleanup]
+    private static Exception Cleanup(MethodBase original, Exception exception, Harmony harmony)
+    {
+        if (original == null && exception == null)
+            harmony.Patch(AccessTools.Method(typeof(CampaignPeriodicEventManager), "TickPeriodicEvents"),
+                transpiler: new HarmonyMethod(typeof(CampaignTickerEvidencePatches), nameof(ParentIdentity)));
+        return exception;
+    }
+
+    private static IEnumerable<CodeInstruction> ParentIdentity(IEnumerable<CodeInstruction> instructions) => instructions;
 
     [HarmonyTranspiler]
     internal static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase __originalMethod)
@@ -332,6 +351,7 @@ internal static class CampaignTickerEvidencePatches
                 new CampaignTickerAudit { Ticker = binding.Name, Node = controller?.ControllerId,
                     AuthorityId = lease.AuthorityId, RoomId = lease.RoomId, Epoch = lease.Epoch,
                     LeaseKnown = known, LocalWriter = authority?.IsLocalCampaignAuthority == true }, timeUnitsElapsed);
+            EnableLiveSelection(batch);
             try { batch.Frame = TaleWorlds.Engine.Utilities.EngineFrameNo; }
             catch (Exception error) { batch.DiagnosticError = error.ToString(); }
             return batch;
@@ -344,12 +364,13 @@ internal static class CampaignTickerEvidencePatches
     {
         var batch = new TickerBatch { Instance = instance, Collector = collector, Audit = audit,
             Parent = current, Depth = (current?.Depth ?? 0) + 1, StartedUtc = DateTime.UtcNow,
-            ThreadId = Thread.CurrentThread.ManagedThreadId, Elapsed = elapsed };
+            ThreadId = Thread.CurrentThread.ManagedThreadId, Elapsed = elapsed, Callback = callback };
         current = batch;
         try
         {
             var ticker = Traverse.Create(instance);
-            batch.Ids = ReadIds(instance);
+            batch.InitialEntities = ReadEntities(instance);
+            batch.Ids = batch.InitialEntities.Select(value => value.StringId).ToArray();
             batch.StartIndex = ticker.Property<int>("Index").Value;
             batch.StartDebt = ticker.Property<double>("TickDebt").Value;
             batch.Expected = Expected(batch.Ids, batch.StartIndex, batch.StartDebt, elapsed,
@@ -359,12 +380,117 @@ internal static class CampaignTickerEvidencePatches
         return batch;
     }
 
-    private static string[] ReadIds(object instance)
+    private static MBObjectBase[] ReadEntities(object instance)
     {
-        var ids = ((System.Collections.IEnumerable)Traverse.Create(instance).Field("_list").GetValue())
-            .Cast<MBObjectBase>().Select(value => value.StringId).Take(EvidenceLimit + 1).ToArray();
-        if (ids.Length > EvidenceLimit) throw new InvalidOperationException("Ticker evidence list exceeds complete capture limit; evidence incomplete.");
-        return ids;
+        var entities = ((System.Collections.IEnumerable)Traverse.Create(instance).Field("_list").GetValue())
+            .Cast<MBObjectBase>().Take(EvidenceLimit + 1).ToArray();
+        if (entities.Length > EvidenceLimit) throw new InvalidOperationException("Ticker evidence list exceeds complete capture limit; evidence incomplete.");
+        return entities;
+    }
+
+    private static bool SameEntities(MBObjectBase[] left, MBObjectBase[] right) =>
+        left.Length == right.Length && left.Zip(right, (a, b) => ReferenceEquals(a, b)).All(equal => equal);
+
+    internal static void EnableLiveSelection(TickerBatch batch)
+    {
+        batch.Live = true;
+        batch.ObservedEntities = batch.InitialEntities;
+        batch.ObservedIds = batch.Ids;
+        batch.LiveIndex = batch.StartIndex;
+        batch.InitialExpectedCount = batch.Expected.Length;
+        batch.InitialEndDebt = batch.EndDebt;
+        // Native adds debt once using the initial count; callback mutations do not recompute it.
+        batch.LiveDebt = batch.Ids.Length == 0 ? 0 : batch.StartDebt + batch.Elapsed * batch.Ids.Length;
+    }
+
+    private static void Incomplete(TickerBatch batch, string reason)
+    { if (batch.DiagnosticError == null) batch.DiagnosticError = reason; }
+
+    internal static CallbackBoundary BeginCallback(string callback, object entity)
+    {
+        var batch = current;
+        if (batch == null) return null;
+        var boundary = new CallbackBoundary { Batch = batch, Callback = callback, Entity = entity as MBObjectBase,
+            Parent = batch.ActiveCallback, ThreadId = Thread.CurrentThread.ManagedThreadId, StartedUtc = DateTime.UtcNow };
+        if (!batch.Live) return boundary;
+        batch.ActiveCallback = boundary;
+        try
+        {
+            if (boundary.Parent != null) throw new InvalidOperationException("Nested callback without a nested native ticker boundary.");
+            if (batch.LiveExpected.Count == EvidenceLimit) throw new InvalidOperationException("Live callback selection evidence exceeds complete capture limit.");
+            var entities = ReadEntities(batch.Instance);
+            var ids = entities.Select(value => value.StringId).ToArray();
+            if (!SameEntities(batch.ObservedEntities, entities) || !batch.ObservedIds.SequenceEqual(ids))
+                throw new InvalidOperationException("Native ticker membership changed outside an observed callback.");
+            if (entities.Length == 0 || batch.LiveDebt <= 1 || double.IsNaN(batch.LiveDebt) || double.IsInfinity(batch.LiveDebt))
+                throw new InvalidOperationException("Native callback has no independently predicted due selection.");
+            int next = batch.LiveIndex + 1;
+            if (next >= entities.Length) next = 0;
+            boundary.Index = next;
+            boundary.BeforeIds = ids;
+            boundary.BeforeEntities = entities;
+            boundary.EntityId = boundary.Entity?.StringId;
+            // The argument is checked against the previous complete post list, never used as its own expectation.
+            batch.LiveExpected.Add(batch.Callback + "|" + batch.ObservedIds[next]);
+            var ticker = Traverse.Create(batch.Instance);
+            boundary.ObservedIndex = ticker.Property<int>("Index").Value;
+            boundary.ObservedDebt = ticker.Property<double>("TickDebt").Value;
+            batch.LiveSelectionMatches &= callback == batch.Callback && ReferenceEquals(entity, batch.ObservedEntities[next]) &&
+                boundary.EntityId == batch.ObservedIds[next] && boundary.ObservedIndex == next && boundary.ObservedDebt == batch.LiveDebt;
+            boundary.Ready = true;
+        }
+        catch (Exception error) { Incomplete(batch, error.ToString()); }
+        return boundary;
+    }
+
+    internal static Exception EndCallback(Exception original, bool ranOriginal, CallbackBoundary boundary)
+    {
+        if (boundary == null) return original;
+        var batch = boundary.Batch;
+        if (!batch.Live)
+        {
+            if (original == null && ranOriginal) Completed(boundary.Callback, boundary.Entity);
+            return original;
+        }
+        try
+        {
+            if (!ReferenceEquals(current, batch) || !ReferenceEquals(batch.ActiveCallback, boundary) ||
+                boundary.ThreadId != Thread.CurrentThread.ManagedThreadId)
+                throw new InvalidOperationException("Incomplete callback thread/nesting boundary.");
+            if (!boundary.Ready) return original;
+            var entities = ReadEntities(batch.Instance);
+            var ids = entities.Select(value => value.StringId).ToArray();
+            var ticker = Traverse.Create(batch.Instance);
+            batch.LiveSelectionMatches &= ticker.Property<int>("Index").Value == boundary.Index &&
+                ticker.Property<double>("TickDebt").Value == batch.LiveDebt;
+            if (!SameEntities(boundary.BeforeEntities, entities) || !boundary.BeforeIds.SequenceEqual(ids))
+            {
+                string evidence = JsonConvert.SerializeObject(new { boundary.Callback, boundary.EntityId, boundary.StartedUtc,
+                    finishedUtc = DateTime.UtcNow, batch.Audit.Ticker, batch.Audit.Node, batch.Audit.RoomId, batch.Audit.AuthorityId, batch.Audit.Epoch,
+                    expectedIndex = boundary.Index, beforeIds = boundary.BeforeIds, afterIds = ids,
+                    referenceSequenceChanged = !SameEntities(boundary.BeforeEntities, entities),
+                    beforeReferenceFingerprints = boundary.BeforeEntities.Select(RuntimeHelpers.GetHashCode).ToArray(),
+                    afterReferenceFingerprints = entities.Select(RuntimeHelpers.GetHashCode).ToArray(),
+                    referenceFingerprintScope = "Process-local diagnostics only; matching uses ReferenceEquals, not hashes.",
+                    boundary.ObservedIndex, entryDebtBits = BitConverter.DoubleToInt64Bits(boundary.ObservedDebt),
+                    expectedDebtBitsBeforeNativeDecrement = BitConverter.DoubleToInt64Bits(batch.LiveDebt),
+                    batch.Frame, boundary.ThreadId, batch.Depth, originalException = original?.ToString() });
+                batch.Audit.MembershipChanges++;
+                batch.Audit.MembershipChangesHash = CampaignCycleDiagnostics.Hash(batch.Audit.MembershipChangesHash + evidence);
+                if (batch.Audit.FirstMembershipChange == null) batch.Audit.FirstMembershipChange = evidence;
+            }
+            batch.ObservedEntities = entities; batch.ObservedIds = ids; batch.LiveIndex = boundary.Index;
+            if (!ranOriginal) Incomplete(batch, "Native callback original was skipped.");
+            if (original == null)
+            {
+                // Finalizer runs before native delegate return/decrement; predict that one native decrement.
+                batch.LiveDebt--;
+                if (ranOriginal) batch.Completed.Add(boundary.Callback + "|" + boundary.EntityId);
+            }
+        }
+        catch (Exception error) { Incomplete(batch, error.ToString()); }
+        finally { batch.ActiveCallback = boundary.Parent; }
+        return original;
     }
 
     internal static string[] Expected(string[] ids, int index, double debt, double elapsed, out int endIndex, out double endDebt)
@@ -386,6 +512,7 @@ internal static class CampaignTickerEvidencePatches
     internal static void Completed(string callback, object entity)
     {
         if (current == null || entity is not MBObjectBase value) return;
+        if (current.Live) Incomplete(current, "Live callback completion lacks a complete observed Prefix/Finalizer boundary.");
         if (current.Completed.Count == EvidenceLimit)
         { current.DiagnosticError = "Ticker completed callbacks exceed complete capture limit; evidence incomplete."; return; }
         current.Completed.Add(callback + "|" + value.StringId);
@@ -415,6 +542,15 @@ internal static class CampaignTickerEvidencePatches
 
     internal static Exception FinishBatch(Exception originalException, TickerBatch batch)
     {
+        if (batch.Live)
+        {
+            if (originalException == null && (batch.LiveExpected.Count != batch.InitialExpectedCount || batch.LiveDebt != batch.InitialEndDebt))
+                Incomplete(batch, "Live selection count/debt differs from the independent initial native budget.");
+            batch.Expected = batch.LiveExpected.ToArray(); batch.EndIndex = batch.LiveIndex; batch.EndDebt = batch.LiveDebt;
+            if (batch.ActiveCallback != null) Incomplete(batch, "Native ticker returned with an unfinished callback boundary.");
+            if (originalException == null && (batch.LiveDebt > 1 || double.IsNaN(batch.LiveDebt) || double.IsInfinity(batch.LiveDebt)))
+                Incomplete(batch, "Native ticker returned before independently due callbacks were consumed.");
+        }
         bool sequenceMatches = batch.Expected.SequenceEqual(batch.Completed), membershipMatches = false,
             indexMatches = false, debtMatches = false;
         string[] actualIds = null;
@@ -424,16 +560,18 @@ internal static class CampaignTickerEvidencePatches
         try
         {
             var ticker = Traverse.Create(batch.Instance);
-            actualIds = ReadIds(batch.Instance);
+            var actualEntities = ReadEntities(batch.Instance);
+            actualIds = actualEntities.Select(value => value.StringId).ToArray();
             actualIndex = ticker.Property<int>("Index").Value;
             actualDebt = ticker.Property<double>("TickDebt").Value;
-            membershipMatches = batch.Ids.SequenceEqual(actualIds);
+            membershipMatches = batch.Live ? SameEntities(batch.ObservedEntities, actualEntities) && batch.ObservedIds.SequenceEqual(actualIds)
+                : batch.Ids.SequenceEqual(actualIds);
             indexMatches = actualIndex == batch.EndIndex;
             debtMatches = actualDebt == batch.EndDebt;
         }
         catch (Exception error) { batch.DiagnosticError = (batch.DiagnosticError == null ? "" : batch.DiagnosticError + "\n") + error; }
         bool matches = originalException == null && batch.DiagnosticError == null && sequenceMatches &&
-            membershipMatches && indexMatches && debtMatches;
+            membershipMatches && indexMatches && debtMatches && (!batch.Live || batch.LiveSelectionMatches);
         var audit = batch.Audit;
         audit.Expected = batch.Expected.Length; audit.Completed = batch.Completed.Count;
         audit.ExpectedHash = CampaignCycleDiagnostics.Hash(string.Join("|", batch.Expected));
@@ -442,7 +580,8 @@ internal static class CampaignTickerEvidencePatches
         if (!matches) audit.FirstFailure = JsonConvert.SerializeObject(new
         {
             sequenceMatches, membershipMatches, indexMatches, debtMatches,
-            complete = batch.DiagnosticError == null,
+            complete = batch.DiagnosticError == null, batch.Live, batch.LiveSelectionMatches,
+            batch.InitialExpectedCount, initialExpectedDebtBits = BitConverter.DoubleToInt64Bits(batch.InitialEndDebt),
             batch.StartedUtc, finishedUtc = DateTime.UtcNow, batch.Frame, batch.ThreadId, batch.Depth,
             finishedThreadId = Thread.CurrentThread.ManagedThreadId,
             nativeTicker = batch.Instance?.GetType().FullName,
@@ -464,6 +603,14 @@ internal static class CampaignTickerEvidencePatches
         public object Instance;
         public CampaignCycleDiagnostics Collector;
         public string DiagnosticError;
+        public string Callback;
+        public MBObjectBase[] InitialEntities = Array.Empty<MBObjectBase>(), ObservedEntities = Array.Empty<MBObjectBase>();
+        public string[] ObservedIds = Array.Empty<string>();
+        public bool Live, LiveSelectionMatches = true;
+        public int LiveIndex, InitialExpectedCount;
+        public double LiveDebt, InitialEndDebt;
+        public readonly List<string> LiveExpected = new();
+        public CallbackBoundary ActiveCallback;
         public string[] Ids = Array.Empty<string>(), Expected = Array.Empty<string>();
         public readonly List<string> Completed = new();
         public int StartIndex, EndIndex;
@@ -472,6 +619,20 @@ internal static class CampaignTickerEvidencePatches
         public TickerBatch Parent;
         public int Frame, ThreadId, Depth;
         public DateTime StartedUtc;
+    }
+
+    internal sealed class CallbackBoundary
+    {
+        public TickerBatch Batch;
+        public CallbackBoundary Parent;
+        public string Callback, EntityId;
+        public MBObjectBase Entity;
+        public MBObjectBase[] BeforeEntities;
+        public string[] BeforeIds;
+        public int Index, ThreadId, ObservedIndex;
+        public double ObservedDebt;
+        public DateTime StartedUtc;
+        public bool Ready;
     }
 }
 
@@ -518,9 +679,12 @@ internal static class CampaignTickerCallbackEvidencePatches
             "DailyTickTown", "DailyTickHero", "DailyTickClan", "HourlyTickClan", "TickPartialHourlyAi", "QuarterDailyPartyTick" })
             yield return AccessTools.Method(typeof(CampaignEventDispatcher), name);
     }
-    [HarmonyPostfix]
-    private static void Postfix(object[] __args, MethodBase __originalMethod, bool __runOriginal)
-    { if (__runOriginal) CampaignTickerEvidencePatches.Completed(__originalMethod.DeclaringType.Name + "." + __originalMethod.Name, __args[0]); }
+    [HarmonyPrefix]
+    private static void Prefix(object[] __args, MethodBase __originalMethod, out CampaignTickerEvidencePatches.CallbackBoundary __state) =>
+        __state = CampaignTickerEvidencePatches.BeginCallback(__originalMethod.DeclaringType.Name + "." + __originalMethod.Name, __args[0]);
+    [HarmonyFinalizer]
+    private static Exception Finalizer(Exception __exception, bool __runOriginal, CampaignTickerEvidencePatches.CallbackBoundary __state) =>
+        CampaignTickerEvidencePatches.EndCallback(__exception, __runOriginal, __state);
 }
 
 [HarmonyPatch]
@@ -531,9 +695,12 @@ internal static class CampaignMobilePartyCallbackEvidencePatches
         yield return AccessTools.Method(typeof(MobileParty), "HourlyTick");
         yield return AccessTools.Method(typeof(MobileParty), "DailyTick");
     }
-    [HarmonyPostfix]
-    private static void Postfix(MobileParty __instance, MethodBase __originalMethod, bool __runOriginal)
-    { if (__runOriginal) CampaignTickerEvidencePatches.Completed("MobileParty." + __originalMethod.Name, __instance); }
+    [HarmonyPrefix]
+    private static void Prefix(MobileParty __instance, MethodBase __originalMethod, out CampaignTickerEvidencePatches.CallbackBoundary __state) =>
+        __state = CampaignTickerEvidencePatches.BeginCallback("MobileParty." + __originalMethod.Name, __instance);
+    [HarmonyFinalizer]
+    private static Exception Finalizer(Exception __exception, bool __runOriginal, CampaignTickerEvidencePatches.CallbackBoundary __state) =>
+        CampaignTickerEvidencePatches.EndCallback(__exception, __runOriginal, __state);
 }
 
 [HarmonyPatch]

@@ -1,4 +1,4 @@
-using Common;
+﻿using Common;
 using GameInterface.Services.CampaignAuthority;
 using Newtonsoft.Json;
 using TaleWorlds.CampaignSystem;
@@ -74,6 +74,28 @@ public sealed class CampaignCycleDiagnosticsTests
         Assert.Equal(native.DeclaringType, wrapper.GetParameters()[0].ParameterType);
         Assert.Throws<InvalidOperationException>(() => CampaignTickerEvidencePatches.Transpiler(new[] { new CodeInstruction(OpCodes.Nop) }, target));
         Assert.Throws<InvalidOperationException>(() => CampaignTickerEvidencePatches.WrapperFor(typeof(object)));
+    }
+
+    [Fact]
+    public void ParentRebuildUsesActualOwnerOnlyAtSuccessfulClassEndAndPreservesErrors()
+    {
+        var harmony = new Harmony("coop.tests.ticker-class-end");
+        var cleanup = AccessTools.Method(typeof(CampaignTickerEvidencePatches), "Cleanup");
+        var parent = AccessTools.Method(typeof(CampaignPeriodicEventManager), "TickPeriodicEvents");
+        var error = new InvalidOperationException("patch install fault");
+        try
+        {
+            Assert.Null(cleanup.Invoke(null, new object?[] { parent, null, harmony }));
+            Assert.Same(error, cleanup.Invoke(null, new object?[] { null, error, harmony }));
+            Assert.DoesNotContain(Harmony.GetPatchInfo(parent)?.Transpilers.AsEnumerable() ?? Enumerable.Empty<Patch>(), p => p.owner == harmony.Id);
+            Assert.Null(cleanup.Invoke(null, new object?[] { null, null, harmony }));
+            var patch = Assert.Single(Harmony.GetPatchInfo(parent).Transpilers, p => p.owner == harmony.Id);
+            Assert.Equal("ParentIdentity", patch.PatchMethod.Name);
+            var instructions = new[] { new CodeInstruction(OpCodes.Nop) };
+            Assert.Same(instructions, AccessTools.Method(typeof(CampaignTickerEvidencePatches), "ParentIdentity")
+                .Invoke(null, new object[] { instructions }));
+        }
+        finally { harmony.UnpatchAll(harmony.Id); }
     }
 
     [Fact]
@@ -359,7 +381,15 @@ public sealed class CampaignCycleDiagnosticsTests
     {
         var entity = (T)RuntimeHelpers.GetUninitializedObject(typeof(T)); entity.StringId = id;
         ticker.Initialize(new MBReadOnlyList<T>(new[] { entity }), value =>
-        { nativeCall(); CampaignTickerEvidencePatches.Completed(callback, value); }, false);
+        {
+            // This callsite fixture supplies the same complete callback boundary;
+            // real production Prefix/Finalizer execution is tested separately.
+            var boundary = CampaignTickerEvidencePatches.BeginCallback(callback, value);
+            Exception? error = null;
+            try { nativeCall(); }
+            catch (Exception original) { error = original; throw; }
+            finally { CampaignTickerEvidencePatches.EndCallback(error!, true, boundary); }
+        }, false);
         ticker.TickDebt = 1.5;
     }
 
