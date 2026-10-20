@@ -69,17 +69,24 @@ public class CampaignCheckpointReadinessTests
         Assert.Same(task.Object, campaign.CampaignLateAITickTask);
     }
 
-    [Fact]
-    public void NativeTaskCompletionCannotCertifyANewlyIncompleteGraph()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NativeTaskCompletionCannotCertifyANewlyIncompleteGraphOrLifetime(bool graphBecomesIncomplete)
     {
         var campaign = (Campaign)RuntimeHelpers.GetUninitializedObject(typeof(Campaign));
         var graph = Graph(true);
         var task = new Mock<ITask>();
-        task.Setup(value => value.Wait()).Callback(() => SetGraph(graph, false));
+        var lifetime = Lifetime(true);
+        task.Setup(value => value.Wait()).Callback(() =>
+        {
+            if (graphBecomesIncomplete) SetGraph(graph, false);
+            else lifetime.SetupGet(value => value.IsComplete).Returns(false);
+        });
         campaign.CampaignLateAITickTask = task.Object;
-        Assert.False(new CampaignAsyncTaskDrain(Lifetime(true).Object, graph.Object).TryDrain(campaign));
+        Assert.False(new CampaignAsyncTaskDrain(lifetime.Object, graph.Object).TryDrain(campaign));
         task.Verify(value => value.Wait(), Times.Once);
-        Assert.Null(campaign.CampaignLateAITickTask);
+        Assert.Same(task.Object, campaign.CampaignLateAITickTask);
     }
 
     private static Mock<ICampaignObjectGraphReadiness> Graph(bool ready)

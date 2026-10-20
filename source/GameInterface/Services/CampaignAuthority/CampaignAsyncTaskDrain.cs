@@ -35,7 +35,6 @@ internal sealed class CampaignAsyncTaskDrain : ICampaignAsyncTaskDrain
             // RealTick waits for this task at the beginning of the next frame. A handoff can
             // arrive before that frame, so drain it while its original lease still permits writes.
             campaign.WaitAsyncTasks();
-            campaign.CampaignLateAITickTask = null;
             return Ready();
         }
         catch (Exception ex)
