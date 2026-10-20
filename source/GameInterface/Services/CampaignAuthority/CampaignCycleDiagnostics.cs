@@ -13,6 +13,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using Newtonsoft.Json;
+using System.Reflection.Emit;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Settlements;
@@ -212,10 +213,81 @@ internal static class CampaignTickerEvidencePatches
         foreach (string name in new[] { "MobilePartyHourlyTick", "PeriodicHourlyTick", "PeriodicDailyTick", "PeriodicQuarterDailyTick", "TickPartialHourlyAi" })
             yield return AccessTools.Method(typeof(CampaignPeriodicEventManager), name);
     }
-    internal static IEnumerable<MethodBase> TargetMethods() => GroupTargetMethods()
-        .SelectMany(method => Bindings(method.Name))
-        .Select(binding => AccessTools.Method(AccessTools.Field(typeof(CampaignPeriodicEventManager), binding.Name).FieldType,
-            "PeriodicTickSome", new[] { typeof(double) })).Distinct();
+    // CLR4 cannot build Harmony wrappers for these native closed generic methods.
+    // Detour only the five nongeneric callers; keep the original generic methods intact.
+    internal static IEnumerable<MethodBase> TargetMethods() => GroupTargetMethods();
+
+    [HarmonyTranspiler]
+    internal static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions, MethodBase __originalMethod)
+    {
+        var result = instructions.ToList();
+        int replaced = 0;
+        foreach (var instruction in result)
+        {
+            if ((instruction.opcode != OpCodes.Call && instruction.opcode != OpCodes.Callvirt) ||
+                instruction.operand is not MethodInfo method || method.Name != "PeriodicTickSome") continue;
+            var wrapper = WrapperFor(method.DeclaringType);
+            if (method.ReturnType != typeof(void) || method.GetParameters().Length != 1 ||
+                method.GetParameters()[0].ParameterType != typeof(double))
+                throw new InvalidOperationException("Unexpected native periodic ticker signature.");
+            // Keep the same receiver and double on the evaluation stack, labels and EH blocks.
+            instruction.opcode = OpCodes.Call;
+            instruction.operand = wrapper;
+            replaced++;
+        }
+        if (replaced != Bindings(__originalMethod.Name).Length)
+            throw new InvalidOperationException("Native periodic ticker call-site coverage changed: " + __originalMethod.Name);
+        return result;
+    }
+
+    internal static MethodInfo WrapperFor(Type tickerType)
+    {
+        if (tickerType == null || !tickerType.IsConstructedGenericType ||
+            tickerType.GetGenericTypeDefinition() != typeof(CampaignPeriodicEventManager.PeriodicTicker<>))
+            throw new InvalidOperationException("Unexpected native periodic ticker type.");
+        var entity = tickerType.GetGenericArguments()[0];
+        string name = entity == typeof(MobileParty) ? nameof(TickMobileParty) :
+            entity == typeof(Settlement) ? nameof(TickSettlement) : entity == typeof(Town) ? nameof(TickTown) :
+            entity == typeof(Hero) ? nameof(TickHero) : entity == typeof(Clan) ? nameof(TickClan) :
+            throw new InvalidOperationException("Unsupported native periodic ticker entity.");
+        return AccessTools.Method(typeof(CampaignTickerEvidencePatches), name);
+    }
+
+    private static void TickMobileParty(CampaignPeriodicEventManager.PeriodicTicker<MobileParty> ticker, double elapsed)
+    {
+        var batch = BeginNativeBatch(ticker, elapsed);
+        try { ticker.PeriodicTickSome(elapsed); }
+        catch (Exception original) { CompleteBatch(original, true, batch); throw; }
+        CompleteBatch(null, true, batch);
+    }
+    private static void TickSettlement(CampaignPeriodicEventManager.PeriodicTicker<Settlement> ticker, double elapsed)
+    {
+        var batch = BeginNativeBatch(ticker, elapsed);
+        try { ticker.PeriodicTickSome(elapsed); }
+        catch (Exception original) { CompleteBatch(original, true, batch); throw; }
+        CompleteBatch(null, true, batch);
+    }
+    private static void TickTown(CampaignPeriodicEventManager.PeriodicTicker<Town> ticker, double elapsed)
+    {
+        var batch = BeginNativeBatch(ticker, elapsed);
+        try { ticker.PeriodicTickSome(elapsed); }
+        catch (Exception original) { CompleteBatch(original, true, batch); throw; }
+        CompleteBatch(null, true, batch);
+    }
+    private static void TickHero(CampaignPeriodicEventManager.PeriodicTicker<Hero> ticker, double elapsed)
+    {
+        var batch = BeginNativeBatch(ticker, elapsed);
+        try { ticker.PeriodicTickSome(elapsed); }
+        catch (Exception original) { CompleteBatch(original, true, batch); throw; }
+        CompleteBatch(null, true, batch);
+    }
+    private static void TickClan(CampaignPeriodicEventManager.PeriodicTicker<Clan> ticker, double elapsed)
+    {
+        var batch = BeginNativeBatch(ticker, elapsed);
+        try { ticker.PeriodicTickSome(elapsed); }
+        catch (Exception original) { CompleteBatch(original, true, batch); throw; }
+        CompleteBatch(null, true, batch);
+    }
 
     internal static (string Name, string Callback)[] Bindings(string method)
     {
@@ -242,31 +314,29 @@ internal static class CampaignTickerEvidencePatches
         }
     }
 
-    [HarmonyPrefix]
-    private static void Prefix(object __instance, double timeUnitsElapsed, out TickerBatch __state)
+    private static TickerBatch BeginNativeBatch(object instance, double timeUnitsElapsed)
     {
-        __state = null;
         var campaign = Campaign.Current;
-        if (campaign?._campaignPeriodicEventManager == null) return;
-        // Resolve by the actual instance, not the generic method's reported T: reference-type
-        // instantiations can share native code. Only this Campaign's twenty ticker fields count.
+        if (campaign?._campaignPeriodicEventManager == null) return null;
+        // Observe only the actual Campaign's ticker instances, including repeated closed types.
         foreach (var method in GroupTargetMethods())
         foreach (var binding in Bindings(method.Name))
         {
             if (!ReferenceEquals(AccessTools.Field(typeof(CampaignPeriodicEventManager), binding.Name)
-                    .GetValue(campaign._campaignPeriodicEventManager), __instance)) continue;
+                    .GetValue(campaign._campaignPeriodicEventManager), instance)) continue;
             ContainerProvider.TryResolve<IControllerIdProvider>(out var controller);
             ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authority);
             AuthorityLease lease = default;
             bool known = authority?.TryGetCurrentLease(out lease) == true;
-            __state = BeginBatch(__instance, binding.Callback, CampaignCycleDispatchPatches.For(campaign),
+            var batch = BeginBatch(instance, binding.Callback, CampaignCycleDispatchPatches.For(campaign),
                 new CampaignTickerAudit { Ticker = binding.Name, Node = controller?.ControllerId,
                     AuthorityId = lease.AuthorityId, RoomId = lease.RoomId, Epoch = lease.Epoch,
                     LeaseKnown = known, LocalWriter = authority?.IsLocalCampaignAuthority == true }, timeUnitsElapsed);
-            try { __state.Frame = TaleWorlds.Engine.Utilities.EngineFrameNo; }
-            catch (Exception error) { __state.DiagnosticError = error.ToString(); }
-            return;
+            try { batch.Frame = TaleWorlds.Engine.Utilities.EngineFrameNo; }
+            catch (Exception error) { batch.DiagnosticError = error.ToString(); }
+            return batch;
         }
+        return null;
     }
 
     internal static TickerBatch BeginBatch(object instance, string callback, CampaignCycleDiagnostics collector,
@@ -321,8 +391,7 @@ internal static class CampaignTickerEvidencePatches
         current.Completed.Add(callback + "|" + value.StringId);
     }
 
-    [HarmonyFinalizer]
-    internal static Exception Finalizer(Exception __exception, bool __runOriginal, TickerBatch __state)
+    internal static Exception CompleteBatch(Exception __exception, bool __runOriginal, TickerBatch __state)
     {
         if (__state == null) return __exception;
         current = __state.Parent;

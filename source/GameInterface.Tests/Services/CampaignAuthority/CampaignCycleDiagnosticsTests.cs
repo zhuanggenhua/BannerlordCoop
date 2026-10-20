@@ -1,4 +1,4 @@
-﻿using Common;
+using Common;
 using GameInterface.Services.CampaignAuthority;
 using Newtonsoft.Json;
 using TaleWorlds.CampaignSystem;
@@ -13,6 +13,7 @@ using Newtonsoft.Json.Linq;
 using System.Runtime.CompilerServices;
 using TaleWorlds.Library;
 using System.Reflection;
+using System.Reflection.Emit;
 
 namespace GameInterface.Tests.Services.CampaignAuthority;
 
@@ -20,22 +21,30 @@ namespace GameInterface.Tests.Services.CampaignAuthority;
 public sealed class CampaignCycleDiagnosticsTests
 {
     [Fact]
-    public void EveryTargetIsAnActualClosedNativeTickerBoundary()
+    public void EveryHarmonyTargetIsANonGenericNativeCallerWithExactTypedCallsiteCoverage()
     {
         var targets = CampaignTickerEvidencePatches.TargetMethods().ToArray();
-        Assert.NotEmpty(targets);
+        Assert.Equal(5, targets.Length);
         Assert.All(targets, method =>
         {
-            Assert.Equal("PeriodicTickSome", method.Name);
             Assert.False(method.ContainsGenericParameters);
-            Assert.True(method.DeclaringType!.IsConstructedGenericType);
-            Assert.Equal(typeof(double), Assert.Single(method.GetParameters()).ParameterType);
+            Assert.False(method.DeclaringType!.IsGenericType);
+            Assert.Empty(method.GetParameters());
+            var original = PatchProcessor.GetOriginalInstructions(method);
+            var replaced = CampaignTickerEvidencePatches.Transpiler(original, method).ToArray();
+            var wrappers = replaced.Where(instruction => instruction.operand is MethodInfo called &&
+                called.DeclaringType == typeof(CampaignTickerEvidencePatches)).ToArray();
+            Assert.Equal(CampaignTickerEvidencePatches.Bindings(method.Name).Length, wrappers.Length);
+            Assert.All(wrappers, instruction =>
+            {
+                var wrapper = (MethodInfo)instruction.operand;
+                Assert.True(wrapper.IsStatic); Assert.False(wrapper.ContainsGenericParameters);
+                Assert.Equal(OpCodes.Call, instruction.opcode);
+                Assert.Equal(typeof(double), wrapper.GetParameters()[1].ParameterType);
+            });
+            Assert.DoesNotContain(replaced, instruction => instruction.operand is MethodInfo called && called.Name == "PeriodicTickSome");
         });
-        var expected = new[] { "MobilePartyHourlyTick", "PeriodicHourlyTick", "PeriodicDailyTick", "PeriodicQuarterDailyTick", "TickPartialHourlyAi" }
-            .SelectMany(CampaignTickerEvidencePatches.Bindings)
-            .Select(binding => AccessTools.Method(AccessTools.Field(typeof(CampaignPeriodicEventManager), binding.Name).FieldType, "PeriodicTickSome"))
-            .Distinct();
-        Assert.Equal(expected.OrderBy(method => method.DeclaringType!.FullName), targets.OrderBy(method => method.DeclaringType!.FullName));
+        Assert.Equal(20, targets.Sum(method => CampaignTickerEvidencePatches.Bindings(method.Name).Length));
     }
 
     [Fact]
@@ -50,13 +59,31 @@ public sealed class CampaignCycleDiagnosticsTests
     }
 
     [Fact]
+    public void CallsiteReplacementPreservesInstructionLabelsAndExceptionBlocksAndRejectsMissingCoverage()
+    {
+        var target = CampaignTickerEvidencePatches.TargetMethods().Single(method => method.Name == "MobilePartyHourlyTick");
+        var native = AccessTools.Method(typeof(CampaignPeriodicEventManager.PeriodicTicker<TaleWorlds.CampaignSystem.Party.MobileParty>), "PeriodicTickSome");
+        var call = new CodeInstruction(OpCodes.Callvirt, native);
+        call.labels.Add(default);
+        var block = new ExceptionBlock(ExceptionBlockType.BeginExceptionBlock);
+        call.blocks.Add(block);
+        var replacement = Assert.Single(CampaignTickerEvidencePatches.Transpiler(new[] { call }, target));
+        Assert.Same(call, replacement); Assert.Single(replacement.labels); Assert.Same(block, Assert.Single(replacement.blocks));
+        Assert.Equal(OpCodes.Call, replacement.opcode);
+        var wrapper = Assert.IsType<MethodInfo>(replacement.operand, exactMatch: false);
+        Assert.Equal(native.DeclaringType, wrapper.GetParameters()[0].ParameterType);
+        Assert.Throws<InvalidOperationException>(() => CampaignTickerEvidencePatches.Transpiler(new[] { new CodeInstruction(OpCodes.Nop) }, target));
+        Assert.Throws<InvalidOperationException>(() => CampaignTickerEvidencePatches.WrapperFor(typeof(object)));
+    }
+
+    [Fact]
     public void FailedNativeTickerPreservesOriginalExceptionDespiteDiagnosticReadFailure()
     {
         var original = new System.NullReferenceException("native list missing");
         var collector = new CampaignCycleDiagnostics();
         var batch = new CampaignTickerEvidencePatches.TickerBatch { Instance = new object(), Collector = collector,
             Audit = new CampaignTickerAudit { Ticker = "broken", Node = "a" } };
-        var result = CampaignTickerEvidencePatches.Finalizer(original, true, batch);
+        var result = CampaignTickerEvidencePatches.CompleteBatch(original, true, batch);
         Assert.Same(original, result);
         var audit = Assert.Single(collector.AuditSnapshot());
         Assert.Equal(1, audit.Mismatches);
@@ -118,7 +145,7 @@ public sealed class CampaignCycleDiagnosticsTests
     {
         var collector = new CampaignCycleDiagnostics();
         var batch = Batch(collector, "skipped", "party|a"); batch.Audit.LocalWriter = writer;
-        Assert.Null(CampaignTickerEvidencePatches.Finalizer(null!, false, batch));
+        Assert.Null(CampaignTickerEvidencePatches.CompleteBatch(null!, false, batch));
         Assert.Empty(collector.AuditSnapshot());
         Assert.Equal(1, collector.SimulationSnapshot()["CampaignTicker.skipped.skipped"]);
         Assert.Equal(writer, collector.SimulationSnapshot().ContainsKey("CampaignTicker.writerSkipped.failed"));
@@ -168,7 +195,7 @@ public sealed class CampaignCycleDiagnosticsTests
             new CampaignTickerAudit { Ticker = "party" }, 1);
         // Native one-item tick (debt1.5 -> callback a -> debt0.5).
         CampaignTickerEvidencePatches.Completed(callback, party);
-        Assert.Null(CampaignTickerEvidencePatches.Finalizer(null!, true, batch));
+        Assert.Null(CampaignTickerEvidencePatches.CompleteBatch(null!, true, batch));
         // Later DailyTickClan/HourlyTickSettlement can spawn a party in this shared live list.
         ticker._list.Add(new CharacterObject { StringId = "new-lord-or-villager" });
         Assert.Equal(0, Assert.Single(collector.AuditSnapshot()).Mismatches);
@@ -187,9 +214,9 @@ public sealed class CampaignCycleDiagnosticsTests
             "inner", collector, new CampaignTickerAudit { Ticker = "inner" }, 1);
         var error = new InvalidOperationException("native-inner");
         CampaignTickerEvidencePatches.Completed("inner", innerEntity);
-        Assert.Same(error, CampaignTickerEvidencePatches.Finalizer(error, true, inner));
+        Assert.Same(error, CampaignTickerEvidencePatches.CompleteBatch(error, true, inner));
         CampaignTickerEvidencePatches.Completed("outer", outerEntity);
-        Assert.Null(CampaignTickerEvidencePatches.Finalizer(null!, true, outer));
+        Assert.Null(CampaignTickerEvidencePatches.CompleteBatch(null!, true, outer));
         Assert.Equal(1, inner.Completed.Count); Assert.Equal("inner|inner", inner.Completed[0]);
         Assert.Equal("outer|outer", Assert.Single(outer.Completed));
         Assert.Equal(1, outer.Depth); Assert.Equal(2, inner.Depth);
@@ -210,7 +237,7 @@ public sealed class CampaignCycleDiagnosticsTests
             new CampaignTickerAudit { Ticker = "native", Node = "A", RoomId = "room", AuthorityId = "world", Epoch = 3 }, 14);
         for (int i = 0; i < 14; i++) CampaignTickerEvidencePatches.Completed("cb", entity);
         ticker.TickDebt = 0.75; // Debt-only defect must remain a mismatch, even with14 matching callbacks.
-        CampaignTickerEvidencePatches.Finalizer(null!, true, batch);
+        CampaignTickerEvidencePatches.CompleteBatch(null!, true, batch);
         string original = Assert.Single(collector.AuditSnapshot()).FirstFailure;
         var failure = JObject.Parse(original);
         Assert.True((bool)failure["sequenceMatches"]!); Assert.True((bool)failure["membershipMatches"]!);
@@ -235,7 +262,7 @@ public sealed class CampaignCycleDiagnosticsTests
         var batch = CampaignTickerEvidencePatches.BeginBatch(ticker, "cb", collector, new CampaignTickerAudit { Ticker = "inside" }, 1);
         CampaignTickerEvidencePatches.Completed("cb", entity);
         ticker._list.Add(new CharacterObject { StringId = "inside-spawn" });
-        CampaignTickerEvidencePatches.Finalizer(null!, true, batch);
+        CampaignTickerEvidencePatches.CompleteBatch(null!, true, batch);
         var audit = Assert.Single(collector.AuditSnapshot()); Assert.Equal(1, audit.Mismatches);
         Assert.False((bool)JObject.Parse(audit.FirstFailure)["membershipMatches"]!);
     }
@@ -250,14 +277,14 @@ public sealed class CampaignCycleDiagnosticsTests
         var batch = CampaignTickerEvidencePatches.BeginBatch(new ObservedTicker { _list = new() { entity } }, "cb",
             collector, new CampaignTickerAudit { Ticker = "bounded" }, 0);
         for (int i = 0; i < CampaignTickerEvidencePatches.EvidenceLimit + 1; i++) CampaignTickerEvidencePatches.Completed("cb", entity);
-        CampaignTickerEvidencePatches.Finalizer(null!, true, batch);
+        CampaignTickerEvidencePatches.CompleteBatch(null!, true, batch);
         var audit = Assert.Single(collector.AuditSnapshot()); Assert.Equal(1, audit.Mismatches);
         var failure = JObject.Parse(audit.FirstFailure);
         Assert.False((bool)failure["complete"]!); Assert.Equal(CampaignTickerEvidencePatches.EvidenceLimit, ((JArray)failure["completed"]!).Count);
     }
 
     [Fact]
-    public void InstalledClosedNativeMethodsEachObserveOneActualInstanceExactlyOnce()
+    public void InstalledNonGenericCallersObserveAllTwentyNativeInstancesExactlyOnce()
     {
         var harmony = new Harmony("coop.tests.closed-ticker-dispatch");
         var previous = Campaign.Current;
@@ -270,6 +297,10 @@ public sealed class CampaignCycleDiagnosticsTests
             Campaign.Current = campaign;
             harmony.Patch(AccessTools.PropertyGetter(typeof(TaleWorlds.Engine.Utilities), "EngineFrameNo"),
                 prefix: new HarmonyMethod(typeof(CampaignCycleDiagnosticsTests), nameof(FramePrefix)));
+            // This is a managed callsite fixture, not a real campaign clock/scene.
+            foreach (string property in new[] { "DeltaHours", "DeltaDays" })
+                harmony.Patch(AccessTools.PropertyGetter(typeof(CampaignPeriodicEventManager), property),
+                    prefix: new HarmonyMethod(typeof(CampaignCycleDiagnosticsTests), nameof(ElapsedPrefix)));
             Assert.NotEmpty(harmony.CreateClassProcessor(typeof(CampaignTickerEvidencePatches)).Patch());
             int nativeCalls = 0;
             var bindings = CampaignTickerEvidencePatches.GroupTargetMethods().SelectMany(method => CampaignTickerEvidencePatches.Bindings(method.Name)).ToArray();
@@ -280,9 +311,13 @@ public sealed class CampaignCycleDiagnosticsTests
                 AccessTools.Method(typeof(CampaignCycleDiagnosticsTests), nameof(InitializeNativeFixture))
                     .MakeGenericMethod(field.FieldType.GetGenericArguments()[0])
                     .Invoke(null, new object[] { ticker, binding.Name, binding.Callback, (Action)(() => nativeCalls++) });
-                AccessTools.Method(field.FieldType, "PeriodicTickSome").Invoke(ticker, new object[] { 1d });
-                var observed = CampaignCycleDispatchPatches.For(campaign).AuditSnapshot();
-                Assert.Equal(nativeCalls, observed.Length);
+            }
+            foreach (var method in CampaignTickerEvidencePatches.TargetMethods())
+                method.Invoke(campaign._campaignPeriodicEventManager, Array.Empty<object>());
+            var observed = CampaignCycleDispatchPatches.For(campaign).AuditSnapshot();
+            Assert.Equal(20, observed.Length);
+            foreach (var binding in bindings)
+            {
                 var audit = observed.Single(row => row.Ticker == binding.Name);
                 Assert.Equal(1, audit.Batches); Assert.Equal(1, audit.Expected); Assert.Equal(1, audit.Completed);
                 Assert.True(audit.Mismatches == 0, audit.FirstFailure);
@@ -291,6 +326,7 @@ public sealed class CampaignCycleDiagnosticsTests
             // An unbound same-closed-type ticker must run natively without creating a campaign audit.
             var foreign = new CampaignPeriodicEventManager.PeriodicTicker<Hero>();
             InitializeNativeFixture(foreign, "foreign", "foreign", () => nativeCalls++);
+            foreign.TickDebt = 0.5;
             foreign.PeriodicTickSome(1d);
             Assert.Equal(21, nativeCalls);
             Assert.Equal(20, CampaignCycleDispatchPatches.For(campaign).AuditSnapshot().Length);
@@ -298,8 +334,8 @@ public sealed class CampaignCycleDiagnosticsTests
             InitializeNativeFixture(campaign._campaignPeriodicEventManager._dailyTickHeroTicker, "failing-hero",
                 "CampaignEventDispatcher.DailyTickHero", () => throw original);
             var thrown = Assert.Throws<TargetInvocationException>(() => AccessTools.Method(
-                campaign._campaignPeriodicEventManager._dailyTickHeroTicker.GetType(), "PeriodicTickSome")
-                .Invoke(campaign._campaignPeriodicEventManager._dailyTickHeroTicker, new object[] { 1d }));
+                typeof(CampaignPeriodicEventManager), "PeriodicDailyTick")
+                .Invoke(campaign._campaignPeriodicEventManager, Array.Empty<object>()));
             Assert.Same(original, thrown.InnerException);
             var failed = CampaignCycleDispatchPatches.For(campaign).AuditSnapshot().Single(row => row.Ticker == "_dailyTickHeroTicker");
             Assert.Equal(2, failed.Batches); Assert.Equal(1, failed.Mismatches);
@@ -316,6 +352,7 @@ public sealed class CampaignCycleDiagnosticsTests
     }
 
     private static bool FramePrefix(ref int __result) { __result = 17; return false; }
+    private static bool ElapsedPrefix(ref double __result) { __result = 0; return false; }
 
     private static void InitializeNativeFixture<T>(CampaignPeriodicEventManager.PeriodicTicker<T> ticker,
         string id, string callback, Action nativeCall) where T : MBObjectBase
@@ -323,7 +360,7 @@ public sealed class CampaignCycleDiagnosticsTests
         var entity = (T)RuntimeHelpers.GetUninitializedObject(typeof(T)); entity.StringId = id;
         ticker.Initialize(new MBReadOnlyList<T>(new[] { entity }), value =>
         { nativeCall(); CampaignTickerEvidencePatches.Completed(callback, value); }, false);
-        ticker.TickDebt = 0.5;
+        ticker.TickDebt = 1.5;
     }
 
     [Fact]
@@ -336,6 +373,14 @@ public sealed class CampaignCycleDiagnosticsTests
                 typeof(CampaignMobilePartyCallbackEvidencePatches), typeof(CampaignSimulationEvidencePatches),
                 typeof(CampaignEconomicEvidencePatches), typeof(CampaignWageEvidencePatches) })
                 Assert.NotEmpty(harmony.CreateClassProcessor(type).Patch());
+            foreach (var target in CampaignTickerEvidencePatches.TargetMethods())
+            {
+                var installed = Harmony.GetPatchInfo(target);
+                Assert.Single(installed.Transpilers.Where(patch => patch.owner == harmony.Id &&
+                    patch.PatchMethod.DeclaringType == typeof(CampaignTickerEvidencePatches)));
+                Assert.DoesNotContain(installed.Prefixes.Concat(installed.Postfixes).Concat(installed.Finalizers), patch =>
+                    patch.owner == harmony.Id && patch.PatchMethod.DeclaringType == typeof(CampaignTickerEvidencePatches));
+            }
         }
         finally { harmony.UnpatchAll(harmony.Id); }
     }
