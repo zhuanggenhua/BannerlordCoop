@@ -9,11 +9,14 @@ test('moving player comparison allows position offsets and rejects resource or r
         heroStringId: controllerId, settlementId: null, registeredPlayers: 2, heroRegistrations: 1,
         partyRegistrations: 1, clanRegistrations: 1, active: true, x: 1, y: 2 }));
     const pair = [players, structuredClone(players)]; pair[1][0].x += 3;
-    assertMovingPlayersCritical(pair);
+    const actors = ['A', 'B'].map(controller => ({ controller, mainHero: controller, mainParty: controller }));
+    assertMovingPlayersCritical(pair, actors);
     for (const edit of [r => r.gold++, r => r.troops++, r => r.heroId = 'switched', r => r.partyRegistrations++,
         r => delete r.clanId, r => r.x = NaN]) {
-        const bad = structuredClone(pair); edit(bad[1][0]); assert.throws(() => assertMovingPlayersCritical(bad));
+        const bad = structuredClone(pair); edit(bad[1][0]); assert.throws(() => assertMovingPlayersCritical(bad, actors));
     }
+    const bothWrong = structuredClone(pair); bothWrong.forEach(rows => rows[0].heroStringId = 'both-wrong');
+    assert.throws(() => assertMovingPlayersCritical(bothWrong, actors));
 });
 
 const clock = (pid = 1, ticks = 1000) => ({ pid, frequency: 1000, basis: 'Stopwatch.GetTimestamp', stopwatchTicks: ticks });

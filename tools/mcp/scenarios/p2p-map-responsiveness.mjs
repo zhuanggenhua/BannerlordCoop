@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { setTimeout as delay } from 'node:timers/promises';
 import { options, run } from './p2p-mission-lifecycle.mjs';
 import { assertActors, assertWorld, assertWriter, jsonOutput } from './p2p-udp-reliability.mjs';
+import { allocationCheckpoint, assertAllocationCheckpointFloor } from './p2p-prisoner-sale.mjs';
 import { assertMovingPlayersCritical, clockOffset, mergeProbePages, summarizeMovement } from './map-responsiveness-evidence.mjs';
 
 const INSTANCES = ['server', 'client1'];
@@ -13,8 +14,9 @@ export const PROFILE_CASES = [{ name: 'transparent', fault: {} },
     { name: 'one-way-50ms', fault: { delayEvery: 1, delayMs: 50 } }];
 
 export async function exerciseMapMovement(context) {
-    const { command, feature, initial, bothStates, setTime, proxy, config, emit, screenshot, poll } = context;
+    const { command, feature, initial, bothStates, setTime, proxy, config, emit, screenshot, poll, summary } = context;
     assert.ok(proxy, 'Actual UDP proxy is required for measured network conditions');
+    let allocationFloor = allocationCheckpoint(summary.features[0].evidence.worlds[0]);
     const read = async (instance, offset = 0) => jsonOutput(await command(instance,
         'coop.debug.movement_probe.read', [String(offset), '256']));
     async function calibrate(instance) {
@@ -75,12 +77,13 @@ export async function exerciseMapMovement(context) {
         result.finalCriticalWorld = await poll('critical state after ' + profile.name, async () => {
             const states = await bothStates(); assertActors(states, initial); assertWriter(states, initial[0].controller, initial);
             const worlds = await Promise.all(INSTANCES.map(instance => command(instance, 'coop.debug.authority.world_state').then(jsonOutput)));
-            assertWorld(worlds);
+            assertWorld(worlds); assertAllocationCheckpointFloor(worlds, allocationFloor);
             const players = await Promise.all(INSTANCES.map(instance => Promise.all(initial.map(actor =>
                 command(instance, 'coop.debug.players.party_state', [actor.controller]).then(jsonOutput)))));
-            assertMovingPlayersCritical(players);
+            assertMovingPlayersCritical(players, initial);
             return { states, worlds, players, positionPolicy: 'Raw positions retained; replica offsets allowed' };
         });
+        allocationFloor = allocationCheckpoint(result.finalCriticalWorld.worlds[0]);
         return result;
     });
 }
