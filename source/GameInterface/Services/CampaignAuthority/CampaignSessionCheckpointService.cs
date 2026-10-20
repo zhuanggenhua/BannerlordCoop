@@ -4,6 +4,7 @@ using Common.Messaging;
 using GameInterface.CoopSessionData;
 using GameInterface.CoopSessionData.Save.Data;
 using GameInterface.Services.Inventory;
+using GameInterface.Services.CampaignAuthority.NativeState;
 using GameInterface.Services.ObjectManager;
 using GameInterface.Services.Players;
 using GameInterface.Services.Players.Data;
@@ -34,21 +35,27 @@ internal sealed class CampaignSessionCheckpointService : ICampaignSessionCheckpo
     private readonly ICoopSessionProvider provider;
     private readonly ISessionIdentity identity;
     private readonly IMessageBroker broker;
+    private readonly ICampaignNativeBehaviorCheckpointService nativeState;
 
     public CampaignSessionCheckpointService(IObjectManager objects, IPlayerManager players,
-        ICoopSessionProvider provider, ISessionIdentity identity, IMessageBroker broker)
+        ICoopSessionProvider provider, ISessionIdentity identity, IMessageBroker broker,
+        ICampaignNativeBehaviorCheckpointService nativeState = null)
     {
         this.objects = objects;
         this.players = players;
         this.provider = provider;
         this.identity = identity;
         this.broker = broker;
+        this.nativeState = nativeState;
     }
 
-    public bool TryCapture(out CampaignSessionCheckpoint checkpoint) =>
-        TryCapture(Campaign.Current?.UniqueGameId, out checkpoint);
+    public bool TryCapture(out CampaignSessionCheckpoint checkpoint)
+    {
+        checkpoint = null;
+        return nativeState != null && TryCapture(Campaign.Current?.UniqueGameId, out checkpoint);
+    }
     public bool TryApply(CampaignSessionCheckpoint checkpoint) =>
-        TryApply(checkpoint, Campaign.Current?.UniqueGameId);
+        nativeState != null && TryApply(checkpoint, Campaign.Current?.UniqueGameId);
 
     internal bool TryCapture(string campaignId, out CampaignSessionCheckpoint checkpoint)
     {
@@ -63,7 +70,9 @@ internal sealed class CampaignSessionCheckpointService : ICampaignSessionCheckpo
             { CrimeRatings = new Dictionary<string, float>(player.CrimeRatings) }).ToArray();
             var snapshot = BuildSession(provider.CoopSession, detachedPlayers, lease,
                 identity.RoomHostControllerId, CoopSession.Empty.InventoryPlayerData);
-            checkpoint = new CampaignSessionCheckpoint(campaignId, JsonSerializer.Serialize(snapshot, JsonOptions));
+            CampaignNativeBehaviorCheckpoint native = null;
+            if (nativeState != null && !nativeState.TryCapture(out native)) return false;
+            checkpoint = new CampaignSessionCheckpoint(campaignId, JsonSerializer.Serialize(snapshot, JsonOptions), native);
             return true;
         }
         catch (Exception exception)
@@ -90,10 +99,13 @@ internal sealed class CampaignSessionCheckpointService : ICampaignSessionCheckpo
             snapshot.AuthorityPaused != lease.IsPaused || snapshot.RoomHostControllerId != identity.RoomHostControllerId ||
             !ValidatePlayers(snapshot.Players, out var registered)) return false;
 
+        Action installNative = null;
+        if (nativeState != null && !nativeState.TryPrepare(checkpoint.NativeBehaviors, out installNative)) return false;
         var localInventory = provider.CoopSession?.InventoryPlayerData ?? CoopSession.Empty.InventoryPlayerData;
         var merged = BuildSession(snapshot, registered.Values.ToArray(), lease, identity.RoomHostControllerId, localInventory);
         return identity.TryExecuteWithLease(lease, () =>
         {
+            installNative?.Invoke();
             foreach (var player in snapshot.Players)
                 registered[player.ControllerId].CrimeRatings = new Dictionary<string, float>(player.CrimeRatings);
             provider.CoopSession = merged;

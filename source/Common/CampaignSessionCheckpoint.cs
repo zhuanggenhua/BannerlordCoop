@@ -8,9 +8,11 @@ public sealed class CampaignSessionCheckpoint
 {
     [ProtoMember(1)] public readonly string CampaignId;
     [ProtoMember(2)] public readonly string SessionJson;
-    public CampaignSessionCheckpoint(string campaignId, string sessionJson)
+    [ProtoMember(3)] public readonly CampaignNativeBehaviorCheckpoint NativeBehaviors;
+    public CampaignSessionCheckpoint(string campaignId, string sessionJson, CampaignNativeBehaviorCheckpoint nativeBehaviors = null)
     {
         CampaignId = campaignId;
         SessionJson = sessionJson;
+        NativeBehaviors = nativeBehaviors;
     }
 }
