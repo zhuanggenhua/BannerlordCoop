@@ -5,6 +5,8 @@ using Serilog;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
+using TaleWorlds.ObjectSystem;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.Settlements;
@@ -282,20 +284,39 @@ internal sealed class CampaignSchedulerCheckpointService : ICampaignSchedulerChe
         public bool TryCapture(out CampaignPeriodicTickerState state)
         {
             state = null;
-            if (ticker?._list == null ||
-                (ticker._currentFrameToTickListFlattened != null && ticker._currentFrameToTickListFlattened.Count != 0) ||
-                (ticker._doParallel && ticker._currentFrameToTickListFlattened == null) ||
-                !ValidCursor(ticker.Index, ticker.TickDebt)) return false;
+            if (ticker?._list == null) return RejectCapture("null-ticker-or-list");
+            if (ticker._currentFrameToTickListFlattened != null && ticker._currentFrameToTickListFlattened.Count != 0)
+                return RejectCapture("scratch-not-empty");
+            if (ticker._doParallel && ticker._currentFrameToTickListFlattened == null) return RejectCapture("parallel-scratch-missing");
+            if (!ValidCursor(ticker.Index, ticker.TickDebt)) return RejectCapture("cursor-or-debt");
             var handles = new List<uint>();
+            var capturedValues = new List<T>();
             foreach (var value in ticker._list)
             {
-                if (value == null || !objects.TryGetHandleWithLogging(value, out var handle)) return false;
-                handles.Add(handle);
+                uint handle = 0;
+                if (value == null || !objects.TryGetHandleWithLogging(value, out handle))
+                    return RejectCapture(value == null ? "null-value" : "unregistered-value", handles.Count, value, handle);
+                handles.Add(handle);capturedValues.Add(value);
             }
-            if (handles.Distinct().Count() != handles.Count) return false;
+            if (handles.Distinct().Count() != handles.Count)
+                return RejectCapture("duplicate-handles", duplicates: string.Join("|", handles.Select((handle, index) => (handle, index))
+                    .GroupBy(entry => entry.handle).Where(group => group.Count() > 1).SelectMany(group => group).Take(12)
+                    .Select(entry => $"handle={entry.handle};index={entry.index};{DescribeValue(capturedValues[entry.index])}")));
             state = new CampaignPeriodicTickerState(Name, ticker.Index, ticker.TickDebt, handles);
             return true;
         }
+
+        private bool RejectCapture(string reason, int ordinal = -1, T value = null, uint? handle = null, string duplicates = null)
+        {
+            Logger.Warning("Scheduler ticker capture rejected {TickerName} reason {Reason} listCount {ListCount} scratchCount {ScratchCount} parallel {DoParallel} index {Index} debt {Debt} debtBits {DebtBits} valueOrdinal {ValueOrdinal} value {Value} handle {Handle} duplicatesFirst12 {Duplicates}",
+                Name, reason, ticker?._list?.Count, ticker?._currentFrameToTickListFlattened?.Count, ticker?._doParallel,
+                ticker?.Index, ticker?.TickDebt, ticker == null ? (long?)null : BitConverter.DoubleToInt64Bits(ticker.TickDebt),
+                ordinal, DescribeValue(value), handle, duplicates);
+            return false;
+        }
+
+        private static string DescribeValue(T value) => value == null ? "null" :
+            $"id={(value as MBObjectBase)?.StringId};ref={RuntimeHelpers.GetHashCode(value)}";
 
         public bool TryPrepare(CampaignPeriodicTickerState state, out Action apply)
         {
