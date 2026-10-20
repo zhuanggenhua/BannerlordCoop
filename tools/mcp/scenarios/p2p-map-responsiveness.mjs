@@ -74,6 +74,8 @@ export async function exerciseMapMovement(context) {
             assert.equal(localInputs.length, 4, 'Every actual local click must be observed exactly once');
         }
         assert.ok(analysis.observations.every(row => row.localSimulationMs !== null), 'Input did not produce local map motion');
+        assert.ok(analysis.observations.every(row => row.localTargetAdoptionMs !== null),
+            'Original native map click did not immediately adopt every selected valid target');
         const states = await bothStates(); assertActors(states, initial); assertWriter(states, initial[0].controller, initial);
         const afterNetwork = structuredClone(proxy.stats);
         assert.ok(afterNetwork.sent.toHost > beforeNetwork.sent.toHost && afterNetwork.sent.toClient > beforeNetwork.sent.toClient);
