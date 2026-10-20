@@ -91,6 +91,151 @@ public class CampaignAuthorityFreezeClientHandlerTests
         finally { OutputSinkManager.RemoveLogCallback(capture); }
     }
 
+    [Fact]
+    public void EighteenIdenticalRequestsCaptureAndEnqueueOneFullAck()
+    {
+        using var fixture = new IdempotencyFixture();
+        for (int i = 0; i < 18; i++) fixture.Request();
+        fixture.Drain();
+        Assert.Single(fixture.Acks);Assert.Equal(1, fixture.Captures);Assert.Equal(2, fixture.Flushes);
+        Assert.True(fixture.Identity.IsLocallyFrozen(fixture.Lease));
+        Assert.Equal(fixture.Lease.Epoch, fixture.Acks[0].Epoch);
+        Assert.Equal(44, fixture.Acks[0].HandoffSequence);Assert.Equal("host", fixture.Acks[0].CandidateControllerId);
+        Assert.NotNull(fixture.Acks[0].SchedulerCheckpoint);Assert.NotNull(fixture.Acks[0].MovementCheckpoint);
+    }
+
+    [Theory]
+    [InlineData("send-before")]
+    [InlineData("send-partial")]
+    [InlineData("final-flush")]
+    public void UncertainTransportNeverRequeuesEvenAcrossHandlerReconnection(string failure)
+    {
+        using var fixture = new IdempotencyFixture();fixture.Failure = failure;fixture.Request();fixture.Drain();
+        Assert.Equal(1, fixture.SendCalls);Assert.True(fixture.Identity.IsLocallyFrozen(fixture.Lease));
+        Assert.Equal(failure == "send-before" ? 0 : 1, fixture.Acks.Count);
+        int captures = fixture.Captures,flushes = fixture.Flushes;
+        fixture.Failure = null;
+        for (int i = 0; i < 18; i++) fixture.Request();fixture.Drain();
+        fixture.Reconnect();fixture.Request();fixture.Drain();
+        Assert.Equal(1, fixture.SendCalls);Assert.Equal(captures, fixture.Captures);Assert.Equal(flushes, fixture.Flushes);
+        Assert.True(fixture.Identity.IsLocallyFrozen(fixture.Lease));
+        fixture.Cancel();fixture.Drain();Assert.False(fixture.Identity.IsLocallyFrozen(fixture.Lease));
+        fixture.Request(45);fixture.Drain();Assert.Equal(2, fixture.SendCalls);
+    }
+
+    [Theory]
+    [InlineData("roster")]
+    [InlineData("clock")]
+    [InlineData("session")]
+    [InlineData("scheduler")]
+    [InlineData("movement")]
+    [InlineData("allocation")]
+    [InlineData("pre-flush")]
+    public void CaptureOrPreSendFlushFailureCanRetryOnlyBeforeAnyAckAttempt(string failure)
+    {
+        using var fixture = new IdempotencyFixture();fixture.Failure = failure;fixture.Request();fixture.Drain();
+        Assert.True(fixture.Identity.IsLocallyFrozen(fixture.Lease));Assert.Equal(0, fixture.SendCalls);
+        fixture.Failure = null;fixture.Request();fixture.Drain();
+        Assert.Equal(1, fixture.SendCalls);Assert.Single(fixture.Acks);
+        fixture.Request();fixture.Drain();Assert.Equal(1, fixture.SendCalls);
+    }
+
+    [Fact]
+    public void CanceledSequenceCannotRefreezeAndCandidateCannotStealTheOriginalFence()
+    {
+        using var fixture = new IdempotencyFixture();fixture.Request();fixture.Drain();
+        fixture.Request(44, "different-candidate");fixture.Request(45, "different-candidate");fixture.Drain();
+        fixture.Cancel(44, "different-candidate");fixture.Drain();
+        Assert.True(fixture.Identity.IsLocallyFrozen(fixture.Lease));Assert.Equal(1, fixture.SendCalls);
+        fixture.Cancel();fixture.Drain();Assert.False(fixture.Identity.IsLocallyFrozen(fixture.Lease));
+        fixture.Request();fixture.Request(43);fixture.Drain();
+        Assert.False(fixture.Identity.IsLocallyFrozen(fixture.Lease));Assert.Equal(1, fixture.SendCalls);
+        fixture.Request(45, "different-candidate");fixture.Drain();Assert.Equal(2, fixture.SendCalls);
+        Assert.Equal("different-candidate", fixture.Acks[1].CandidateControllerId);
+        fixture.Cancel();fixture.Drain();Assert.True(fixture.Identity.IsLocallyFrozen(fixture.Lease));
+    }
+
+    [Fact]
+    public void RebuiltHandlerKeepsConfirmedAttemptButNewExactLeaseCanCaptureItsOwnBaseline()
+    {
+        using var fixture = new IdempotencyFixture();fixture.Request();fixture.Drain();fixture.Reconnect();
+        fixture.Request();fixture.Drain();Assert.Equal(1, fixture.SendCalls);Assert.Equal(1, fixture.Captures);
+        var old = fixture.Lease;
+        fixture.Lease = new AuthorityLease(old.RoomId, "new-writer-lease", old.AuthorityControllerId, old.Epoch + 1);
+        Assert.True(fixture.Identity.TryApply(fixture.Lease, "host"));fixture.Reconnect();
+        fixture.Broker.Publish(this, new NetworkCampaignAuthorityFreezeRequest(old, "host", 45));fixture.Drain();
+        Assert.Equal(1, fixture.SendCalls);Assert.False(fixture.Identity.IsLocallyFrozen(fixture.Lease));
+        fixture.Request();fixture.Drain();Assert.Equal(2, fixture.SendCalls);Assert.Equal(fixture.Lease.Epoch, fixture.Acks[1].Epoch);
+        Assert.Equal(fixture.Lease, fixture.Acks[1].MovementCheckpoint.SourceLease);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LeaseOrFenceChangedDuringCaptureCannotSendAnObsoleteAck(bool changedLease)
+    {
+        using var fixture = new IdempotencyFixture();
+        fixture.DuringCapture = () =>
+        {
+            if (changedLease) Assert.True(fixture.Identity.TryApply(new AuthorityLease(fixture.Lease.RoomId, "other-authority", "host", 6)));
+            else Assert.True(fixture.Identity.TryCancelLocalAuthorityFreeze(fixture.Lease, 44));
+        };
+        fixture.Request();fixture.Drain();Assert.Equal(0, fixture.SendCalls);Assert.Empty(fixture.Acks);
+    }
+
+    private sealed class IdempotencyFixture : IDisposable
+    {
+        internal readonly TestMessageBroker Broker = new();
+        internal readonly SessionIdentity Identity = new();
+        internal readonly ControllerIdProvider Controller = new();
+        internal AuthorityLease Lease = new("idempotency-room", "writer-lease", "writer", 5);
+        internal Mock<INetwork> Network = new();
+        internal readonly List<NetworkCampaignAuthorityFreezeAcknowledged> Acks = new();
+        internal int Captures, Flushes, SendCalls;
+        internal string? Failure;
+        internal Action? DuringCapture;
+        internal CampaignAuthorityFreezeClientHandler Handler = null!;
+        internal IdempotencyFixture()
+        {
+            Assert.True(Identity.TryApply(Lease, "host"));Controller.SetControllerId("writer");Reconnect();
+        }
+        internal void Reconnect()
+        {
+            Handler?.Dispose();Network = new Mock<INetwork>();
+            var rosters = new Mock<ICampaignRosterCheckpointService>();
+            var roster = new CampaignRosterCheckpoint(Array.Empty<CampaignRosterState>());
+            rosters.Setup(value => value.TryCapture(out roster)).Callback(() => { Captures++;DuringCapture?.Invoke(); }).Returns(() => Failure != "roster");
+            long ticks = 888;var clock = new Mock<IMapTimeTrackerInterface>();clock.Setup(value => value.TryGetCurrentTicks(out ticks)).Returns(() => Failure != "clock");
+            var session = new CampaignSessionCheckpoint("campaign", "{}");var sessions = new Mock<ICampaignSessionCheckpointService>();
+            sessions.Setup(value => value.TryCapture(out session)).Returns(() => Failure != "session");
+            var checkpoint = new CampaignMovementCheckpoint(Lease, ticks, 1, new byte[] { 1 }, "movement-hash");
+            var movement = new Mock<ICampaignMovementCheckpointService>();movement.Setup(value => value.TryCapture(Lease, ticks, out checkpoint)).Returns(() => Failure != "movement");
+            var schedulerCheckpoint = CampaignHandoffTestServices.Checkpoint();var scheduler = new Mock<ICampaignSchedulerCheckpointService>();
+            scheduler.Setup(value => value.TryCapture(out schedulerCheckpoint)).Returns(() => Failure != "scheduler");
+            var objects = new Mock<IObjectManager>();objects.Setup(value => value.CaptureAllocationCheckpoint()).Returns(() =>
+                Failure == "allocation" ? throw new InvalidOperationException("allocation capture failed before send") : new RegistryAllocationCheckpoint(10, new Dictionary<string,int>()));
+            Network.Setup(value => value.SendAll(It.IsAny<IMessage>())).Callback<IMessage>(message =>
+            {
+                SendCalls++;
+                if (Failure == "send-before") throw new InvalidOperationException("SendAll outcome unknown before enqueue evidence");
+                Acks.Add(Assert.IsType<NetworkCampaignAuthorityFreezeAcknowledged>(message));
+                if (Failure == "send-partial") throw new InvalidOperationException("SendAll partially enqueued before failure");
+            });
+            Network.Setup(value => value.FlushPendingMessages()).Callback(() =>
+            {
+                Flushes++;
+                if (Failure == "pre-flush" && SendCalls == 0) throw new InvalidOperationException("pre-send flush failed");
+                if (Failure == "final-flush" && SendCalls > 0) throw new InvalidOperationException("final flush outcome unknown");
+            });
+            Handler = new CampaignAuthorityFreezeClientHandler(Broker, Network.Object, Identity, Controller, objects.Object,
+                rosters.Object, clock.Object, sessions.Object, scheduler.Object, CampaignHandoffTestServices.Drained(), movement: movement.Object);
+        }
+        internal void Request(long sequence = 44, string candidate = "host") => Broker.Publish(this, new NetworkCampaignAuthorityFreezeRequest(Lease, candidate, sequence));
+        internal void Cancel(long sequence = 44, string candidate = "host") => Broker.Publish(this, new NetworkCampaignAuthorityFreezeRequest(Lease, candidate, sequence).ToCanceled());
+        internal void Drain() => GameThread.Run(() => { }, blocking: true);
+        public void Dispose() { Handler.Dispose();Broker.Dispose(); }
+    }
+
     private readonly ITestOutputHelper output;
 
     public CampaignAuthorityFreezeClientHandlerTests(ITestOutputHelper output) => this.output = output;
@@ -236,7 +381,7 @@ public class CampaignAuthorityFreezeClientHandlerTests
             coalescer.Verify(value => value.Flush(network.Object), Times.Once);
             asyncTasks.Verify(value => value.TryDrain(), Times.Once);
             preparation.Verify(value => value.TryPrepareForFreeze(lease), Times.Once);
-            network.Verify(value => value.SendAll(It.IsAny<NetworkCampaignAuthorityFreezeAcknowledged>()), Times.Exactly(2));
+            network.Verify(value => value.SendAll(It.IsAny<NetworkCampaignAuthorityFreezeAcknowledged>()), Times.Once);
 
             broker.Publish(this, request.ToCanceled());
             GameThread.Run(() => { }, blocking: true);

@@ -187,6 +187,10 @@ public class CampaignFinalMovementProtocolTests
         GameThread.Run(() => { }, blocking: true);
         Assert.NotNull(ack);
         Assert.Same(checkpoint, ack.Value.MovementCheckpoint);
+        broker.Publish(this, new NetworkCampaignAuthorityFreezeRequest(Source, "a", 44));
+        GameThread.Run(() => { }, blocking: true);
+        movement.Verify(m => m.TryCapture(Source, 777, out checkpoint), Times.Once);
+        network.Verify(n => n.SendAll(It.IsAny<NetworkCampaignAuthorityFreezeAcknowledged>()), Times.Once);
     }
 
     [Fact]

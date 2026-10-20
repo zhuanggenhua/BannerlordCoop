@@ -11,6 +11,7 @@ using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.ObjectManager;
 using GameInterface.Services.Time.Interfaces;
 using Serilog;
+using System.Runtime.CompilerServices;
 
 namespace Coop.Core.Client.Services.Session;
 
@@ -32,6 +33,15 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
     private readonly ISendCoalescer sendCoalescer;
     private readonly ICampaignMovementCheckpointService movement;
     private readonly ICampaignMovementFreezePreparation movementPreparation;
+    private static readonly ConditionalWeakTable<ISessionIdentity, FreezeAckAttempt> attempts = new();
+
+    private sealed class FreezeAckAttempt
+    {
+        internal AuthorityLease Lease;
+        internal long Sequence;
+        internal string Candidate, SendState;
+        internal bool AckAttempted, Canceled, Processing;
+    }
 
     public CampaignAuthorityFreezeClientHandler(
         IMessageBroker messageBroker,
@@ -87,6 +97,17 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
             return;
         }
 
+        var previous = attempts.GetValue(sessionIdentity, _ => new FreezeAckAttempt());
+        if (previous.Lease == lease && (request.HandoffSequence < previous.Sequence ||
+            (request.HandoffSequence == previous.Sequence &&
+                (request.CandidateControllerId != previous.Candidate || previous.AckAttempted || previous.Canceled || previous.Processing))))
+        {
+            Logger.Information("Ignored duplicate or superseded freeze {HandoffSequence} room {RoomId} authority {AuthorityId} epoch {Epoch} candidate {CandidateControllerId}; recorded sequence {RecordedSequence} candidate {RecordedCandidate} state {AckState} canceled {Canceled}; delivery remains unconfirmed",
+                request.HandoffSequence, lease.RoomId, lease.AuthorityId, lease.Epoch, request.CandidateControllerId,
+                previous.Sequence, previous.Candidate, previous.SendState, previous.Canceled);
+            return;
+        }
+        FreezeAckAttempt attempt = null;
         string stage = "freeze";
         try
         {
@@ -107,6 +128,14 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
                     frozen = sessionIdentity.TryFreezeLocalAuthority(lease, request.HandoffSequence);
                 }) || !frozen) return;
             }
+
+            attempt = previous;
+            if (attempt.Lease != lease || attempt.Sequence != request.HandoffSequence)
+            {
+                attempt.Lease = lease;attempt.Sequence = request.HandoffSequence;attempt.Candidate = request.CandidateControllerId;
+                attempt.AckAttempted = false;attempt.Canceled = false;attempt.SendState = "capture-not-sent";
+            }
+            attempt.Processing = true;
 
             // Fence local simulation before flushing. The acknowledgement follows every already queued
             // authority delta on this reliable-ordered connection.
@@ -144,23 +173,38 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
             stage = "allocation-capture";
             var ack = request.ToAcknowledged(objectManager.CaptureAllocationCheckpoint(), rosterCheckpoint,
                 new CampaignClockCheckpoint(ticks), sessionCheckpoint, schedulerCheckpoint, movementCheckpoint);
+            if (!sessionIdentity.TryGetConfirmedLease(out var current) || current != lease ||
+                !sessionIdentity.IsLocallyFrozen(lease) || attempt.Canceled)
+            {
+                Logger.Warning("Refused obsolete freeze ACK {HandoffSequence} at epoch {Epoch}; current lease or local fence changed during capture",
+                    request.HandoffSequence, request.Epoch);
+                return;
+            }
             stage = "send-call";
             LogAckSendStage(stage, request, ticks, movementCheckpoint);
+            attempt.AckAttempted = true;attempt.SendState = "send-call-uncertain";
             network.SendAll(ack);
             stage = "send-call-returned";
+            attempt.SendState = "send-returned-delivery-unconfirmed";
             LogAckSendStage(stage, request, ticks, movementCheckpoint);
             stage = "flush-call";
             network.FlushPendingMessages();
             stage = "flush-call-returned-delivery-unconfirmed";
+            attempt.SendState = stage;
             LogAckSendStage(stage, request, ticks, movementCheckpoint);
             Logger.Information("Froze local campaign writes and completed freeze ACK send/flush calls for handoff {HandoffSequence} at epoch {Epoch} to controller {CandidateControllerId}; delivery is unconfirmed",
                 request.HandoffSequence, request.Epoch, request.CandidateControllerId);
         }
         catch (System.Exception ex)
         {
+            if (attempt?.AckAttempted == true) attempt.SendState = "send-or-flush-uncertain-safe-frozen";
             Logger.Error(ex, "Failed to acknowledge campaign authority freeze {HandoffSequence} at stage {Stage} room {RoomId} authority {AuthorityId} epoch {Epoch}",
                 request.HandoffSequence, stage, request.RoomId, request.AuthorityId, request.Epoch);
+            if (attempt?.AckAttempted == true)
+                Logger.Warning("Freeze ACK {HandoffSequence} transport outcome uncertain; authority remains safely frozen and automatic re-enqueue/reconnect recovery is not implemented",
+                    request.HandoffSequence);
         }
+        finally { if (attempt != null) attempt.Processing = false; }
     }
 
     private void LogAckSendStage(string stage, NetworkCampaignAuthorityFreezeRequest request, long ticks,
@@ -179,10 +223,16 @@ public sealed class CampaignAuthorityFreezeClientHandler : IHandler
             canceled.RoomId, canceled.AuthorityId, canceled.AuthorityControllerId, canceled.Epoch);
         GameThread.EnqueueSafe(() =>
         {
+            attempts.TryGetValue(sessionIdentity, out var attempt);
+            if (attempt != null && attempt.Lease == lease && attempt.Sequence == canceled.HandoffSequence &&
+                attempt.Candidate != canceled.CandidateControllerId) return;
             if (!string.Equals(canceled.AuthorityControllerId, controllerIdProvider.ControllerId, System.StringComparison.Ordinal) ||
                 !sessionIdentity.TryCancelLocalAuthorityFreeze(lease, canceled.HandoffSequence))
                 return;
 
+            attempt = attempts.GetValue(sessionIdentity, _ => new FreezeAckAttempt());
+            attempt.Lease = lease;attempt.Sequence = canceled.HandoffSequence;attempt.Candidate = canceled.CandidateControllerId;
+            attempt.Canceled = true;attempt.Processing = false;attempt.SendState = "canceled";
             Logger.Information("Canceled campaign authority freeze {HandoffSequence}; epoch {Epoch} remains active",
                 canceled.HandoffSequence, canceled.Epoch);
         }, context: nameof(CampaignAuthorityFreezeClientHandler));
