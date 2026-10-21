@@ -271,13 +271,16 @@ export async function triageNativeFailure({ repo, record, out }) {
     }
     if (!summary.completedUtc) issues.push({ code: 'summary-not-completed' });
     if (raw && summary.runId && !raw.runIds.includes(summary.runId)) issues.push({ code: 'run-id-not-in-raw', runId: summary.runId });
+    if (raw && summary.runId && raw.runIds.some(id => id !== summary.runId))
+        issues.push({ code: 'conflicting-raw-run-ids', expectedRunId: summary.runId, observedRunIds: raw.runIds });
     for (const actor of summary.processes ?? []) {
         const observed = raw?.actors.find(x => x.name === actor.name);
         if (observed && (observed.identity?.pid !== actor.identity?.pid ||
             observed.build?.buildVersion !== actor.status?.buildVersion || observed.build?.assemblyMvid !== actor.status?.assemblyMvid))
             issues.push({ code: 'summary-raw-actor-mismatch', actor: actor.name });
     }
-    if (summary.cleanupConfirmed === true && !(raw?.stops.length && raw.stops.at(-1).instances.length &&
+    if (summary.cleanupConfirmed === true && !(summary.runId && raw?.stops.length &&
+        raw.stops.at(-1).runId === summary.runId && raw.stops.at(-1).instances.length &&
         raw.stops.at(-1).instances.every(x => x.cleanupComplete === true && x.processAlive === false)))
         issues.push({ code: 'cleanup-receipt-disagreement' });
     if (!Object.keys(logs).length) issues.push({ code: 'no-actor-logs' });

@@ -130,6 +130,20 @@ test('summary versus raw PID/build/run and cleanup conflicts are visible without
     assert.equal(r.completeness, 'INCOMPLETE');
 });
 
+test('foreign stop receipt cannot complete the target run even with matching PID and successful cleanup', async () => {
+    const f = await fixture();
+    const rows = (await readFile(f.record, 'utf8')).trim().split('\n').map(x => JSON.parse(x));
+    rows[1].data.runId = 'foreign-stopped-run';
+    await writeFile(f.record, rows.map(x => JSON.stringify(x)).join('\n') + '\n');
+    const r = await triageNativeFailure(f);
+    assert.equal(r.completeness, 'INCOMPLETE');
+    assert.ok(r.issues.some(x => x.code === 'conflicting-raw-run-ids'));
+    assert.ok(r.issues.some(x => x.code === 'cleanup-receipt-disagreement'));
+    assert.equal(r.native.runId, runId);
+    assert.equal(r.native.cleanupConfirmed, true);
+    assert.equal(r.raw.stops[0].runId, 'foreign-stopped-run');
+});
+
 test('malformed JSONL and partial tail are explicit; EOF error continuation retained', async () => {
     const f = await fixture('[42 00:00:00 ERR Class] first\n   at EOF.Stack()');
     await writeFile(f.record, '{bad}\n{"phase":"response","data":{"runId":"actual-run-not-filename"}}');
