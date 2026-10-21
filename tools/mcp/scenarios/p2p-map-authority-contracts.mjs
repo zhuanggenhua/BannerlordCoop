@@ -59,7 +59,7 @@ export async function exerciseMapAuthorityContracts(context) {
             await setTime('Play_1x');
             const afterProgress = await poll(name + '-single-writer-progress', async () => {
                 const after = await bothStates();
-                assertSingleWriterProgress(beforeProgress, after, writerIndex, initial);
+                assertSingleWriterProgress(beforeProgress, after, writerIndex, initial, [mode === 'yield', false]);
                 return after;
             });
             const afterCritical = await capturePredictedMapState(context, name + '-critical-after-progress');

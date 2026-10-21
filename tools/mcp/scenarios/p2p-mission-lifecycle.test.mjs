@@ -193,6 +193,64 @@ test('only confirmed map writer may advance world ticks across a Mission observa
     assert.throws(() => assertSingleWriterProgress(before, switched, 1, initial));
 });
 
+test('Mission progress rejects availability overrides without an explicit map-only expectation', () => {
+    const before = states(false), after = clone(before);
+    after[1].worldTicks++; after[1].hours++;
+    for (const sample of ['before', 'after']) for (const index of [0, 1]) {
+        const observedBefore = clone(before), observedAfter = clone(after);
+        (sample === 'before' ? observedBefore : observedAfter)[index].yielded = true;
+        assert.throws(() => assertSingleWriterProgress(observedBefore, observedAfter, 1, initial));
+    }
+});
+
+test('explicit map yield and auto observations preserve their exact per-node overrides', () => {
+    for (const [writer, writerIndex, expectedYield] of [['B', 1, [true, false]], ['A', 0, [false, false]]]) {
+        const before = states(false, writer), after = clone(before);
+        for (let index = 0; index < 2; index++)
+            before[index].yielded = after[index].yielded = expectedYield[index];
+        after[writerIndex].worldTicks++; after[writerIndex].hours++;
+        assertSingleWriterProgress(before, after, writerIndex, initial, expectedYield);
+        for (const sample of ['before', 'after']) for (const index of [0, 1]) {
+            const observedBefore = clone(before), observedAfter = clone(after);
+            (sample === 'before' ? observedBefore : observedAfter)[index].yielded = !expectedYield[index];
+            assert.throws(() => assertSingleWriterProgress(observedBefore, observedAfter, writerIndex, initial, expectedYield));
+        }
+    }
+});
+
+test('progress expectations require exactly two booleans and never coerce observed flags', () => {
+    const before = states(false), after = clone(before);
+    after[1].worldTicks++; after[1].hours++;
+    for (const expected of [null, true, [], [false], [false, false, false], [0, false], [false, 'false'],
+        [false, undefined], [, false], [false, new Boolean(false)],
+        { 0: false, 1: false, length: 2 }])
+        assert.throws(() => assertSingleWriterProgress(before, after, 1, initial, expected));
+    for (const flag of [undefined, null, 0, 1, 'false', 'true']) {
+        const changed = clone(after); changed[0].yielded = flag;
+        assert.throws(() => assertSingleWriterProgress(before, changed, 1, initial, [false, false]));
+    }
+});
+
+test('a map yield override cannot hide stopped simulation, observer ticks or changed identities', () => {
+    const before = states(false), after = clone(before);
+    before[0].yielded = after[0].yielded = true;
+    after[1].worldTicks++; after[1].hours++;
+    assertSingleWriterProgress(before, after, 1, initial, [true, false]);
+    const corruptions = [
+        changed => changed[0].worldTicks++,
+        changed => changed[1].worldTicks = before[1].worldTicks,
+        changed => changed[1].hours = before[1].hours,
+        changed => changed.forEach(state => state.lease.epoch++),
+        changed => changed[1].localAuthority = false,
+        changed => changed[0].mainHero = 'wrong-hero',
+        changed => changed[1].mainParty = 'wrong-party',
+    ];
+    for (const corrupt of corruptions) {
+        const changed = clone(after); corrupt(changed);
+        assert.throws(() => assertSingleWriterProgress(before, changed, 1, initial, [true, false]));
+    }
+});
+
 test('help is offline and cannot load SDK or require coordinator game paths', () => {
     const output = execFileSync(process.execPath, ['tools/mcp/scenarios/p2p-mission-lifecycle.mjs', '--help'],
         { encoding: 'utf8', windowsHide: true });

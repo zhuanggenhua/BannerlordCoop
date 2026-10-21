@@ -283,12 +283,16 @@ export function assertNoWorldProgress(before, after, initial) {
     assert.deepEqual(after.players, before.players, 'All-away player resources or identities changed');
 }
 
-export function assertSingleWriterProgress(before, after, writerIndex, initial) {
+export function assertSingleWriterProgress(before, after, writerIndex, initial, expectedYield = [false, false]) {
+    assert.ok(Array.isArray(expectedYield) && expectedYield.length === 2 &&
+        typeof expectedYield[0] === 'boolean' && typeof expectedYield[1] === 'boolean',
+        'Expected yield flags must be exactly two booleans');
     const controller = initial[writerIndex].controller;
     assertWriter(before, controller, initial); assertWriter(after, controller, initial);
     for (let index = 0; index < 2; index++) {
         assert.equal(epoch(after[index]), epoch(before[index]), 'Unexpected authority transition inside observation');
-        assert.equal(after[index].yielded, false);
+        assert.equal(before[index].yielded, expectedYield[index], 'Unexpected availability override before progress observation');
+        assert.equal(after[index].yielded, expectedYield[index], 'Unexpected availability override after progress observation');
         if (index === writerIndex) {
             assert.ok(after[index].worldTicks > before[index].worldTicks, 'Writer native world Tick did not progress');
             assert.ok(after[index].hours > before[index].hours, 'Writer world clock did not progress');
