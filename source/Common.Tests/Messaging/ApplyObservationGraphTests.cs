@@ -1,7 +1,12 @@
 ﻿using Common.Messaging;
 
+using Serilog;
+using Serilog.Core;
+using Serilog.Events;
+
 namespace Common.Tests.Messaging;
 
+[Collection(nameof(GameThreadCollection))]
 public class ApplyObservationGraphTests
 {
     [Fact]
@@ -180,5 +185,47 @@ public class ApplyObservationGraphTests
                 Assert.Equal(1, validations);
             });
         Assert.Equal(1, completed);
+    }
+
+    [Fact]
+    public void SecondaryObserverFailureIsLoggedWithoutReplacingFirstExceptionOrStrandingHolds()
+    {
+        var first = new InvalidOperationException("first observer callback failure");
+        var secondary = new InvalidOperationException("secondary observer callback failure");
+        const string reason = "original retained apply failure #42";
+        int firstNotified = 0, secondaryNotified = 0, completed = 0;
+        var sink = new CaptureSink();
+        var previousLogger = Log.Logger;
+        using var logger = new LoggerConfiguration().WriteTo.Sink(sink).CreateLogger();
+        Log.Logger = logger;
+        try
+        {
+            MessageApplyScope.RetainedObservation pending;
+            using (MessageApplyScope.Observe(() => true, _ => { secondaryNotified++; throw secondary; }, () => completed++))
+            using (MessageApplyScope.Observe(() => true, _ => { firstNotified++; throw first; }, () => completed++))
+                pending = MessageApplyScope.RetainCurrent();
+            using (pending.Activate())
+            {
+                Assert.Same(first, Assert.Throws<InvalidOperationException>(() => MessageApplyScope.Fail(reason)));
+                Assert.Equal(1, firstNotified);
+                Assert.Equal(1, secondaryNotified);
+                Assert.Equal(0, completed);
+            }
+            pending.Complete();
+            Assert.Equal(2, completed);
+            Assert.False(pending.IsCurrent);
+            var entry = Assert.Single(sink.Events);
+            Assert.Equal(LogEventLevel.Error, entry.Level);
+            Assert.Same(secondary, entry.Exception);
+            Assert.Equal(reason, Assert.IsType<ScalarValue>(entry.Properties["ApplyFailureReason"]).Value);
+            Assert.Contains("failure callback", entry.RenderMessage());
+        }
+        finally { Log.Logger = previousLogger; }
+    }
+
+    private sealed class CaptureSink : ILogEventSink
+    {
+        public List<LogEvent> Events { get; } = new();
+        public void Emit(LogEvent logEvent) => Events.Add(logEvent);
     }
 }

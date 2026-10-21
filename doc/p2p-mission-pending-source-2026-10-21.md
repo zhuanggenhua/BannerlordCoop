@@ -51,3 +51,12 @@ Nine new graph cases cover real public alias activation, distinct shared ancesto
 Repair focused composition/retention/graph tests pass 44/44. Final full Common passes 493/493 with actual exit 0; related Coop remains 165/165. These results do not replace native tests, the historical Coop195/E2E10 comparison, or the preserved earlier SDK-host crash. No pending Mission consumer or reliable payload gate was opened. Native Mission, A-B-A, natural day, battle and performance are NOT_RUN for this repair.
 
 Related GI apply/world/freeze also remains 42/42 with actual exit 0 on the repaired source. All three final regression commands use -p:ModName=, with unique stdout, TRX, exit-code and SHA256 evidence paths.
+
+## Secondary failure logging: pre-edit boundary
+
+1. The unique-ancestor Fail loop notifies every actual observer and preserves the first callback exception for rethrow. Independent review found that later callback exceptions were caught without diagnostic output.
+2. An outer adapter sees only the rethrown first exception, so it cannot reconstruct a later callback exception. One log at the existing catch is the minimal correction; no graph, queue or Mission redesign is needed.
+3. Preserve exact first-exception identity/stack, one notification per unique observer and final retain release. Log each later exception with the original apply failure reason; the log does not turn failure into successful apply.
+4. The new two-throwing-observer test first fails because the log collection is empty, after already proving both notifications, the exact first exception and completed-once lifetimes. It requires exactly one secondary Error event with that exception and original structured reason. Original failure evidence stays retained; full Common and related Coop/GI regressions will run after root releases its real-game lock.
+
+Secondary callback logging is now implemented at that existing catch. The final focused suite passes 45/45, full Common 494/494, selected Coop 165/165 and GI 42/42, each with actual exit 0. The regression logger is restored in finally and the test uses the existing nonparallel collection to isolate the global Serilog capture. Original candidate commits and handoffs remain unchanged; the cumulative final handoff lists all files since e268, not only this logging fix. No native acceptance is claimed.

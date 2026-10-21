@@ -81,7 +81,12 @@ public sealed class MessageApplyReceipt
         foreach (var ancestor in Ancestors())
         {
             try { ancestor.failed?.Invoke(reason); }
-            catch (Exception error) { if (firstFailure == null) firstFailure = ExceptionDispatchInfo.Capture(error); }
+            catch (Exception error)
+            {
+                if (firstFailure == null) firstFailure = ExceptionDispatchInfo.Capture(error);
+                else Serilog.Log.Error(error,
+                    "Apply observation failure callback failed while reporting {ApplyFailureReason}", reason);
+            }
         }
         firstFailure?.Throw();
     }
