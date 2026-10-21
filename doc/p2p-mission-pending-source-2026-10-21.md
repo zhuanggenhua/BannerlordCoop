@@ -1,4 +1,4 @@
-# Retained Mission apply sources, 2026-10-21
+﻿# Retained Mission apply sources, 2026-10-21
 
 Base `e2689840ae62f9f3200b6f3497ad042c1273017a`. Native entry and reliable payload families remain gated while this dependency is built.
 
@@ -32,3 +32,22 @@ Final full Common passes 484/484 with actual exit 0; selected Coop session/apply
 One prior full Common invocation produced 484 passing test results but the SDK/MSBuild host exited `0xc0000005`; that invocation is **FAIL**, not accepted as a passing run. Its original log/TRX, WER report, event records and SHA256-indexed crash summary remain preserved. The loaded modules identify the SDK 10.0.400/.NET 10.0.11 MSBuild host and `ntdll.dll+0x304d4`; no native dump was available. The exact native cause and a historical/environment classification are unproven. After root released its game run, the unchanged original command with unique output paths passed with exit 0. The earlier host failure is not erased or relabelled by this retry.
 
 No Mission consumer cache has been changed, no reliable message family has been enabled, and no worker game or deployment occurred. The next independently reviewed slice must wire a typed family's real pending enqueue/drain/replacement/disposal boundaries before that family can be admitted. Full Mission/battle/day/performance acceptance remains `NOT_RUN` for this API slice.
+
+## Independent DAG review repair: pre-edit core boundary
+
+1. The existing receipt composes captured source and ambient parent validity, domain coverage, failure reporting and independently paired lifetime retains. The new public retained activation can make both edges point to the same receipt, or two distinct branches share deeper ancestors.
+2. Review found exact recursive duplication in MessageApplyReceipt.IsCurrent/Observes and BeginReceipt failure delegates. Source callbacks are arbitrary user callbacks, so repeated evaluation is a correctness issue as well as exponential traversal. A consumer adapter cannot repair the generic graph it receives. Separate each node's local callbacks from explicit ancestry and traverse unique nodes per query/propagation inside this existing API.
+3. Preserve source-before-ambient short-circuit AND, original validator/failure exceptions, domain/origin coverage, all observer failures even when another callback throws, and every actual retain/release pair. Deduplicating graph queries must not deduplicate lifetime releases or create any execution/replay permission. No queue or Mission algorithm changes are required.
+4. Deterministic RED/GREEN must count validator and failure callbacks for same-source aliases and distinct branches sharing ancestors, reject missing domains, preserve nonshared false/throw paths, and prove completion once after all nested holds release. Retain original 35 focused, 484 Common, 165 selected Coop and 42 GI baselines plus every prior failure artifact. No timing-based acceptance or native acceptance claim.
+
+## DAG repair implementation and retained evidence
+
+The independent review found a real public API schedule: repeatedly retain and activate the current source while it is also ambient. Eight layers called one source validator and one observer failure callback 256 times per query/propagation. Distinct captured/ambient branches also invoked a shared deeper ancestor twice. The original six-failure run remains in graph-red; five cases show those real defects. The sixth was a new fixture's incorrect short-circuit expectation: existing captured-left validation precedes ambient-root validation, so left legitimately runs once before root returns false. That assertion was corrected to preserve the original order; right remains uncalled.
+
+Each receipt now stores only its own validator/failure callback and explicit source/parent ancestry. One iterative, query-local visited traversal is shared by validity, domain lookup and failure propagation. It preserves source-before-ambient short circuit and original exceptions. Failure propagation continues through other observers when one callback throws, then rethrows the first original exception. Lifetime retains/releases are unchanged: both actual holds remain paired even when the source and ambient edge alias. No global cache, authority permission, queue or Mission policy was added.
+
+Nine new graph cases cover real public alias activation, distinct shared ancestors, per-query and per-failure callback counts, throwing callbacks, original validator exception, nonshared false short circuit, completed-once lifetime, and a 1024-layer shared DAG with exactly 3073 unique nodes. Missing-domain visit count, validator count and failure count each equal 3073; this is deterministic evidence rather than a timing threshold. The internal domain-query overload only returns the visited-node count from the same read-only implementation.
+
+Repair focused composition/retention/graph tests pass 44/44. Final full Common passes 493/493 with actual exit 0; related Coop remains 165/165. These results do not replace native tests, the historical Coop195/E2E10 comparison, or the preserved earlier SDK-host crash. No pending Mission consumer or reliable payload gate was opened. Native Mission, A-B-A, natural day, battle and performance are NOT_RUN for this repair.
+
+Related GI apply/world/freeze also remains 42/42 with actual exit 0 on the repaired source. All three final regression commands use -p:ModName=, with unique stdout, TRX, exit-code and SHA256 evidence paths.

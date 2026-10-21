@@ -1,4 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 
 namespace Common.Messaging;
@@ -33,13 +35,56 @@ public sealed class MessageApplyReceipt
         ObservationDomain = observationDomain; this.parent = parent;
         this.source = source;
     }
-    internal bool Observes(object domain) => domain != null &&
-        (ReferenceEquals(ObservationDomain, domain) || parent != null && parent.Observes(domain) ||
-            source != null && source.Observes(domain));
-    internal bool IsCurrent => isCurrent();
+    // Sources precede ambient parents. A retained activation may share either ancestor,
+    // but a query or failure propagation must invoke each local callback only once.
+    private IEnumerable<MessageApplyReceipt> Ancestors()
+    {
+        var visited = new HashSet<MessageApplyReceipt>();
+        var pending = new Stack<(MessageApplyReceipt Receipt, bool Emit)>();
+        pending.Push((this, false));
+        while (pending.Count != 0)
+        {
+            var item = pending.Pop();
+            if (item.Emit) { yield return item.Receipt; continue; }
+            if (!visited.Add(item.Receipt)) continue;
+            if (item.Receipt.parent != null) pending.Push((item.Receipt.parent, false));
+            pending.Push((item.Receipt, true));
+            if (item.Receipt.source != null) pending.Push((item.Receipt.source, false));
+        }
+    }
+    internal bool Observes(object domain) => Observes(domain, out _);
+    internal bool Observes(object domain, out int visitedCount)
+    {
+        visitedCount = 0;
+        if (domain == null) return false;
+        foreach (var ancestor in Ancestors())
+        {
+            visitedCount++;
+            if (ReferenceEquals(ancestor.ObservationDomain, domain)) return true;
+        }
+        return false;
+    }
+    internal bool IsCurrent
+    {
+        get
+        {
+            foreach (var ancestor in Ancestors())
+                if (ancestor.isCurrent != null && !ancestor.isCurrent()) return false;
+            return true;
+        }
+    }
     internal void Retain() => Interlocked.Increment(ref outstanding);
     internal void Release() { if (Interlocked.Decrement(ref outstanding) == 0) completed(); }
-    internal void Fail(string reason) => failed(reason);
+    internal void Fail(string reason)
+    {
+        ExceptionDispatchInfo firstFailure = null;
+        foreach (var ancestor in Ancestors())
+        {
+            try { ancestor.failed?.Invoke(reason); }
+            catch (Exception error) { if (firstFailure == null) firstFailure = ExceptionDispatchInfo.Capture(error); }
+        }
+        firstFailure?.Throw();
+    }
 }
 
 /// <summary>Thread-bound observation, explicitly retained by GameThread; not ExecutionContext authority.</summary>
@@ -71,11 +116,7 @@ public sealed class MessageApplyScope : IDisposable
         if (value == null) throw new ArgumentException("An observation receipt is required", nameof(value));
         var parent = current;
         parent?.Retain();
-        var composed = new MessageApplyReceipt(reason =>
-        {
-            try { value.Fail(reason); }
-            finally { parent?.Fail(reason); }
-        }, () =>
+        var composed = new MessageApplyReceipt(null, () =>
         {
             try { value.Release(); }
             catch (Exception error)
@@ -84,7 +125,7 @@ public sealed class MessageApplyScope : IDisposable
                 throw;
             }
             finally { parent?.Release(); }
-        }, () => value.IsCurrent && (sourceCurrent == null || sourceCurrent()) && (parent == null || parent.IsCurrent),
+        }, sourceCurrent,
             value.ObservationDomain ?? domain, parent, value);
         return new MessageApplyScope(composed, true);
     }
