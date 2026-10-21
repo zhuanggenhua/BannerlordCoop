@@ -79,7 +79,8 @@ export function assertColdLease(before, after, initial) {
 const AI_CLASSES=['writerNpc','writerPlayer','observerLocalNavigation','receiveApply','unqualified','unknown'];
 const AI_OUTCOMES=['completed','failed','skipped'];
 const aiKey=(kind,outcome)=>'MobilePartyAi.Tick.'+(kind?kind+'.':'')+outcome;
-export function assertAiSimulationEvidence(receipt) {
+export function assertAiSimulationEvidence(receipt, { allowZeroObserved = false } = {}) {
+    assert.equal(typeof allowZeroObserved,'boolean','AI zero-coverage option must be a boolean');
     assert.equal(receipt.aiSimulation?.schemaVersion,1,'AI role probe schema unavailable');
     assert.deepEqual(receipt.aiSimulation.classes,AI_CLASSES,'AI role partitions unavailable');
     assert.ok(Array.isArray(receipt.aiSimulation.firstEntries) && receipt.aiSimulation.firstEntries.length<=36,'AI first evidence unavailable');
@@ -95,7 +96,7 @@ export function assertAiSimulationEvidence(receipt) {
         assert.ok(count(aiKey('unexpectedWorld',outcome))<=count(aiKey('',outcome)),'Unsafe AI count exceeds raw '+outcome);
     }
     assert.equal(count(aiKey('','observed')),AI_OUTCOMES.reduce((sum,outcome)=>sum+count(aiKey('',outcome)),0),'AI probe coverage differs from raw');
-    assert.ok(count(aiKey('','observed'))>0,'AI probe has no actual entry coverage');
+    if(!allowZeroObserved) assert.ok(count(aiKey('','observed'))>0,'AI probe has no actual entry coverage');
     count(aiKey('beforeOriginal','failed'));
     return counters;
 }

@@ -21,6 +21,20 @@ function aiEvidence(kind='writerNpc',completed=1,priorUnknown=0) {
     return {simulation,aiSimulation:{schemaVersion:1,classes:aiClasses,firstEntries:[]}};
 }
 const receipt = (node,rows) => ({node,instance:node,campaign:'campaign',overflowed:false,rows,tickerAudits:[],duplicateRealTicks:0,failedRealTicks:0,...aiEvidence(node==='a'?'writerNpc':'observerLocalNavigation')});
+
+test('AI explicit zero baseline preserves default positivity and complete schema validation', () => {
+    const empty = aiEvidence('writerNpc', 0);
+    assert.throws(() => assertAiSimulationEvidence(empty), /no actual entry/);
+    assert.doesNotThrow(() => assertAiSimulationEvidence(empty, { allowZeroObserved: true }));
+    assert.throws(() => assertAiSimulationEvidence(empty, { allowZeroObserved: 'true' }), /boolean/);
+    for (const corrupt of [value => delete value.simulation['MobilePartyAi.Tick.unknown.failed'],
+        value => value.aiSimulation.schemaVersion = 0,
+        value => value.simulation['MobilePartyAi.Tick.completed'] = 1,
+        value => value.simulation['MobilePartyAi.Tick.observed'] = -1]) {
+        const invalid = structuredClone(empty); corrupt(invalid);
+        assert.throws(() => assertAiSimulationEvidence(invalid, { allowZeroObserved: true }));
+    }
+});
 const receipts = () => [receipt('a',[row('a',2),row('a',2,'DailyTick'),row('a',2,'HourlyTick')]),
     receipt('b',[row('b',3),row('b',3,'DailyTick'),row('b',3,'HourlyTick')])];
 const initial = [{controller:'a',roomHost:'a',mainHero:'hero-a',mainParty:'party-a'},{controller:'b',roomHost:'a',mainHero:'hero-b',mainParty:'party-b'}];
