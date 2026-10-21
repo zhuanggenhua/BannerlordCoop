@@ -25,12 +25,14 @@ namespace GameInterface.Services.Heroes.Handlers
             this.network = network;
             messageBroker.Subscribe<HeroRelationChanged>(Handle);
             messageBroker.Subscribe<NetworkHeroRelationChanged>(Handle);
+            messageBroker.Subscribe<NetworkCampaignAuthorityHeroRelationChanged>(Handle);
         }
 
         public void Dispose()
         {
             messageBroker.Unsubscribe<HeroRelationChanged>(Handle);
             messageBroker.Unsubscribe<NetworkHeroRelationChanged>(Handle);
+            messageBroker.Unsubscribe<NetworkCampaignAuthorityHeroRelationChanged>(Handle);
         }
 
         private void Handle(MessagePayload<HeroRelationChanged> obj)
@@ -69,8 +71,11 @@ namespace GameInterface.Services.Heroes.Handlers
         {
             GameThread.RunSafe(() =>
             {
-                if (!objectManager.TryGetObjectWithLogging<Hero>(hero1Id, out var hero1)) return;
-                if (!objectManager.TryGetObjectWithLogging<Hero>(hero2Id, out var hero2)) return;
+                using var replay = CampaignExecutionScope.Enter(CampaignExecutionPhase.Replay);
+                if (!objectManager.TryGetObjectWithLogging<Hero>(hero1Id, out var hero1))
+                { MessageApplyScope.Fail("Missing relation source Hero " + hero1Id); return; }
+                if (!objectManager.TryGetObjectWithLogging<Hero>(hero2Id, out var hero2))
+                { MessageApplyScope.Fail("Missing relation target Hero " + hero2Id); return; }
 
                 // The change is applied as an absolute value (SetHeroRelation) to match the server exactly
                 // and avoid the RNG/model factor ChangeRelationAction applies to positive gains; capture the
