@@ -3,19 +3,38 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { exerciseMapMovement } from './p2p-map-responsiveness.mjs';
 import { options, run, assertSingleWriterProgress } from './p2p-mission-lifecycle.mjs';
-import { assertActors, assertWorld, assertWriter, epoch, jsonOutput } from './p2p-udp-reliability.mjs';
+import { assertActors, assertPlayers, assertWorld, assertWriter, epoch, jsonOutput } from './p2p-udp-reliability.mjs';
 import { assertFrozenMovementPair, assertFrozenNpcSamples } from './frozen-movement-evidence.mjs';
+import { assertMovingPlayersCritical } from './map-responsiveness-evidence.mjs';
 
 const instances = ['server', 'client1'];
+
+export async function capturePredictedMapState(context, label) {
+    const { command, initial, bothStates, poll, setTime } = context;
+    await setTime('Pause');
+    return poll(label, async () => {
+        const states = await bothStates();
+        assertActors(states, initial);
+        assertWriter(states, states.find(state => state.localAuthority)?.controller, initial);
+        const worlds = await Promise.all(instances.map(instance => command(instance,
+            'coop.debug.authority.world_state').then(jsonOutput)));
+        assertWorld(worlds);
+        const players = await Promise.all(instances.map(instance => Promise.all(initial.map(actor =>
+            command(instance, 'coop.debug.players.party_state', [actor.controller]).then(jsonOutput)))));
+        assertMovingPlayersCritical(players, initial);
+        return { states, worlds, players,
+            positionPolicy: 'Prediction offsets retained; exact final checkpoint comparison is required after handoff' };
+    });
+}
 
 // Reuses original input/prediction probes, native snapshot comparison and immutable log archive.
 // Yield is solely a map-only readiness injection; this scenario does not accept Mission transitions.
 export async function exerciseMapAuthorityContracts(context) {
-    const { command, feature, initial, bothStates, poll, setTime, consistentSnapshot, emit } = context;
+    const { command, feature, initial, bothStates, poll, setTime, emit } = context;
     await exerciseMapMovement(context);
     for (const [mode, writerIndex, name] of [['yield', 1, 'A-to-B-map-handoff'], ['auto', 0, 'B-to-A-map-handoff']]) {
         await feature(name, async () => {
-            const beforeTransfer = await consistentSnapshot(name + '-critical-before-barrier');
+            const beforeTransfer = await capturePredictedMapState(context, name + '-critical-before-barrier');
             const oldEpoch = epoch(beforeTransfer.states[0]);
             await command('server', 'coop.debug.authority.availability', [mode], true);
             const committed = await poll(name + '-confirmed-writer', async () => {
@@ -30,6 +49,9 @@ export async function exerciseMapAuthorityContracts(context) {
                 assertWorld(worlds);
                 assertFrozenNpcSamples(worlds);
                 assertFrozenMovementPair(worlds.map(world => world.movement));
+                const players = await Promise.all(instances.map(instance => Promise.all(initial.map(actor =>
+                    command(instance, 'coop.debug.players.party_state', [actor.controller]).then(jsonOutput)))));
+                assertPlayers(players);
                 return worlds;
             });
             await emit({ phase: 'final_barrier_exact_movement', name, committed, worlds: finalBaseline });
@@ -40,7 +62,7 @@ export async function exerciseMapAuthorityContracts(context) {
                 assertSingleWriterProgress(beforeProgress, after, writerIndex, initial);
                 return after;
             });
-            const afterCritical = await consistentSnapshot(name + '-critical-after-progress');
+            const afterCritical = await capturePredictedMapState(context, name + '-critical-after-progress');
             return { beforeTransfer, committed, finalBaseline, beforeProgress, afterProgress, afterCritical,
                 scope: 'Real map simulation and final-barrier exact positions; debug readiness yield, not Mission acceptance' };
         });

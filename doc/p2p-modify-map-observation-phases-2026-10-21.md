@@ -1,0 +1,9 @@
+# Map observation and final-checkpoint phases
+
+The native map02 run at `15f02d5d` remains FAIL. Its original JSONL, logs and twelve screenshots are retained. Join, transparent movement and actual 50ms UDP delay passed; no authority-yield request was dispatched. The pre-handoff observation instead required exact player positions before the final-checkpoint protocol could run.
+
+Both clocks and all seven critical world hashes/counters matched throughout the failed observation. LocalA's native position was `(651.4297, 278.454041)` on A and `(652.254639, 278.460327)` on B. Ordinary movement intentionally predicts the replicated target and does not hard-correct every in-flight position. Pausing the clock does not change that target to Hold. This observation does not establish successful final checkpoint installation or excuse any post-handoff discrepancy.
+
+The map-only fixture now uses its existing prediction-compatible critical-player contract before handoff and after renewed simulation. Raw positions remain in the evidence. XP, gold, troop counts, recruitment, identities, registrations, object numbering and clock equality remain mandatory. After each actual handoff, the original exact complete-party and NPC position assertions remain, with an additional exact player-state comparison, before simulation resumes. No production synchronization algorithm, positional tolerance or final checkpoint assertion is changed. The shared Mission fixture keeps its original behavior.
+
+Regression checks cover retained raw offsets and rejection of XP/resource/identity/registration corruption, together with the existing frozen-movement negative tests. A fresh native run is required; correcting the observation phase does not retroactively pass map02 or establish Mission, natural-day or performance acceptance.
