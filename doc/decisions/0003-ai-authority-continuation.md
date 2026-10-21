@@ -41,6 +41,24 @@ entrypoints and final continuation checkpoint, not their business algorithms.
    duplicate detection and exact final positions. Failed partial installation remains a
    fault/freeze. Do not erase evidence or call it rollback/lossless recovery.
 
+## Setter provenance and existing endpoint composition
+
+Owner, Gold and IsOwnerUnassigned originally log the same SettlementComponent error.
+The saved 223 entries cannot uniquely identify Owner. Preserve the original RCA and
+record this correction; the malformed caravan and missing AI graph remain separate facts.
+
+Reuse the original settlement publisher and receiver, composing each once on both endpoint
+roles. Retain original gold LatestWins coalescing, share its instance with the existing
+client freeze flush, and add the matching game-thread periodic flush on the client.
+Do not replace these payload/conversion bodies with a parallel settlement protocol.
+
+The raw scoped-message ingress rejection remains strict. Network publication of classified
+world results requires a confirmed lease. AuthorityLeaseDistributionHandler confirms at
+CampaignReady and before PlayerConnected, sending initial lease metadata immediately before
+world deltas. Bootstrap registration is transferred by the original snapshot, not by
+unconfirmed raw scoped results. This ordering must be tested on the actual join/catch-up
+path; a production counterexample blocks this slice rather than weakening ingress.
+
 ## Regression and acceptance obligations
 
 Before editing core entrypoints, each worker records original behavior, concrete failure,
