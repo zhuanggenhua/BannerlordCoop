@@ -103,14 +103,17 @@ internal sealed class CampaignSessionCheckpointService : ICampaignSessionCheckpo
         if (nativeState != null && (!nativeState.TryPrepare(checkpoint.NativeBehaviors, out installNative) || installNative == null)) return false;
         var localInventory = provider.CoopSession?.InventoryPlayerData ?? CoopSession.Empty.InventoryPlayerData;
         var merged = BuildSession(snapshot, registered.Values.ToArray(), lease, identity.RoomHostControllerId, localInventory);
+        bool installed = false;
         return identity.TryExecuteWithLease(lease, () =>
         {
             installNative?.Invoke();
+            if (nativeState != null && !nativeState.IsInstalled(checkpoint.NativeBehaviors)) return;
             foreach (var player in snapshot.Players)
                 registered[player.ControllerId].CrimeRatings = new Dictionary<string, float>(player.CrimeRatings);
             provider.CoopSession = merged;
             CoopSessionUpdateHandler.InitializeSessionReaders(broker, this, merged);
-        });
+            installed = true;
+        }) && installed;
     }
 
     private bool ValidatePlayers(Player[] snapshot, out Dictionary<string, Player> registered)

@@ -27,10 +27,35 @@ public class SessionNativeStateIntegrationTests
         int installed = 0;
         Action install = () => installed++;
         fixture.Native.Setup(value => value.TryPrepare(native, out install)).Returns(true);
+        fixture.Native.Setup(value => value.IsInstalled(native)).Returns(() => installed == 1);
         Assert.True(fixture.Service.TryCapture("campaign", out var checkpoint));
         Assert.Same(native, checkpoint.NativeBehaviors);
         Assert.True(fixture.Service.TryApply(checkpoint, "campaign"));
         Assert.Equal(1, installed);
+    }
+
+    [Theory]
+    [InlineData("noop")]
+    [InlineData("corrupt")]
+    [InlineData("recapture")]
+    public void UnprovenNativeInstallCannotPublishSessionOrReportApplySuccess(string failure)
+    {
+        var fixture = new Fixture();
+        var native = new CampaignNativeBehaviorCheckpoint(new CampaignAgingBehaviorState(42,
+            Array.Empty<CampaignHeroIntState>(), Array.Empty<CampaignHeroIntState>()));
+        fixture.Native.Setup(value => value.TryCapture(out native)).Returns(true);
+        int value = 7;
+        Action install = () => value = failure == "noop" ? value : 99;
+        fixture.Native.Setup(service => service.TryPrepare(native, out install)).Returns(true);
+        fixture.Native.Setup(service => service.IsInstalled(native)).Returns(() => failure != "recapture" && value == 42);
+        Assert.True(fixture.Service.TryCapture("campaign", out var checkpoint));
+        var original = fixture.Provider.CoopSession;
+
+        Assert.False(fixture.Service.TryApply(checkpoint, "campaign"));
+
+        fixture.Native.Verify(service => service.IsInstalled(native), Times.Once);
+        Assert.Same(original, fixture.Provider.CoopSession);
+        Assert.Equal(failure == "noop" ? 7 : 99, value);
     }
 
     [Fact]
@@ -62,6 +87,7 @@ public class SessionNativeStateIntegrationTests
         Assert.False(fixture.Service.TryApply(checkpoint, "campaign"));
         Assert.False(installed);
         Assert.Same(original, fixture.Provider.CoopSession);
+        fixture.Native.Verify(value => value.IsInstalled(It.IsAny<CampaignNativeBehaviorCheckpoint>()), Times.Never);
     }
 
     [Fact]

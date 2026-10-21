@@ -6,6 +6,8 @@ using GameInterface.Services.ObjectManager;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.IO;
+using ProtoBuf;
 using TaleWorlds.Core;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
@@ -17,6 +19,7 @@ public interface ICampaignNativeBehaviorCheckpointService
 {
     bool TryCapture(out CampaignNativeBehaviorCheckpoint checkpoint);
     bool TryPrepare(CampaignNativeBehaviorCheckpoint checkpoint, out Action install);
+    bool IsInstalled(CampaignNativeBehaviorCheckpoint checkpoint);
 }
 
 internal sealed partial class CampaignNativeBehaviorCheckpointService : ICampaignNativeBehaviorCheckpointService
@@ -58,6 +61,20 @@ internal sealed partial class CampaignNativeBehaviorCheckpointService : ICampaig
         return TryPrepare(checkpoint, campaign.GetCampaignBehavior<AgingCampaignBehavior>(),
             campaign.GetCampaignBehavior<CaravansCampaignBehavior>(), ItemCategories.All.ToArray(),
             campaign.GetCampaignBehavior<KingdomDecisionProposalBehavior>(), out install);
+    }
+
+    public bool IsInstalled(CampaignNativeBehaviorCheckpoint checkpoint) =>
+        checkpoint != null && TryCapture(out var installed) && MatchesInstalled(checkpoint, installed);
+
+    private bool MatchesInstalled(CampaignNativeBehaviorCheckpoint checkpoint, CampaignNativeBehaviorCheckpoint installed)
+    {
+        if (checkpoint == null || installed == null || checkpoint.Version != 3 || installed.Version != 3)
+            return Reject("installed.header=null or invalid");
+        using var expected = new MemoryStream();
+        using var actual = new MemoryStream();
+        Serializer.Serialize(expected, checkpoint);
+        Serializer.Serialize(actual, installed);
+        return expected.ToArray().SequenceEqual(actual.ToArray()) || Reject("installed.nativeState differs from checkpoint");
     }
 
     internal bool TryCapture(AgingCampaignBehavior aging, CaravansCampaignBehavior caravans, ItemCategory[] categories,
