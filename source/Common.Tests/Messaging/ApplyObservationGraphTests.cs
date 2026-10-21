@@ -1,8 +1,7 @@
 ﻿using Common.Messaging;
 
 using Serilog;
-using Serilog.Core;
-using Serilog.Events;
+using Common.Logging;
 
 namespace Common.Tests.Messaging;
 
@@ -191,15 +190,19 @@ public class ApplyObservationGraphTests
     public void SecondaryObserverFailureIsLoggedWithoutReplacingFirstExceptionOrStrandingHolds()
     {
         var first = new InvalidOperationException("first observer callback failure");
-        var secondary = new InvalidOperationException("secondary observer callback failure");
+        var secondary = new InstanceMarkedException("secondary observer callback failure");
         const string reason = "original retained apply failure #42";
         int firstNotified = 0, secondaryNotified = 0, completed = 0;
-        var sink = new CaptureSink();
+        var output = new List<string>();
+        Action<string> callback = output.Add;
         var previousLogger = Log.Logger;
-        using var logger = new LoggerConfiguration().WriteTo.Sink(sink).CreateLogger();
-        Log.Logger = logger;
+        using var silent = new LoggerConfiguration().CreateLogger();
+        Log.Logger = silent;
+        OutputSinkManager.AddLogCallback(callback);
         try
         {
+            Log.Error("global logger must not reach app OutputSink");
+            Assert.Empty(output);
             MessageApplyScope.RetainedObservation pending;
             using (MessageApplyScope.Observe(() => true, _ => { secondaryNotified++; throw secondary; }, () => completed++))
             using (MessageApplyScope.Observe(() => true, _ => { firstNotified++; throw first; }, () => completed++))
@@ -214,18 +217,72 @@ public class ApplyObservationGraphTests
             pending.Complete();
             Assert.Equal(2, completed);
             Assert.False(pending.IsCurrent);
-            var entry = Assert.Single(sink.Events);
-            Assert.Equal(LogEventLevel.Error, entry.Level);
-            Assert.Same(secondary, entry.Exception);
-            Assert.Equal(reason, Assert.IsType<ScalarValue>(entry.Properties["ApplyFailureReason"]).Value);
-            Assert.Contains("failure callback", entry.RenderMessage());
+            var line = Assert.Single(output);
+            Assert.True(secondary.RenderCount > 0);
+            Assert.Contains(secondary.ToString(), line);
+            Assert.Contains(secondary.InstanceMarker, line);
+            Assert.Contains(reason, line);
+            Assert.Contains("Apply observation failure callback failed", line);
         }
-        finally { Log.Logger = previousLogger; }
+        finally
+        {
+            OutputSinkManager.RemoveLogCallback(callback);
+            Log.Logger = previousLogger;
+        }
     }
 
-    private sealed class CaptureSink : ILogEventSink
+    private sealed class InstanceMarkedException : InvalidOperationException
     {
-        public List<LogEvent> Events { get; } = new();
-        public void Emit(LogEvent logEvent) => Events.Add(logEvent);
+        public string InstanceMarker { get; } = Guid.NewGuid().ToString("N");
+        public int RenderCount { get; private set; }
+        public InstanceMarkedException(string message) : base(message) { }
+        public override string ToString()
+        {
+            RenderCount++;
+            return $"instance:{InstanceMarker} {base.ToString()}";
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ValidationFailureDiagnosticsReachRealOutputWhileGlobalLoggerIsSilent(bool throwOnRelease)
+    {
+        var original = new InvalidOperationException("real-sink validator exception");
+        var secondary = new InstanceMarkedException("real-sink secondary callback exception");
+        var output = new List<string>();
+        Action<string> callback = output.Add;
+        int notified = 0, completed = 0;
+        var previousLogger = Log.Logger;
+        using var silent = new LoggerConfiguration().CreateLogger();
+        Log.Logger = silent;
+        OutputSinkManager.AddLogCallback(callback);
+        try
+        {
+            MessageApplyScope.RetainedObservation pending;
+            using (MessageApplyScope.Observe(() => throw original, _ =>
+            {
+                notified++;
+                if (!throwOnRelease) throw secondary;
+            }, () =>
+            {
+                completed++;
+                if (throwOnRelease) throw secondary;
+            })) pending = MessageApplyScope.RetainCurrent();
+            Assert.Same(original, Assert.Throws<InvalidOperationException>(() => _ = pending.IsCurrent));
+            Assert.Equal(1, notified);
+            Assert.Equal(1, completed);
+            Assert.False(pending.IsCurrent);
+            var line = Assert.Single(output);
+            Assert.True(secondary.RenderCount > 0);
+            Assert.Contains(secondary.ToString(), line);
+            Assert.Contains(secondary.InstanceMarker, line);
+            Assert.Contains(original.Message, line);
+        }
+        finally
+        {
+            OutputSinkManager.RemoveLogCallback(callback);
+            Log.Logger = previousLogger;
+        }
     }
 }

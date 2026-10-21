@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Common.Logging;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 
@@ -84,7 +85,7 @@ public sealed class MessageApplyReceipt
             catch (Exception error)
             {
                 if (firstFailure == null) firstFailure = ExceptionDispatchInfo.Capture(error);
-                else Serilog.Log.Error(error,
+                else LogManager.GetLogger<MessageApplyReceipt>().Error(error,
                     "Apply observation failure callback failed while reporting {ApplyFailureReason}", reason);
             }
         }
@@ -251,7 +252,7 @@ public sealed class MessageApplyScope : IDisposable
         try { complete(error.ToString()); }
         catch (Exception completionError)
         {
-            Serilog.Log.Error(completionError,
+            LogManager.GetLogger<MessageApplyScope>().Error(completionError,
                 "Apply observation failure reporting failed after {ApplyError}", error);
         }
     }
@@ -261,7 +262,7 @@ public sealed class MessageApplyScope : IDisposable
         try { value.Release(); }
         catch (Exception completionError)
         {
-            Serilog.Log.Error(completionError,
+            LogManager.GetLogger<MessageApplyScope>().Error(completionError,
                 "Apply observation release failed after source validation threw {ValidationError}", error);
         }
     }
