@@ -1,4 +1,4 @@
-using Common;
+﻿using Common;
 using Common.Network.Session;
 using Common.Util;
 using GameInterface.Services.CampaignAuthority.Movement;
@@ -21,7 +21,7 @@ using Xunit;
 namespace GameInterface.Tests.Services.CampaignAuthority.Movement;
 
 [Collection(nameof(CampaignCurrentCollection))]
-public class CampaignMovementCheckpointServiceTests : IDisposable
+public partial class CampaignMovementCheckpointServiceTests : IDisposable
 {
     private readonly Campaign previous = Campaign.Current;
     private readonly Campaign campaign = ObjectHelper.SkipConstructor<Campaign>();
@@ -43,7 +43,7 @@ public class CampaignMovementCheckpointServiceTests : IDisposable
         Campaign.Current = campaign;
         harmony.Patch(AccessTools.PropertyGetter(typeof(MobileParty), nameof(MobileParty.NavigationCapability)),
             prefix: new HarmonyMethod(typeof(CampaignMovementCheckpointServiceTests), nameof(Navigation)));
-        service = new CampaignMovementCheckpointService(new MobilePartyBehaviorSnapshot(registry), new PartyBehaviorWireMapper(registry));
+        service = new CampaignMovementCheckpointService(new MobilePartyBehaviorSnapshot(registry), new PartyBehaviorWireMapper(registry), new CampaignAiContinuation(registry));
     }
 
     public void Dispose()
@@ -56,6 +56,31 @@ public class CampaignMovementCheckpointServiceTests : IDisposable
     {
         __result = MobileParty.NavigationType.Default;
         return false;
+    }
+
+    [Fact]
+    public void FinalCheckpointRestoresLiveConstructorContinuationOnExistingIncrementalAi()
+    {
+        var party = Party(1);
+        var native = party.Ai;
+        native.HourCounter = 73;
+        native._fleeingData.ShouldFleeClockWise = true;
+        native._fleeingData.CcwFleeDirectionIsBlocked = true;
+        Assert.True(service.TryCapture(source, 777, out var checkpoint));
+        var replica = ObjectHelper.SkipConstructor<MobilePartyAi>();
+        AccessTools.Field(typeof(MobilePartyAi), nameof(MobilePartyAi._mobileParty)).SetValue(replica, party);
+        Assert.True(registry.Remove(native));
+        Assert.True(registry.AddExisting("MobilePartyAi_Created_1", replica, 1001));
+        party.Ai = replica;
+        Assert.Null(replica._fleeingData);
+        Assert.True(service.TryPrepare(checkpoint, source, 777, out var apply));
+        Assert.True(apply());
+        Assert.Same(replica, party.Ai);
+        Assert.NotNull(replica._fleeingData);
+        Assert.Equal(73, replica.HourCounter);
+        Assert.True(replica._fleeingData.ShouldFleeClockWise);
+        Assert.True(replica._fleeingData.CcwFleeDirectionIsBlocked);
+        Assert.True(service.IsInstalled(checkpoint));
     }
 
     [Fact]
@@ -176,6 +201,7 @@ public class CampaignMovementCheckpointServiceTests : IDisposable
         party.ShortTermBehavior = AiBehavior.Hold;
         campaign.CampaignObjectManager._mobileParties.Add(party);
         Assert.True(registry.AddExisting("MobileParty_Created_" + handle, party, handle));
+        Assert.True(registry.AddExisting("MobilePartyAi_Created_" + handle, party.Ai, handle + 1000));
         return party;
     }
 

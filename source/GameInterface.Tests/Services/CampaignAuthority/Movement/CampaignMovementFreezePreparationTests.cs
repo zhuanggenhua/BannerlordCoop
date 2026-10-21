@@ -260,7 +260,7 @@ public sealed class CampaignMovementFreezePreparationTests
             }
             else networkBehavior = new ClientMobilePartyBehaviorHandler(messages, network.Object, mapper, authority);
             Service = new CampaignMovementFreezePreparation(authority, snapshot, mapper, messages);
-            Checkpoints = new CampaignMovementCheckpointService(snapshot, mapper);
+            Checkpoints = new CampaignMovementCheckpointService(snapshot, mapper, new CampaignAiContinuation(Objects));
         }
 
         internal void FailNativeSetter() => harmony.Patch(
@@ -302,6 +302,7 @@ public sealed class CampaignMovementFreezePreparationTests
             party.ShortTermBehavior = AiBehavior.Hold;
             campaign.CampaignObjectManager._mobileParties.Add(party);
             Assert.True(Objects.AddExisting("MobileParty_Created_" + handle, party, handle));
+            Assert.True(Objects.AddExisting("MobilePartyAi_Created_" + handle, party.Ai, handle + 1000));
             return party;
         }
 

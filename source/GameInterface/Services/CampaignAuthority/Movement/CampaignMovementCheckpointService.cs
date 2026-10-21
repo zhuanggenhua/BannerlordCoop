@@ -1,4 +1,4 @@
-using Common;
+﻿using Common;
 using Common.Logging;
 using Common.Network.Session;
 using GameInterface.Services.MobileParties.Data;
@@ -29,20 +29,23 @@ public sealed class CampaignMovementCheckpointService : ICampaignMovementCheckpo
     private static readonly ILogger Logger = LogManager.GetLogger<CampaignMovementCheckpointService>();
     private readonly IMobilePartyBehaviorSnapshot snapshot;
     private readonly IPartyBehaviorWireMapper mapper;
+    private readonly ICampaignAiContinuation continuation;
     public CampaignMovementCheckpoint LastCaptured { get; private set; }
     public CampaignMovementCheckpoint LastApplied { get; private set; }
 
-    public CampaignMovementCheckpointService(IMobilePartyBehaviorSnapshot snapshot, IPartyBehaviorWireMapper mapper)
+    public CampaignMovementCheckpointService(IMobilePartyBehaviorSnapshot snapshot, IPartyBehaviorWireMapper mapper, ICampaignAiContinuation continuation)
     {
         this.snapshot = snapshot;
         this.mapper = mapper;
+        this.continuation = continuation;
     }
 
     public bool TryCapture(AuthorityLease source, long ticks, out CampaignMovementCheckpoint checkpoint)
     {
         checkpoint = null;
-        if (!source.IsValid || source.IsPaused || ticks < 0 || !TryCaptureStates(out var states)) return false;
-        byte[] payload = Encode(states);
+        if (!source.IsValid || source.IsPaused || ticks < 0 || !TryCaptureStates(out var states) ||
+            !continuation.TryCapture(out var aiStates)) return false;
+        byte[] payload = Encode(states, aiStates);
         checkpoint = new CampaignMovementCheckpoint(source, ticks, states.Length, payload, Hash(payload));
         LastCaptured = checkpoint;
         Logger.Information("Captured final campaign movement epoch {Epoch} ticks {Ticks} parties {PartyCount} sha256 {Sha256}",
@@ -59,17 +62,19 @@ public sealed class CampaignMovementCheckpointService : ICampaignMovementCheckpo
             (LastApplied.Ticks != ticks || !string.Equals(LastApplied.Sha256, checkpoint.Sha256, StringComparison.Ordinal))) return false;
 
         NetworkMobilePartyJoinState[] wire;
+        MovementPayload payload;
         try
         {
             using var stream = new MemoryStream(checkpoint.Payload, writable: false);
-            wire = Serializer.Deserialize<MovementPayload>(stream)?.States;
+            payload = Serializer.Deserialize<MovementPayload>(stream);
+            wire = payload?.States;
         }
         catch (Exception ex)
         {
             Logger.Error(ex, "Rejected invalid final campaign movement payload at epoch {Epoch}", source.Epoch);
             return false;
         }
-        if (wire == null || wire.Length != checkpoint.PartyCount) return false;
+        if (payload?.AiContinuation?.Version != 1 || payload.AiContinuation.States == null || wire == null || wire.Length != checkpoint.PartyCount) return false;
         var states = new MobilePartyJoinState[wire.Length];
         var handles = new HashSet<uint>();
         for (int i = 0; i < wire.Length; i++)
@@ -79,7 +84,8 @@ public sealed class CampaignMovementCheckpointService : ICampaignMovementCheckpo
                 !mapper.TryFromNetwork(wire[i].Behavior, out var behavior)) return false;
             states[i] = wire[i].ToLocal(behavior);
         }
-        if (!snapshot.TryPrepareAuthorityBaseline(states, out var install)) return false;
+        if (!continuation.TryPrepare(payload.AiContinuation.States, wire.Select(p => p.Behavior.MobilePartyId).ToArray(), out var installAi) ||
+            !snapshot.TryPrepareAuthorityBaseline(states, out var install)) return false;
         Logger.Information("Prepared final campaign movement epoch {Epoch} ticks {Ticks} parties {PartyCount} sha256 {Sha256}",
             source.Epoch, ticks, states.Length, checkpoint.Sha256);
         bool consumed = false;
@@ -89,7 +95,7 @@ public sealed class CampaignMovementCheckpointService : ICampaignMovementCheckpo
             consumed = true;
             // An exact duplicate verifies the installed baseline without replaying movement writes.
             bool duplicate = LastApplied != null && LastApplied.SourceLease == source;
-            if ((!duplicate && !install()) || !MatchesInstalled(states)) return false;
+            if ((!duplicate && (!install() || !installAi())) || !MatchesInstalled(states) || !IsInstalled(checkpoint)) return false;
             LastApplied = checkpoint;
             Logger.Information("Installed final campaign movement epoch {Epoch} ticks {Ticks} parties {PartyCount} sha256 {Sha256} duplicate {Duplicate}",
                 source.Epoch, ticks, states.Length, checkpoint.Sha256, duplicate);
@@ -101,8 +107,9 @@ public sealed class CampaignMovementCheckpointService : ICampaignMovementCheckpo
     public bool IsInstalled(CampaignMovementCheckpoint checkpoint)
     {
         if (checkpoint?.Payload == null || !string.Equals(checkpoint.Sha256, Hash(checkpoint.Payload), StringComparison.Ordinal) ||
-            !TryCaptureStates(out var states) || states.Length != checkpoint.PartyCount) return false;
-        return Encode(states).SequenceEqual(checkpoint.Payload);
+            !TryCaptureStates(out var states) || states.Length != checkpoint.PartyCount ||
+            !continuation.TryCapture(out var aiStates)) return false;
+        return Encode(states, aiStates).SequenceEqual(checkpoint.Payload);
     }
 
     private bool TryCaptureStates(out NetworkMobilePartyJoinState[] states)
@@ -155,10 +162,14 @@ public sealed class CampaignMovementCheckpointService : ICampaignMovementCheckpo
         return BitConverter.ToString(sha.ComputeHash(bytes)).Replace("-", string.Empty).ToLowerInvariant();
     }
 
-    private static byte[] Encode(NetworkMobilePartyJoinState[] states)
+    private static byte[] Encode(NetworkMobilePartyJoinState[] states, CampaignAiContinuationState[] aiStates = null)
     {
         using var stream = new MemoryStream();
-        Serializer.Serialize(stream, new MovementPayload { States = states });
+        Serializer.Serialize(stream, new MovementPayload
+        {
+            States = states,
+            AiContinuation = aiStates == null ? null : new CampaignAiContinuationPayload { Version = 1, States = aiStates },
+        });
         return stream.ToArray();
     }
 
@@ -166,5 +177,6 @@ public sealed class CampaignMovementCheckpointService : ICampaignMovementCheckpo
     internal sealed class MovementPayload
     {
         [ProtoMember(1)] public NetworkMobilePartyJoinState[] States { get; set; } = Array.Empty<NetworkMobilePartyJoinState>();
+        [ProtoMember(2)] public CampaignAiContinuationPayload AiContinuation { get; set; }
     }
 }
