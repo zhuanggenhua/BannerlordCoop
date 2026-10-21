@@ -1,5 +1,6 @@
 ﻿using Autofac;
 using Common;
+using Common.Logging;
 using Common.Util;
 using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Entity;
@@ -10,6 +11,8 @@ using HarmonyLib;
 using Moq;
 using Serilog;
 using System;
+using System.Collections.Concurrent;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.GameComponents;
@@ -151,6 +154,38 @@ public class PlayerInitiativeQualificationTests
             Assert.True(PlayerManager.TryGetControlledObjectInfo(fixture.B, out var control));
             Assert.Equal("B", control.ObjectControllerId);
             Assert.True(CampaignSimulationAuthorityPolicy.CanTickParty(fixture.B));
+        }
+    }
+
+    [Fact]
+    public void NativeSuppressionReachesConfiguredApplicationSinkWithSilentGlobalLogger()
+    {
+        using var fixture = new Fixture();
+        var lines = new ConcurrentQueue<string>();
+        Action<string> capture = lines.Enqueue;
+        var previousLogger = Log.Logger;
+        using var silent = new LoggerConfiguration().CreateLogger();
+        Log.Logger = silent;
+        OutputSinkManager.AddLogCallback(capture);
+        try
+        {
+            fixture.RegisterB();
+            fixture.Patch();
+            Assert.False(fixture.Model.ShouldPartyCheckInitiativeBehavior(fixture.B));
+            var first = Assert.Single(lines.Where(line => line.Contains("[PlayerInitiativeQualification]")));
+            Assert.Contains("nativeEligible=true", first);
+            Assert.Contains("epoch=1", first);
+            Assert.Contains("B", first);
+            Assert.False(fixture.Model.ShouldPartyCheckInitiativeBehavior(fixture.B));
+            Assert.Single(lines.Where(line => line.Contains("[PlayerInitiativeQualification]")));
+            fixture.SetLease("B", 3);
+            Assert.False(fixture.Model.ShouldPartyCheckInitiativeBehavior(fixture.B));
+            Assert.Equal(2, lines.Count(line => line.Contains("[PlayerInitiativeQualification]")));
+        }
+        finally
+        {
+            OutputSinkManager.RemoveLogCallback(capture);
+            Log.Logger = previousLogger;
         }
     }
 

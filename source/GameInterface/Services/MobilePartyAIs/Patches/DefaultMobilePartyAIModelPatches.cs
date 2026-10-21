@@ -41,7 +41,7 @@ internal class DefaultMobilePartyAIModelPatches
             observed.Lease = lease;
         }
         PlayerManager.TryGetControlledObjectInfo(party, out var control);
-        Serilog.Log.Information("[PlayerInitiativeQualification] Suppressed native initiative party={Party} controller={Controller} " +
+        Common.Logging.LogManager.GetLogger<DefaultMobilePartyAIModelPatches>().Information("[PlayerInitiativeQualification] Suppressed native initiative party={Party} controller={Controller} " +
             "mainParty={MainParty} nativeEligible=true room={Room} authority={Authority} writer={Writer} epoch={Epoch} paused={Paused} phase={Phase}",
             party.StringId, control?.ObjectControllerId, MobileParty.MainParty?.StringId,
             lease.RoomId, lease.AuthorityId, lease.AuthorityControllerId, lease.Epoch, lease.IsPaused, CampaignExecutionScope.Current);
