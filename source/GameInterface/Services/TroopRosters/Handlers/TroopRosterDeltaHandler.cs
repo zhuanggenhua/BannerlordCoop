@@ -432,6 +432,7 @@ internal class TroopRosterDeltaHandler : IHandler
         GameThread.RunSafe(() =>
         {
             TroopRoster roster;
+            using (CampaignExecutionScope.Enter(CampaignExecutionPhase.Replay))
             using (new AllowedThread())
             {
                 if (!objectManager.TryGetObjectWithLogging(rosterId, out roster)) return;
@@ -457,6 +458,7 @@ internal class TroopRosterDeltaHandler : IHandler
         GameThread.RunSafe(() =>
         {
             TroopRoster roster;
+            using (CampaignExecutionScope.Enter(CampaignExecutionPhase.Replay))
             using (new AllowedThread())
             {
                 if (!objectManager.TryGetObjectWithLogging(rosterId, out roster)) return;

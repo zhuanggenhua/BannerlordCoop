@@ -20,6 +20,16 @@ internal static class CampaignSimulationAuthorityPolicy
     internal static bool CanRunWorldSimulation()
     {
         if (!CanEnterWorldCallback()) return false;
+        return CanPublishAppliedWorldResult();
+    }
+
+    /// <summary>
+    /// Publishing an already executed result does not authorize simulation. AllowedThread alone
+    /// neither grants authority nor identifies replay; receive paths must carry Replay provenance.
+    /// </summary>
+    internal static bool CanPublishAppliedWorldResult()
+    {
+        if (CampaignExecutionScope.IsWorldWriteRestricted) return false;
         bool hasAuthorityContext = ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authorityContext);
         if (hasAuthorityContext)
         {

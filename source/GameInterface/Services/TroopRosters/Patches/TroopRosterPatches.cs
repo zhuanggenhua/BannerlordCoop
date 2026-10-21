@@ -242,7 +242,7 @@ internal class TroopRosterAddToCountsPatch
     {
         if (!__state) return;
         if (!AllowedThread.IsThisThreadAllowed()) return;
-        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return;
+        if (!CampaignSimulationAuthorityPolicy.CanPublishAppliedWorldResult()) return;
         if (CallOriginalPolicy.IsClientMutationBlocked()) return;
         if (__instance == null || character == null) return;
         if (!TroopRosterPatches.IsRegistered(__instance)) return;
