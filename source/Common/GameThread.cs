@@ -196,7 +196,7 @@ public class GameThread : IUpdateable
                 cancellationReason = completedCancellationReason;
                 completionState = state;
                 act = null;
-                try { applyContinuation?.Complete(completedFailure?.ToString() ?? completedCancellationReason); }
+                try { applyContinuation?.Complete(completedCancellationReason, completedFailure); }
                 finally { if (!waiterDetached) Wait?.Set(); }
             }
         }
