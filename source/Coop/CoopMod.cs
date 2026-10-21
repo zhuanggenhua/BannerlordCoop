@@ -1,5 +1,6 @@
 ﻿using Common;
 using Common.Logging;
+using Common.Network.Session;
 using Coop.Core.Common.Configuration;
 using Common.Serialization;
 using Coop.Core;
@@ -665,8 +666,15 @@ namespace Coop
                 else
 #endif
                 {
-                    var steamPump = isListenHost ? null : SteamIntegrationBoot.TryStartWithCallbackPump(
-                        isServer, Utilities.GetFullCommandLineString());
+                    var steamPump = SteamIntegrationBoot.TryStartWithCallbackPump(
+                        isServer && !isListenHost, Utilities.GetFullCommandLineString());
+                    if (isListenHost)
+                    {
+                        if (SessionDiscovery.SteamAvailable)
+                            Logger.Information("Steam 房主连接服务已启用，进入战役后创建好友房间");
+                        else
+                            Logger.Warning("Steam 房主连接服务不可用，请确认 Steam 已登录；当前仍可使用 Direct IP");
+                    }
                     // The standalone server has no game frame of its own to dispatch its game-server callbacks.
                     if (steamPump != null) Updateables.Add(steamPump);
                 }

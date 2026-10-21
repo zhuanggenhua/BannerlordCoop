@@ -10,6 +10,7 @@ using Common.PacketHandlers;
 using Coop.Core.Client.Services.Settlements.Handlers;
 using Coop.Core.Client.Services.Kingdoms;
 using Coop.Core.Client.Services.MobileParties;
+using Coop.Core.Client.Services.Session;
 using Coop.Core.Common;
 using Coop.Core.Common.Configuration;
 #if DEBUG
@@ -146,12 +147,14 @@ public class ServerModule : CommonModule
         // Policies
         builder.RegisterType<ServerSyncPolicy>().As<ISyncPolicy>().InstancePerLifetimeScope();
 
-        // The standalone server logs into Steam itself and advertises with the host-selected lobby
-        // visibility, so eligible players can join without port forwarding while the owner never
-        // plays. Same guard as ClientModule: only touch Steam types when the boot probe found Steam.
-        if (!ModInformation.IsListenAuthority && SessionDiscovery.SteamAvailable)
+        // Listen hosts use their player's Steam identity; dedicated hosts use anonymous server login.
+        // Keep Steam-specific layouts outside this method's JIT on non-Steam installs.
+        if (SessionDiscovery.SteamAvailable)
         {
-            RegisterSteamSessionServices(builder);
+            if (ModInformation.IsListenAuthority)
+                RegisterListenSteamSessionServices(builder);
+            else
+                RegisterSteamSessionServices(builder);
         }
         else
         {
@@ -167,6 +170,29 @@ public class ServerModule : CommonModule
         RegisterAllTypesWithInterface<ServerModule, IHandler>(builder, autoInstantiate: true);
         RegisterAllTypesWithInterface<ServerModule, IPacketHandler>(builder, autoInstantiate: true);
         builder.RegisterType<ClientSettlementComponentHandler>().AsSelf().InstancePerLifetimeScope().AutoActivate();
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    internal static void RegisterListenSteamSessionServices(ContainerBuilder builder)
+    {
+        builder.RegisterType<SteamLobbyApi>()
+            .As<ISteamLobbyApi>()
+            .As<ISteamPublicLobbyApi>()
+            .InstancePerLifetimeScope();
+        builder.RegisterType<ListenSteamLobbyAdvertiser>()
+            .As<ISessionAdvertiser>()
+            .As<ISteamLobbyOwner>()
+            .InstancePerLifetimeScope();
+        builder.RegisterType<SteamNetworkingTunnelTransport>()
+            .As<ISteamTunnelTransport>().InstancePerLifetimeScope();
+        builder.RegisterType<SteamTunnelHost>()
+            .As<ISessionTunnelHost>()
+            .As<ISessionTunnelIdentityResolver>()
+            .InstancePerLifetimeScope();
+        builder.RegisterType<SteamMissionBridge>().As<ISteamMissionBridge>().InstancePerLifetimeScope();
+        builder.RegisterType<ConfiguredSessionJoinInfoSource>().As<ISessionJoinInfoSource>().InstancePerLifetimeScope();
+        builder.RegisterType<ListenSessionAdvertisementHandler>()
+            .As<IListenSessionAdvertisementHandler>().InstancePerLifetimeScope().AutoActivate();
     }
 
     // Non-inlined so referencing the Steam tunnel transport (its layout embeds Steamworks value
