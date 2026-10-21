@@ -16,10 +16,12 @@ namespace GameInterface.Tests.Diagnostics;
 public sealed class CampaignLateAiBranchEvidenceTests
 {
     private static Action<Campaign> afterEntry;
+    private static Action beforePartiesSkip;
     private static bool resetDt;
     private static Exception thinkError;
     private static bool SkipPartiesThink(Campaign __instance)
     {
+        beforePartiesSkip?.Invoke();
         if(resetDt)__instance._dt=0;
         if(thinkError!=null)throw thinkError;
         return false;
@@ -52,6 +54,23 @@ public sealed class CampaignLateAiBranchEvidenceTests
         Assert.Equal(0,(int)group["FirstEntry"]["DtBits"]);Assert.Equal(0,(int)group["LastExit"]["DtBits"]);
         Assert.Equal(1,(int)group["LastExit"]["LateAiPartiesThinkAttempts"]);
         Assert.Equal("unexpected",(string)group["Classification"]);
+    }
+
+    [Fact]
+    public void EarlierFalsePrefixStillRecordsTransientBranchAttemptOnActualHarmonyDependency()
+    {
+        int? attemptsBeforeSkip=null;
+        var snapshot=ObserveActual(0,10,true,after:c=>{c._dt=0.1f;resetDt=true;},earlySkip:true,beforeSkip:()=>
+        {
+            var scope=AccessTools.Field(typeof(CampaignSimulationEvidencePatches),"currentLateAi").GetValue(null);
+            Assert.NotNull(scope);attemptsBeforeSkip=(int)AccessTools.Field(scope.GetType(),"Attempts").GetValue(scope);
+        });
+        var group=Assert.Single((JArray)snapshot["RoleGroups"]);
+        Assert.Equal(0,attemptsBeforeSkip);
+        Assert.Equal(0,(int)group["FirstEntry"]["DtBits"]);Assert.Equal(0,(int)group["LastExit"]["DtBits"]);
+        Assert.Equal(1,(int)group["LastExit"]["LateAiPartiesThinkAttempts"]);
+        Assert.Equal("unexpected",(string)group["Classification"]);
+        Assert.Equal(1,(long)snapshot["Counts"]["Campaign.LateAITickAux.completed"]);
     }
 
     [Fact]
@@ -132,7 +151,7 @@ public sealed class CampaignLateAiBranchEvidenceTests
     }
 
     private static JObject ObserveActual(float dt,int count,bool coverage,Action<Campaign> after=null,
-        Action<Campaign,SessionIdentity> setup=null,Exception error=null,bool invokeAgain=false,bool confirmed=true)
+        Action<Campaign,SessionIdentity> setup=null,Exception error=null,bool invokeAgain=false,bool confirmed=true,bool earlySkip=false,Action beforeSkip=null)
     {
         var previous=Campaign.Current;
         var campaign=(Campaign)RuntimeHelpers.GetUninitializedObject(typeof(Campaign));
@@ -146,9 +165,9 @@ public sealed class CampaignLateAiBranchEvidenceTests
         var harmony=new Harmony("coop.tests.late-ai.branch");var late=AccessTools.Method(typeof(Campaign),"LateAITickAux");var think=AccessTools.Method(typeof(Campaign),"PartiesThink");
         try
         {
-            setup?.Invoke(campaign,identity);afterEntry=after;thinkError=error;
+            setup?.Invoke(campaign,identity);afterEntry=after;thinkError=error;beforePartiesSkip=beforeSkip;
             if(coverage)harmony.Patch(think,prefix:new HarmonyMethod(typeof(CampaignSimulationEvidencePatches),"Prefix"),finalizer:new HarmonyMethod(typeof(CampaignSimulationEvidencePatches),"Finalizer"));
-            harmony.Patch(think,prefix:new HarmonyMethod(typeof(CampaignLateAiBranchEvidenceTests),nameof(SkipPartiesThink)));
+            harmony.Patch(think,prefix:new HarmonyMethod(typeof(CampaignLateAiBranchEvidenceTests),nameof(SkipPartiesThink)) { priority=earlySkip?Priority.First+100:Priority.Normal });
             harmony.Patch(late,prefix:new HarmonyMethod(typeof(CampaignSimulationEvidencePatches),"Prefix"),finalizer:new HarmonyMethod(typeof(CampaignSimulationEvidencePatches),"Finalizer"));
             harmony.Patch(late,prefix:new HarmonyMethod(typeof(CampaignLateAiBranchEvidenceTests),nameof(BeforeNative)));
             if(error==null)late.Invoke(campaign,Array.Empty<object>());
@@ -156,6 +175,6 @@ public sealed class CampaignLateAiBranchEvidenceTests
             if(invokeAgain){thinkError=null;campaign._dt=0;late.Invoke(campaign,Array.Empty<object>());}
             return JObject.FromObject(CampaignCycleDispatchPatches.For(campaign).SimulationEvidenceSnapshot());
         }
-        finally {harmony.UnpatchAll(harmony.Id);afterEntry=null;resetDt=false;thinkError=null;ContainerProvider.Clear();Campaign.Current=previous;}
+        finally {harmony.UnpatchAll(harmony.Id);afterEntry=null;beforePartiesSkip=null;resetDt=false;thinkError=null;ContainerProvider.Clear();Campaign.Current=previous;}
     }
 }
