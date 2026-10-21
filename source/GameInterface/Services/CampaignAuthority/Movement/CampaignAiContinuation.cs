@@ -1,4 +1,6 @@
-﻿using GameInterface.Services.ObjectManager;
+﻿using Common.Logging;
+using GameInterface.Services.ObjectManager;
+using Serilog;
 using ProtoBuf;
 using System;
 using System.Collections.Generic;
@@ -17,6 +19,7 @@ public interface ICampaignAiContinuation
 /// <summary>Finite native AI leaf state; navigation and references remain in the movement snapshot.</summary>
 public sealed class CampaignAiContinuation : ICampaignAiContinuation
 {
+    private static readonly ILogger Logger = LogManager.GetLogger<CampaignAiContinuation>();
     private readonly IObjectManager objects;
 
     public CampaignAiContinuation(IObjectManager objects) => this.objects = objects;
@@ -25,15 +28,21 @@ public sealed class CampaignAiContinuation : ICampaignAiContinuation
     {
         states = null;
         var parties = Campaign.Current?.CampaignObjectManager?.MobileParties;
-        if (parties == null) return false;
+        if (parties == null) return Reject("capture", 0, 0, "campaign-parties-unavailable");
         var result = new List<CampaignAiContinuationState>();
         foreach (var party in parties.Where(p => p?.IsActive == true))
         {
             var ai = party.Ai;
-            if (ai?._fleeingData == null || !ReferenceEquals(ai._mobileParty, party) ||
-                !objects.TryGetHandle(party, out var partyId) || !objects.TryGetHandle(ai, out var aiId)) return false;
+            bool partyRegistered = objects.TryGetHandle(party, out var partyId);
+            uint aiId = 0;
+            bool aiRegistered = ai != null && objects.TryGetHandle(ai, out aiId);
+            if (ai?._fleeingData == null) return Reject("capture", partyId, aiId, "missing-flee-leaf");
+            if (!ReferenceEquals(ai._mobileParty, party)) return Reject("capture", partyId, aiId, "ai-owner-binding");
+            if (!partyRegistered || partyId == 0) return Reject("capture", partyId, aiId, "unregistered-party");
+            if (!aiRegistered || aiId == 0) return Reject("capture", partyId, aiId, "unregistered-ai");
             var state = Read(ai, partyId, aiId);
-            if (!Valid(state)) return false;
+            if (!Finite(state.AttackInitiative) || !Finite(state.AvoidInitiative))
+                return Reject("capture", partyId, aiId, "nonfinite-initiative");
             result.Add(state);
         }
         states = result.OrderBy(s => s.PartyId).ToArray();
@@ -43,16 +52,26 @@ public sealed class CampaignAiContinuation : ICampaignAiContinuation
     public bool TryPrepare(CampaignAiContinuationState[] states, uint[] partyHandles, out Func<bool> apply)
     {
         apply = null;
-        if (states == null || partyHandles == null || states.Length != partyHandles.Length) return false;
+        if (states == null) return Reject("prepare", 0, 0, "missing-records");
+        if (partyHandles == null || states.Length != partyHandles.Length) return Reject("prepare", 0, 0, "record-coverage-count");
         var ais = new MobilePartyAi[states.Length];
         var handles = new HashSet<uint>();
         for (int i = 0; i < states.Length; i++)
         {
             var state = states[i];
-            if (!Valid(state) || state.PartyId != partyHandles[i] || !handles.Add(state.AiId) ||
-                !objects.TryGetObject<MobileParty>(state.PartyId, out var party) || !party.IsActive ||
-                !objects.TryGetObject<MobilePartyAi>(state.AiId, out var ai) ||
-                !ReferenceEquals(party.Ai, ai) || !ReferenceEquals(ai._mobileParty, party)) return false;
+            if (state == null) return Reject("prepare", 0, 0, "missing-record");
+            if (state.PartyId == 0 || state.AiId == 0) return Reject("prepare", state.PartyId, state.AiId, "zero-identity");
+            if (!Finite(state.AttackInitiative) || !Finite(state.AvoidInitiative))
+                return Reject("prepare", state.PartyId, state.AiId, "nonfinite-initiative");
+            if (state.PartyId != partyHandles[i]) return Reject("prepare", state.PartyId, state.AiId, "party-coverage-order");
+            if (!handles.Add(state.AiId)) return Reject("prepare", state.PartyId, state.AiId, "duplicate-ai");
+            if (!objects.TryGetObject<MobileParty>(state.PartyId, out var party))
+                return Reject("prepare", state.PartyId, state.AiId, "unregistered-party");
+            if (!party.IsActive) return Reject("prepare", state.PartyId, state.AiId, "inactive-party");
+            if (!objects.TryGetObject<MobilePartyAi>(state.AiId, out var ai))
+                return Reject("prepare", state.PartyId, state.AiId, "unregistered-ai");
+            if (!ReferenceEquals(party.Ai, ai)) return Reject("prepare", state.PartyId, state.AiId, "party-ai-binding");
+            if (!ReferenceEquals(ai._mobileParty, party)) return Reject("prepare", state.PartyId, state.AiId, "ai-owner-binding");
             ais[i] = ai;
         }
         bool consumed = false;
@@ -65,16 +84,19 @@ public sealed class CampaignAiContinuation : ICampaignAiContinuation
                 if (!objects.TryGetObject<MobileParty>(states[i].PartyId, out var party) || !party.IsActive ||
                     !objects.TryGetObject<MobilePartyAi>(states[i].AiId, out var ai) ||
                     !ReferenceEquals(ai, ais[i]) || !ReferenceEquals(party.Ai, ai) ||
-                    !ReferenceEquals(ai._mobileParty, party)) return false;
+                    !ReferenceEquals(ai._mobileParty, party))
+                    return Reject("install", states[i].PartyId, states[i].AiId, "binding-changed-after-prepare");
             for (int i = 0; i < states.Length; i++) Write(ais[i], states[i]);
             return true;
         };
         return true;
     }
 
-    private static bool Valid(CampaignAiContinuationState state) =>
-        state != null && state.PartyId != 0 && state.AiId != 0 &&
-        Finite(state.AttackInitiative) && Finite(state.AvoidInitiative);
+    private static bool Reject(string phase, uint party, uint ai, string reason)
+    {
+        Logger.Warning("Rejected final AI continuation {Phase}: party {PartyHandle} ai {AiHandle} reason {Reason}", phase, party, ai, reason);
+        return false;
+    }
 
     private static bool Finite(float value) => !float.IsNaN(value) && !float.IsInfinity(value);
 

@@ -46,6 +46,16 @@ Tick stack. No native AI method or algorithm is replaced by the adapter.
 Worker validation: original navigation-only checkpoint RED 0/1 (leaf remains null),
 then movement/AI continuation 48/0 and related movement/batch/routing regressions 68/0.
 All existing assertions remain. Initial compiler/fixture development failures are kept.
-Original E2E AI class filter is 1 PASS/6 FAIL; a pure-base exact-name comparison is required
-before classifying these failures. No game, deployment, full natural day or Mission run
+Original E2E AI class filter is 1 PASS/6 FAIL on both the candidate and pure base
+`e43187d9b19bd9df6ce2915865cbaff7a2a61109`, with identical seven per-case outcomes
+and no added/removed failures. Original messages are retained: client instance numbers
+vary with test order and one Siege teardown queue count is 332 versus 333; this is not
+a byte-identical error-message claim. These six failures are separately base-reproduced,
+not silently assigned to the designated historical ten. No game, deployment, full natural day or Mission run
 is performed by this worker. Final integrated dual-process A-B-A remains unaccepted.
+
+Rejections log the first party/AI handles and reason per invocation. Captured, prepared
+and installed movement logs include AI schema version and record count alongside the
+existing source epoch, tick and full payload hash. The final diagnostic-only delta was
+verified by the 48 movement tests; the earlier related AI run was 68/0. No assertions or
+legacy E2E code were changed.

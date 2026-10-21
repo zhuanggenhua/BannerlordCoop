@@ -48,8 +48,8 @@ public sealed class CampaignMovementCheckpointService : ICampaignMovementCheckpo
         byte[] payload = Encode(states, aiStates);
         checkpoint = new CampaignMovementCheckpoint(source, ticks, states.Length, payload, Hash(payload));
         LastCaptured = checkpoint;
-        Logger.Information("Captured final campaign movement epoch {Epoch} ticks {Ticks} parties {PartyCount} sha256 {Sha256}",
-            source.Epoch, ticks, states.Length, checkpoint.Sha256);
+        Logger.Information("Captured final campaign movement epoch {Epoch} ticks {Ticks} parties {PartyCount} sha256 {Sha256} AI version {AiVersion} count {AiCount}",
+            source.Epoch, ticks, states.Length, checkpoint.Sha256, 1, aiStates.Length);
         return true;
     }
 
@@ -74,7 +74,13 @@ public sealed class CampaignMovementCheckpointService : ICampaignMovementCheckpo
             Logger.Error(ex, "Rejected invalid final campaign movement payload at epoch {Epoch}", source.Epoch);
             return false;
         }
-        if (payload?.AiContinuation?.Version != 1 || payload.AiContinuation.States == null || wire == null || wire.Length != checkpoint.PartyCount) return false;
+        if (payload?.AiContinuation?.Version != 1 || payload.AiContinuation.States == null)
+        {
+            Logger.Warning("Rejected final AI continuation prepare: party {PartyHandle} ai {AiHandle} reason {Reason} version {AiVersion}",
+                0, 0, payload?.AiContinuation == null ? "missing-section" : "unsupported-version-or-missing-records", payload?.AiContinuation?.Version);
+            return false;
+        }
+        if (wire == null || wire.Length != checkpoint.PartyCount) return false;
         var states = new MobilePartyJoinState[wire.Length];
         var handles = new HashSet<uint>();
         for (int i = 0; i < wire.Length; i++)
@@ -86,8 +92,8 @@ public sealed class CampaignMovementCheckpointService : ICampaignMovementCheckpo
         }
         if (!continuation.TryPrepare(payload.AiContinuation.States, wire.Select(p => p.Behavior.MobilePartyId).ToArray(), out var installAi) ||
             !snapshot.TryPrepareAuthorityBaseline(states, out var install)) return false;
-        Logger.Information("Prepared final campaign movement epoch {Epoch} ticks {Ticks} parties {PartyCount} sha256 {Sha256}",
-            source.Epoch, ticks, states.Length, checkpoint.Sha256);
+        Logger.Information("Prepared final campaign movement epoch {Epoch} ticks {Ticks} parties {PartyCount} sha256 {Sha256} AI version {AiVersion} count {AiCount}",
+            source.Epoch, ticks, states.Length, checkpoint.Sha256, payload.AiContinuation.Version, payload.AiContinuation.States.Length);
         bool consumed = false;
         apply = () =>
         {
@@ -97,8 +103,8 @@ public sealed class CampaignMovementCheckpointService : ICampaignMovementCheckpo
             bool duplicate = LastApplied != null && LastApplied.SourceLease == source;
             if ((!duplicate && (!install() || !installAi())) || !MatchesInstalled(states) || !IsInstalled(checkpoint)) return false;
             LastApplied = checkpoint;
-            Logger.Information("Installed final campaign movement epoch {Epoch} ticks {Ticks} parties {PartyCount} sha256 {Sha256} duplicate {Duplicate}",
-                source.Epoch, ticks, states.Length, checkpoint.Sha256, duplicate);
+            Logger.Information("Installed final campaign movement epoch {Epoch} ticks {Ticks} parties {PartyCount} sha256 {Sha256} duplicate {Duplicate} AI version {AiVersion} count {AiCount}",
+                source.Epoch, ticks, states.Length, checkpoint.Sha256, duplicate, payload.AiContinuation.Version, payload.AiContinuation.States.Length);
             return true;
         };
         return true;
