@@ -1,4 +1,4 @@
-using Common;
+﻿using Common;
 using Common.Messaging;
 using Common.Network;
 using Common.Network.Session;
@@ -30,6 +30,7 @@ public class ArmyAuthorityEnvelopeTests
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(3)]
+    [InlineData(4)]
     public void OriginalSenderPacketAndRelayEnforceArmyEpochAndSequence(int kind)
     {
         var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
@@ -44,7 +45,8 @@ public class ArmyAuthorityEnvelopeTests
             0 => new NetworkAddMobilePartyInArmy("Army160", "party", false),
             1 => new NetworkRemovePartyInArmy("Army160", "party", null),
             2 => new NetworkSetArmyKingdom("Army160", null),
-            _ => new NetworkSetArmyAiBehaviorObject("Army160", null, false)
+            3 => new NetworkSetArmyAiBehaviorObject("Army160", null, false),
+            _ => new NetworkArmyCohesionChanged("Army160", 67)
         };
         Assert.IsAssignableFrom<ICampaignAuthorityScopedMessage>(message);
         MessagePacket packet = default;
@@ -67,7 +69,14 @@ public class ArmyAuthorityEnvelopeTests
         Action<MessagePayload<NetworkRemovePartyInArmy>> remove = _ => applied++;
         Action<MessagePayload<NetworkSetArmyKingdom>> kingdom = _ => applied++;
         Action<MessagePayload<NetworkSetArmyAiBehaviorObject>> objective = _ => applied++;
+        Action<MessagePayload<NetworkArmyCohesionChanged>> cohesion = value =>
+        {
+            Assert.Equal("Army160", value.What.ArmyId);
+            Assert.Equal(67, value.What.Cohesion);
+            applied++;
+        };
         broker.Subscribe(add); broker.Subscribe(remove); broker.Subscribe(kingdom); broker.Subscribe(objective);
+        broker.Subscribe(cohesion);
         using var relay = new CampaignAuthoritySyncRelayServerHandler(broker, connections.Object, players.Object, network.Object, identity, serializer);
         broker.Publish(peer, envelope);
         GameThread.Run(() => { }, blocking: true);
@@ -79,5 +88,18 @@ public class ArmyAuthorityEnvelopeTests
         GameThread.Run(() => { }, blocking: true);
         Assert.Equal(1, applied);
         network.Verify(value => value.SendAllBut(peer, It.Is<NetworkCampaignAuthoritySyncEnvelope>(item => item.Epoch == 2 && item.Sequence == 1)), Times.Once);
+    }
+
+    [Fact]
+    public void IncomingUnwrappedCohesionCannotReachItsOriginalReceiveSubscription()
+    {
+        using var broker = new MessageBroker();
+        var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
+        using var packets = new MessagePacketHandler(broker, Mock.Of<IPacketManager>(), serializer);
+        int applied = 0;
+        Action<MessagePayload<NetworkArmyCohesionChanged>> subscriber = _ => applied++;
+        broker.Subscribe(subscriber);
+        packets.PublishEvent(new TestNetwork().CreatePeer(), new NetworkArmyCohesionChanged("Army160", 67));
+        Assert.Equal(0, applied);
     }
 }

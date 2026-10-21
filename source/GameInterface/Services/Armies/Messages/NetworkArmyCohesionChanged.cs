@@ -4,7 +4,7 @@ using ProtoBuf;
 namespace GameInterface.Services.Armies.Messages;
 
 [ProtoContract(SkipConstructor = true)]
-public readonly struct NetworkArmyCohesionChanged : ICommand
+public readonly struct NetworkArmyCohesionChanged : ICommand, ICampaignAuthorityScopedMessage
 {
     [ProtoMember(1)]
     public readonly string ArmyId;
