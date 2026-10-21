@@ -212,6 +212,170 @@ export function assertSchedulerHandoff(previous, next) {
         assert.deepEqual(receipt.daily,previous.daily,'Handoff lost daily phase');
     }
 }
+const NATIVE_METHODS=['Campaign.RealTick','Campaign.Tick','Campaign.LateAITickAux'];
+const roleContext=b=>Object.fromEntries(['node','campaignId','campaignIdentity','lease','leaseKnown','localWriter','frozen',
+    'restricted','allowedThread','phase','diagnosticError','gameStarted'].map(key=>[key,field(b,key)]));
+const roleKey=g=>JSON.stringify([field(g,'method'),field(g,'outcome'),field(g,'classification'),field(g,'aiClassification')??null,
+    field(g,'aiUnexpectedWorld')??false,field(g,'error')??null,roleContext(field(g,'firstEntry')),roleContext(field(g,'firstExit'))]);
+const strictCount=(counts,key)=>{
+    assert.ok(Object.hasOwn(counts??{},key),'Role counter unavailable: '+key);
+    assert.ok(Number.isSafeInteger(counts[key])&&counts[key]>=0,'Invalid role counter: '+key);return counts[key];
+};
+const exactLease=lease=>['roomId','authorityId','authorityControllerId','epoch','isPaused'].map(key=>field(lease,key));
+function assertRoleBoundary(entry,exit,node,{writer:mustWrite=true,nativeWorld=true}={}) {
+    assert.ok(entry&&exit,'Native role boundary missing');
+    assert.deepEqual(roleContext(exit),roleContext(entry),'Native call changed role context');
+    assert.equal(field(entry,'node'),node,'Native evidence belongs to another node');
+    assert.ok(field(entry,'campaignId'),'Native Campaign identity missing');
+    assert.equal(typeof field(entry,'gameStarted'),'boolean','Native initialization evidence missing');
+    if(nativeWorld)assert.equal(field(entry,'gameStarted'),true,'Native bootstrap initialization');
+    assert.equal(field(entry,'threadId'),field(exit,'threadId'),'Native call changed threads');
+    assert.equal(field(entry,'leaseKnown'),true);assert.equal(field(entry,'frozen'),false);
+    assert.equal(field(entry,'restricted'),false);assert.equal(field(entry,'allowedThread'),false);
+    assert.ok([0,3].includes(field(entry,'phase')),'Native original ran in restricted phase');
+    assert.ok(!field(entry,'diagnosticError'),'Native diagnostic failed');
+    const lease=field(entry,'lease');assert.ok(lease,'Native lease missing');
+    assert.ok(field(lease,'roomId')&&field(lease,'authorityId')&&field(lease,'authorityControllerId')&&field(lease,'epoch')>0);
+    assert.equal(field(lease,'isPaused'),false);
+    assert.equal(field(entry,'localWriter'),node===field(lease,'authorityControllerId'));
+    if(mustWrite)assert.equal(field(entry,'localWriter'),true,'Observer ran native world original');
+    for(const b of [entry,exit]) {
+        assert.ok(Number.isInteger(field(b,'threadId'))&&field(b,'threadId')>0,'Native thread identity missing');
+        assert.ok(Number.isInteger(field(b,'campaignIdentity')),'Native Campaign reference evidence missing');
+        assert.ok(typeof field(b,'utc')==='string'&&Number.isFinite(Date.parse(field(b,'utc'))),'Native boundary timestamp missing');
+        assert.ok(Number.isSafeInteger(field(b,'currentTickCount'))&&field(b,'currentTickCount')>=(nativeWorld?3:0),'Native bootstrap call');
+        assert.ok(Number.isSafeInteger(field(b,'worldTicks')),'Native world clock missing');
+        assert.ok(Number.isFinite(field(b,'dt'))&&field(b,'dt')>=0,'Native dt missing/nonfinite');
+        assert.ok(Number.isInteger(field(b,'dtBits')),'Native raw dt bits missing');
+        const bits=Buffer.allocUnsafe(4);bits.writeFloatLE(field(b,'dt'));
+        assert.equal(bits.readInt32LE(),field(b,'dtBits'),'Native dt value/bits disagree');
+    }
+    return lease;
+}
+export function assertRoleSimulationEvidence(receipt) {
+    const roles=receipt.roleSimulation;assert.equal(roles?.schemaVersion,1,'Native role partition schema missing');
+    assert.equal(roles.node,receipt.node,'Native node must not be inferred from test slot');
+    assert.equal(roles.overflowed,false,'Native role group overflow');
+    assert.ok(Array.isArray(roles.groups)&&roles.groups.length<=256,'Native role groups missing/unbounded');
+    const sums=new Map(),aiSums=new Map(),unsafeAi=new Map(),beforeOriginal=new Map(),keys=new Set();
+    for(const group of roles.groups) {
+        const method=field(group,'method'),outcome=field(group,'outcome'),count=field(group,'count');
+        assert.ok([...NATIVE_METHODS,'MobilePartyAi.Tick'].includes(method));assert.ok(AI_OUTCOMES.includes(outcome));
+        assert.ok((method==='MobilePartyAi.Tick'?[...AI_CLASSES,'unexpected','skipped']:
+            ['writerBookkeeping','writerProgress','unexpected','skipped']).includes(field(group,'classification')),'Unknown native role classification');
+        assert.ok(Number.isSafeInteger(count)&&count>0,'Invalid native group count');
+        const key=roleKey(group);assert.ok(!keys.has(key),'Duplicate native role group');keys.add(key);
+        sums.set(method+'.'+outcome,(sums.get(method+'.'+outcome)??0)+count);
+        if(outcome==='skipped'&&field(group,'error'))beforeOriginal.set(method,(beforeOriginal.get(method)??0)+count);
+        if(method==='MobilePartyAi.Tick') {
+            const ai=field(group,'aiClassification');assert.ok(AI_CLASSES.includes(ai),'AI group lost original class');
+            aiSums.set(ai+'.'+outcome,(aiSums.get(ai+'.'+outcome)??0)+count);
+            assert.equal(typeof field(group,'aiUnexpectedWorld'),'boolean','AI unsafe role flag missing');
+            if(field(group,'aiUnexpectedWorld'))unsafeAi.set(outcome,(unsafeAi.get(outcome)??0)+count);
+        }
+    }
+    for(const method of [...NATIVE_METHODS,'MobilePartyAi.Tick'])for(const outcome of AI_OUTCOMES)
+        assert.equal(strictCount(receipt.simulation,method+'.'+outcome),sums.get(method+'.'+outcome)??0,'Native role partition differs from raw '+method+'.'+outcome);
+    for(const kind of AI_CLASSES)for(const outcome of AI_OUTCOMES)
+        assert.equal(strictCount(receipt.simulation,aiKey(kind,outcome)),aiSums.get(kind+'.'+outcome)??0,'AI role group differs from original class');
+    for(const outcome of AI_OUTCOMES)
+        assert.equal(strictCount(receipt.simulation,aiKey('unexpectedWorld',outcome)),unsafeAi.get(outcome)??0,'AI unsafe partition differs from original');
+    for(const method of [...NATIVE_METHODS,'MobilePartyAi.Tick'])
+        assert.equal(strictCount(receipt.simulation,method+'.beforeOriginal.failed'),beforeOriginal.get(method)??0,'Before-original failure partition differs from raw');
+    return new Map(roles.groups.map(group=>[roleKey(group),group]));
+}
+function roleWindowDeltas(before,after) {
+    assert.equal(before.length,2);assert.equal(after.length,2);
+    assert.equal(new Set(before.map(value=>value.node)).size,2);assert.equal(new Set(after.map(value=>value.node)).size,2);
+    const deltas=[];
+    for(const end of after) {
+        const start=before.find(value=>value.node===end.node);assert.ok(start,'Role start identity missing');
+        for(const key of ['node','instance','campaign','processId'])assert.equal(end[key],start[key],'Role collector identity changed');
+        const prior=assertRoleSimulationEvidence(start),next=assertRoleSimulationEvidence(end);
+        for(const [key,g] of prior)assert.ok(next.has(key)&&field(next.get(key),'count')>=field(g,'count'),'Native role history lost or counter regressed');
+        for(const [key,group] of next) {
+            const delta=field(group,'count')-(prior.has(key)?field(prior.get(key),'count'):0);
+            if(delta) {
+                assert.deepEqual(roleContext(field(group,'firstEntry')),roleContext(field(group,'lastEntry')),'Native group combined different entry contexts');
+                assert.deepEqual(roleContext(field(group,'firstExit')),roleContext(field(group,'lastExit')),'Native group combined different exit contexts');
+                deltas.push({end,group,delta});
+            }
+        }
+    }
+    return deltas;
+}
+function assertAiRole(group,entry,exit,node) {
+    const kind=field(group,'classification');
+    assert.equal(field(group,'aiUnexpectedWorld'),false,'Unsafe native AI');
+    assert.equal(field(group,'aiClassification'),kind,'AI role changed without safe qualification');
+    for(const key of ['aiPartyId','aiPartyRole','aiController','aiIdentity','aiMainParty'])
+        assert.equal(field(entry,key),field(exit,key),'AI identity changed during original');
+    assert.ok(field(entry,'aiPartyId')&&Number.isInteger(field(entry,'aiIdentity')),'AI actual registration evidence missing');
+    if(kind==='observerLocalNavigation') {
+        assert.equal(field(entry,'localWriter'),false);assert.equal(field(entry,'aiMainParty'),true);
+        assert.equal(field(entry,'aiPartyRole'),'localPlayer');assert.equal(field(entry,'aiController'),node);
+    } else {
+        assert.equal(field(entry,'localWriter'),true);
+        assert.ok(['writerNpc','writerPlayer'].includes(kind),'Unqualified native AI');
+        assert.equal(field(entry,'aiPartyRole')==='npc',kind==='writerNpc');
+    }
+}
+function assertNativeClass(method,classification,entry,exit) {
+    assert.equal(field(exit,'currentTickCount'),field(entry,'currentTickCount')+(method==='Campaign.Tick'?1:0));
+    assert.ok(field(exit,'worldTicks')>=field(entry,'worldTicks'),'Native clock moved backwards');
+    const zero=field(entry,'dt')===0&&field(exit,'dt')===0&&field(entry,'worldTicks')===field(exit,'worldTicks');
+    assert.equal(classification,zero?'writerBookkeeping':'writerProgress','Native classification contradicts actual boundaries');
+    if(!zero&&method!=='Campaign.RealTick')assert.ok(field(entry,'dt')>0,'Native Tick could not create positive dt');
+}
+export function assertNaturalDayRoleWindow(before,after,states) {
+    assert.equal(states.length,2);const source=states[0].lease;
+    assert.deepEqual(exactLease(states[1].lease),exactLease(source));let realProgress=0;
+    for(const {end,group:g,delta} of roleWindowDeltas(before,after)) {
+        assert.ok(!field(g,'error'),'Native error during natural day');
+        if(field(g,'outcome')==='skipped') {assert.equal(field(g,'classification'),'skipped');continue;}
+        assert.equal(field(g,'outcome'),'completed');const method=field(g,'method'),ai=method==='MobilePartyAi.Tick',kind=field(g,'classification');
+        for(const [en,ex] of [['firstEntry','firstExit'],['lastEntry','lastExit']]) {
+            const entry=field(g,en),exit=field(g,ex);
+            const lease=assertRoleBoundary(entry,exit,end.node,{writer:!ai||kind!=='observerLocalNavigation',nativeWorld:!ai});
+            assert.deepEqual(exactLease(lease),exactLease(source),'Natural day executed under another lease');
+            if(ai)assertAiRole(g,entry,exit,end.node);else assertNativeClass(method,kind,entry,exit);
+        }
+        if(method==='Campaign.RealTick'&&kind==='writerProgress')realProgress+=delta;
+    }
+    assert.ok(realProgress>0,'Natural day has no actually qualified native RealTick progress');return {realProgress};
+}
+export function assertHandoffCycleTail(before,after,sourceStates,targetStates) {
+    assert.equal(before.length,2);assert.equal(after.length,2);assert.equal(sourceStates.length,2);assert.equal(targetStates.length,2);
+    const source=sourceStates[0].lease,target=targetStates[0].lease;
+    assert.deepEqual(exactLease(sourceStates[1].lease),exactLease(source));assert.deepEqual(exactLease(targetStates[1].lease),exactLease(target));
+    assert.equal(field(source,'roomId'),field(target,'roomId'));assert.ok(field(target,'epoch')>field(source,'epoch'));
+    const result={sourceBookkeeping:0,targetBookkeeping:0,sourceAiDrain:0,observerLocalNavigation:0};
+    for(const {end,group:g,delta} of roleWindowDeltas(before,after)) {
+        if(field(g,'outcome')==='skipped') {assert.equal(field(g,'classification'),'skipped');assert.ok(!field(g,'error'),'Failure before native original');continue;}
+        assert.equal(field(g,'outcome'),'completed','Native tail exception');
+        assert.ok(!field(g,'error'),'Native original exception in tail');
+        const method=field(g,'method'),classification=field(g,'classification');
+        for(const [en,ex] of [['firstEntry','firstExit'],['lastEntry','lastExit']]) {
+            const entry=field(g,en),exit=field(g,ex),ai=method==='MobilePartyAi.Tick';
+            const lease=assertRoleBoundary(entry,exit,end.node,{writer:!ai||classification!=='observerLocalNavigation',nativeWorld:!ai});
+            const sourceLease=JSON.stringify(exactLease(lease))===JSON.stringify(exactLease(source));
+            const targetLease=JSON.stringify(exactLease(lease))===JSON.stringify(exactLease(target));
+            assert.ok(sourceLease||targetLease,'Tail used neither exact source nor target lease');
+            if(ai) {
+                assertAiRole(g,entry,exit,end.node);
+                if(classification!=='observerLocalNavigation')assert.equal(sourceLease,true,'Paused new writer advanced authoritative AI');
+            } else {
+                assert.equal(classification,'writerBookkeeping','Paused tail advanced native simulation');
+                assert.equal(field(entry,'dt'),0);assert.equal(field(exit,'dt'),0);
+                assert.equal(field(exit,'worldTicks'),field(entry,'worldTicks'),'Paused native original advanced clock');
+                assert.equal(field(exit,'currentTickCount'),field(entry,'currentTickCount')+(method==='Campaign.Tick'?1:0));
+            }
+        }
+        if(method==='MobilePartyAi.Tick')result[classification==='observerLocalNavigation'?'observerLocalNavigation':'sourceAiDrain']+=delta;
+        else result[JSON.stringify(exactLease(field(field(g,'firstEntry'),'lease')))===JSON.stringify(exactLease(target))?'targetBookkeeping':'sourceBookkeeping']+=delta;
+    }
+    return result;
+}
 export async function completeNaturalDayHandoff({node,nextController,initial,beforeCycles,
     pause,readPreSnapshot,readCycles,handoff,confirmWriter,readStrictSnapshot,readTimeModes,record}) {
     const assertPausedModes = modes => {
@@ -222,8 +386,9 @@ export async function completeNaturalDayHandoff({node,nextController,initial,bef
     assertWorld(pre.worlds);assertPlayers(pre.players);assertPreHandoffSemantic(...pre.semantics);
     assertPausedModes(await readTimeModes());
     const preCycles=assertCycles(await readCycles());
+    const roleDay=assertNaturalDayRoleWindow(beforeCycles,preCycles.receipts,pre.states);
     const preCoverage=assertCycleWindow(beforeCycles,preCycles.receipts,node);
-    await record({phase:'native_day_pre_handoff',node,nextController,pre,preCycles,preCoverage});
+    await record({phase:'native_day_pre_handoff',node,nextController,pre,preCycles,preCoverage,roleDay});
     await handoff(); // Mutation exactly once; read-only confirmation must not retry it.
     const confirmed=await confirmWriter();assertWriter(confirmed,nextController,initial);
     assert.ok(epoch(confirmed[0])>epoch(pre.states[0]),'Natural handoff did not advance Epoch');
@@ -245,11 +410,15 @@ export async function completeNaturalDayHandoff({node,nextController,initial,bef
     // Re-read the original node's collector after the barrier drained its pending AI.
     // Keep full-history failures/duplicates and the complete original day window strict.
     const cycles=assertCycles(await readCycles());
-    const coverage=assertCycleWindow(beforeCycles,cycles.receipts,node);
+    const roleTail=assertHandoffCycleTail(preCycles.receipts,cycles.receipts,pre.states,post.states);
+    // Re-audit the original writer's complete day after its final asynchronous drain.
+    // The promoted target is checked by actual per-call roles, not its obsolete observer role.
+    const coverage=assertCycleWindow(beforeCycles,cycles.receipts.map(receipt=>receipt.node===node?receipt:
+        preCycles.receipts.find(previous=>previous.node===receipt.node)),node);
     const sealedWriter=cycles.receipts.find(receipt=>receipt.node===node);
     assertSchedulerHandoff(sealedWriter,cycles.receipts);
-    await record({phase:'native_day_post_handoff',node,nextController,confirmed,post,cycles,coverage});
-    return {pre,preCycles,preCoverage,confirmed,post,cycles,coverage,sealedWriter};
+    await record({phase:'native_day_post_handoff',node,nextController,confirmed,post,cycles,coverage,roleTail});
+    return {pre,preCycles,preCoverage,confirmed,post,cycles,coverage,roleTail,sealedWriter};
 }
 export function combineCyclePages(pages) {
     assert.ok(pages.length > 0); const first=pages[0], rows=[];
@@ -263,6 +432,19 @@ export function combineCyclePages(pages) {
     }
     assert.equal(pages.at(-1).hasMore,false,'Incomplete cycle pages');assert.equal(rows.length,first.totalRows);
     return {...first,rows};
+}
+export function combineCycleSimulationSections(cycles,effects,simulation,expectedNode) {
+    for(const section of [cycles,effects,simulation])assert.equal(section.overflowed,false,'Cycle section overflow');
+    for(const section of [effects,simulation])for(const key of ['instance','campaign','processId'])
+        assert.equal(section[key],cycles[key],'Cycle sections changed identity: '+key);
+    assert.equal(simulation.section,'simulation');assert.equal(simulation.offset,0);
+    assert.equal(simulation.hasMore,false,'Atomic simulation snapshot was paginated');
+    assert.equal(simulation.totalRows,simulation.rows.length);assert.equal(simulation.nextOffset,simulation.totalRows);
+    assert.ok(simulation.totalRows<=256);assert.deepEqual(simulation.rows,simulation.roleSimulation?.groups);
+    assert.equal(simulation.roleSimulation.node,expectedNode,'Configured slot does not match actual native node');
+    const receipt={...cycles,node:simulation.roleSimulation.node,effects:effects.rows,
+        simulation:simulation.simulation,aiSimulation:simulation.aiSimulation,roleSimulation:simulation.roleSimulation};
+    assertRoleSimulationEvidence(receipt);return receipt;
 }
 export function freshSaveName(now = new Date(), suffix = randomUUID().slice(0,8)) {
     const name = 'P2P_Cold_' + now.toISOString().replace(/[-:.]/g,'') + '_' + suffix;
@@ -460,7 +642,8 @@ export async function run(config) {
                 sections[section]=combineCyclePages(pages);
             }
             assert.equal(sections.effects.instance,sections.cycles.instance);
-            receipts.push({...sections.cycles,node:controllers[INSTANCES.indexOf(instance)],effects:sections.effects.rows});
+            const simulation=jsonOutput(await command(instance,'coop.debug.authority.cycles',['0','simulation']));
+            receipts.push(combineCycleSimulationSections(sections.cycles,sections.effects,simulation,controllers[INSTANCES.indexOf(instance)]));
         }
         return assertCycles(receipts);
     }

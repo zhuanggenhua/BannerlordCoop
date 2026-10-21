@@ -11,6 +11,7 @@ using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Party;
 using TaleWorlds.CampaignSystem.Roster;
 using Common;
+using GameInterface.Services.Entity;
 
 namespace GameInterface.Services.CampaignAuthority;
 
@@ -22,7 +23,7 @@ public sealed class CampaignCycleDebugCommands : ICoopCommand
     public CoopCommandSide Side => CoopCommandSide.Both;
     public IExpectedArgs[] ExpectedArgs { get; } =
     { new ExpectedArgs("offset", "Optional nonnegative row offset; at most 256 rows per response.", false),
-        new ExpectedArgs("section", "Optional cycles (default) or effects.", false) };
+        new ExpectedArgs("section", "Optional cycles (default), effects or atomic simulation.", false) };
     public CoopCommandResult ProcessCommand(ICoopCommandArgs args)
     {
         if (Campaign.Current == null) return new(false, "A campaign is required.", "campaign_missing");
@@ -31,13 +32,15 @@ public sealed class CampaignCycleDebugCommands : ICoopCommand
         CampaignSchedulerCheckpoint checkpoint = null;
         bool captured = scheduler?.TryCapture(out checkpoint) == true;
         string section = args.Count > 1 ? args[1] : "cycles";
-        if (section != "cycles" && section != "effects") return new(false, "Unknown evidence section.", "invalid_cycle_section");
-        object[] rows = section == "cycles" ? collector.Snapshot() : collector.EffectSnapshot();
+        if (section != "cycles" && section != "effects" && section != "simulation") return new(false, "Unknown evidence section.", "invalid_cycle_section");
+        var simulationEvidence = collector.SimulationEvidenceSnapshot();
+        object[] rows = section == "cycles" ? collector.Snapshot() : section == "effects" ? collector.EffectSnapshot() : simulationEvidence.RoleGroups;
         int offset = 0;
         if (args.Count > 0 && (!int.TryParse(args[0], out offset) || offset < 0 || offset > rows.Length))
             return new(false, "Invalid cycle evidence offset.", "invalid_cycle_offset");
+        if (section == "simulation" && offset != 0) return new(false, "Simulation evidence must be read atomically.", "invalid_simulation_offset");
         var page = rows.Skip(offset).Take(256).ToArray();
-        var simulationEvidence = collector.SimulationEvidenceSnapshot();
+        ContainerProvider.TryResolve<IControllerIdProvider>(out var controller);
         var output = JsonConvert.SerializeObject(new
         {
             instance = collector.InstanceId, campaign = Campaign.Current.UniqueGameId,
@@ -53,6 +56,8 @@ public sealed class CampaignCycleDebugCommands : ICoopCommand
             tickerAudits = collector.AuditSnapshot(),
             simulation = simulationEvidence.Counts,
             aiSimulation = new { schemaVersion = 1, classes = CampaignAiTickEvidence.Classes, firstEntries = simulationEvidence.FirstEntries },
+            roleSimulation = new { schemaVersion = 1, node = controller?.ControllerId,
+                overflowed = simulationEvidence.RoleOverflowed, groups = section == "simulation" ? simulationEvidence.RoleGroups : null },
             scheduler = !captured ? null : new
             {
                 checkpoint.LastGameTimeTicks, checkpoint.MinimumIntervalTicks,

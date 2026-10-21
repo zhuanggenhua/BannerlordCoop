@@ -147,7 +147,8 @@ function naturalHandoffFixture() {
     pre.semantics[1].npcs[0].x=13;
     const post=structuredClone(pre);post.semantics[1].npcs[0].x=10;
     post.states=initial.map(v=>({...v,localAuthority:v.controller==='b',frozen:false,lease:{authorityControllerId:'b',roomId:'room',epoch:4,authorityId:'world',isPaused:false}}));
-    const tailCycles=structuredClone(preCycles);tailCycles[0].simulation['Campaign.LateAITickAux.completed']++;
+    for(const c of [...beforeCycles,...preCycles])seedRolePartition(c);
+    const tailCycles=structuredClone(preCycles);appendNative(tailCycles[0],'Campaign.LateAITickAux','a',3,'a');
     const events=[],records=[];let cycleReads=0,modeReads=0;
     const fixture={pre,post,preCycles,tailCycles,events,records,beforeCycles,
         modes:[['Pause','Pause'],['Pause','Pause']],confirmed:structuredClone(post.states)};
@@ -176,6 +177,12 @@ test('return handoff seals B collector rather than assuming the room host is the
     }
     const assignLease=(pair,node,epoch)=>pair.forEach(s=>{s.localAuthority=s.controller===node;s.lease={authorityControllerId:node,roomId:'room',epoch,authorityId:'world',isPaused:false};});
     assignLease(f.pre.states,'b',5);assignLease(f.post.states,'a',6);f.confirmed=structuredClone(f.post.states);
+    for(const group of [f.beforeCycles,f.preCycles,f.tailCycles])for(const c of group)for(const g of c.roleSimulation.groups)
+        for(const key of ['FirstEntry','FirstExit','LastEntry','LastExit']) {
+            const b=g[key];b.Node=swap(b.Node);b.Lease.AuthorityControllerId=swap(b.Lease.AuthorityControllerId);b.Lease.Epoch=5;
+            b.CampaignIdentity=b.Node==='a'?1:2;if(b.AiController)b.AiController=swap(b.AiController);
+        }
+    for(const group of [f.beforeCycles,f.preCycles,f.tailCycles])for(const c of group)c.roleSimulation.node=c.node;
     f.args.node='b';f.args.nextController='a';
     const result=await completeNaturalDayHandoff(f.args);
     assert.equal(result.sealedWriter.node,'b');assert.equal(result.coverage.hourly,24);
@@ -373,6 +380,165 @@ test('confirmed natural window allows own navigation but rejects newly unqualifi
         receipt.simulation['MobilePartyAi.Tick.unknown.completed']+=100;
         receipt.simulation['MobilePartyAi.Tick.unexpectedWorld.completed']+=100;
         receipt.simulation['MobilePartyAi.Tick.completed']+=100;receipt.simulation['MobilePartyAi.Tick.observed']+=100;
+        appendAiRole(receipt,'unknown',100);
     }
     await completeNaturalDayHandoff(f.args);
+});
+
+// Role-tail evidence tests deliberately retain the fixed-role natural-day oracle above.
+import * as roleOracle from './p2p-world-lifecycle.mjs';
+const nativeMethods=['Campaign.RealTick','Campaign.Tick','Campaign.LateAITickAux'];
+function nativeBoundary(node='a',epoch=3,writer='a') {
+    return {Node:node,Lease:{RoomId:'room',AuthorityId:'world',AuthorityControllerId:writer,Epoch:epoch,IsPaused:false},
+        LeaseKnown:true,Frozen:false,LocalWriter:node===writer,Phase:0,Restricted:false,AllowedThread:false,
+        Dt:0,DtBits:0,CurrentTickCount:10,WorldTicks:124,CampaignId:'campaign',CampaignIdentity:node==='a'?1:2,ThreadId:1,Utc:'2026-10-21T00:00:00Z',GameStarted:true};
+}
+function appendAiRole(r,kind,count=1,node=r.node,epoch=3,writer='a') {
+    const entry=nativeBoundary(node,epoch,writer);
+    Object.assign(entry,{AiPartyId:kind==='writerNpc'?'npc':'party-'+node,AiPartyRole:kind==='writerNpc'?'npc':'localPlayer',
+        AiController:kind==='writerNpc'?null:node,AiIdentity:37,AiMainParty:kind!=='writerNpc'});
+    r.roleSimulation.groups.push({Method:'MobilePartyAi.Tick',Outcome:'completed',Classification:kind,AiClassification:kind,AiUnexpectedWorld:kind==='unknown',
+        Count:count,FirstEntry:entry,FirstExit:structuredClone(entry),LastEntry:structuredClone(entry),LastExit:structuredClone(entry)});
+}
+function seedRolePartition(r) {
+    for(const method of nativeMethods)r.simulation[method+'.beforeOriginal.failed']=0;
+    r.processId=r.node==='a'?1:2;r.roleSimulation={schemaVersion:1,node:r.node,overflowed:false,groups:[]};
+    for(const method of nativeMethods)for(const outcome of ['completed','failed','skipped']) {
+        const key=method+'.'+outcome;if(!Object.hasOwn(r.simulation,key))r.simulation[key]=0;
+        if(r.simulation[key]) {
+            const count=r.simulation[key];r.simulation[key]=0;
+            const group=appendNative(r,method,r.node,3,'a','writerProgress',count);
+            for(const key of ['FirstEntry','FirstExit','LastEntry','LastExit'])Object.assign(group[key],{Dt:0.1,DtBits:1036831949});
+        }
+    }
+    for(const kind of aiClasses) {
+        const count=r.simulation['MobilePartyAi.Tick.'+kind+'.completed'];if(count)appendAiRole(r,kind,count);
+    }
+}
+function nativeRoleReceipt(node) {
+    const r={...receipt(node,[]),processId:node==='a'?1:2,hours:124,ticks:124};
+    for(const method of nativeMethods)for(const outcome of ['completed','failed','skipped'])r.simulation[method+'.'+outcome]=0;
+    for(const method of nativeMethods)r.simulation[method+'.beforeOriginal.failed']=0;
+    r.roleSimulation={schemaVersion:1,node,overflowed:false,groups:[]};
+    // Start with zero AI counts: the role partition covers every observation, not only native Campaign calls.
+    Object.assign(r,aiEvidence('writerNpc',0));
+    for(const method of nativeMethods)for(const outcome of ['completed','failed','skipped'])r.simulation[method+'.'+outcome]=0;
+    for(const method of nativeMethods)r.simulation[method+'.beforeOriginal.failed']=0;
+    return r;
+}
+function appendNative(r,method,node,epoch,writer,classification='writerBookkeeping',count=1) {
+    const entry=nativeBoundary(node,epoch,writer),exit=structuredClone(entry);
+    if(method==='Campaign.Tick')exit.CurrentTickCount++;
+    const prior=r.roleSimulation.groups.find(g=>g.Method===method&&g.Classification===classification&&
+        g.FirstEntry.Node===node&&g.FirstEntry.Lease.Epoch===epoch&&g.FirstEntry.Lease.AuthorityControllerId===writer);
+    if(prior) {prior.Count+=count;prior.LastEntry=entry;prior.LastExit=exit;}
+    else r.roleSimulation.groups.push({Method:method,Outcome:'completed',Classification:classification,Count:count,
+        FirstEntry:entry,FirstExit:exit,LastEntry:structuredClone(entry),LastExit:structuredClone(exit)});
+    r.simulation[method+'.completed']+=count;
+    return prior??r.roleSimulation.groups.at(-1);
+}
+function roleTailFixture() {
+    const before=['a','b'].map(nativeRoleReceipt),after=structuredClone(before);
+    appendNative(after[0],'Campaign.Tick','a',3,'a');
+    appendNative(after[1],'Campaign.Tick','b',4,'b',undefined,47);
+    const source=states('room',3),target=initial.map(v=>({...v,localAuthority:v.controller==='b',frozen:false,
+        lease:{roomId:'room',authorityId:'world',authorityControllerId:'b',epoch:4,isPaused:false}}));
+    return {before,after,source,target};
+}
+test('role-window: confirmed source and promoted target bookkeeping have complete per-call partitions',()=>{
+    const f=roleTailFixture();
+    assert.equal(typeof roleOracle.assertHandoffCycleTail,'function');
+    const result=roleOracle.assertHandoffCycleTail(f.before,f.after,f.source,f.target);
+    assert.equal(result.targetBookkeeping,47);
+});
+test('role-window: no final lease can excuse observer, frozen, replay, mid-call or progressing originals',()=>{
+    assert.equal(typeof roleOracle.assertHandoffCycleTail,'function');
+    for(const change of [g=>g.FirstEntry.LocalWriter=false,g=>g.FirstEntry.Frozen=true,g=>g.FirstEntry.LeaseKnown=false,
+        g=>g.FirstEntry.Lease.Epoch=3,g=>g.LastExit.Lease.Epoch=5,g=>g.FirstEntry.AllowedThread=true,
+        g=>g.FirstEntry.Restricted=true,g=>g.FirstEntry.Phase=4,g=>g.FirstEntry.CurrentTickCount=1,
+        g=>g.LastExit.WorldTicks++,g=>g.FirstEntry.Dt=0.1,g=>g.LastExit.CurrentTickCount++,
+        g=>g.Classification='writerProgress']) {
+        const f=roleTailFixture();change(f.after[1].roleSimulation.groups[0]);
+        assert.throws(()=>roleOracle.assertHandoffCycleTail(f.before,f.after,f.source,f.target));
+    }
+});
+test('role-window: missing, overflowing or mismatched partitions fail rather than defaulting to zero',()=>{
+    assert.equal(typeof roleOracle.assertHandoffCycleTail,'function');
+    for(const change of [r=>delete r.roleSimulation,r=>r.roleSimulation.overflowed=true,
+        r=>r.roleSimulation.groups=[],r=>delete r.simulation['Campaign.RealTick.failed'],
+        r=>r.roleSimulation.node='guessed-node',r=>r.roleSimulation.groups[0].Count--]) {
+        const f=roleTailFixture();change(f.after[1]);
+        assert.throws(()=>roleOracle.assertHandoffCycleTail(f.before,f.after,f.source,f.target));
+    }
+});
+
+test('role-window: real navigation is allowed by exact role, but paused new writer NPC/player AI is rejected',()=>{
+    const add=(receipt,kind,node,epoch,writer)=>{
+        appendAiRole(receipt,kind,1,node,epoch,writer);
+        receipt.simulation['MobilePartyAi.Tick.'+kind+'.completed']++;
+        receipt.simulation['MobilePartyAi.Tick.completed']++;receipt.simulation['MobilePartyAi.Tick.observed']++;
+    };
+    const valid=roleTailFixture();
+    add(valid.after[0],'observerLocalNavigation','a',4,'b');
+    add(valid.after[1],'observerLocalNavigation','b',3,'a');
+    add(valid.after[0],'writerNpc','a',3,'a');
+    assert.equal(roleOracle.assertHandoffCycleTail(valid.before,valid.after,valid.source,valid.target).observerLocalNavigation,2);
+    for(const kind of ['writerNpc','writerPlayer']) {
+        const f=roleTailFixture();add(f.after[1],kind,'b',4,'b');
+        assert.throws(()=>roleOracle.assertHandoffCycleTail(f.before,f.after,f.source,f.target),/new writer/);
+    }
+    for(const corrupt of [b=>b.AiController='wrong',b=>b.AiMainParty=false,b=>b.AiPartyId=null]) {
+        const f=roleTailFixture();add(f.after[0],'observerLocalNavigation','a',4,'b');
+        const g=f.after[0].roleSimulation.groups.at(-1);
+        for(const k of ['FirstEntry','FirstExit','LastEntry','LastExit'])corrupt(g[k]);
+        assert.throws(()=>roleOracle.assertHandoffCycleTail(f.before,f.after,f.source,f.target));
+    }
+});
+
+test('role-window: actual natural-day partitions reject original observer, frozen, replay and lost progress',()=>{
+    const f=naturalHandoffFixture();
+    assert.ok(roleOracle.assertNaturalDayRoleWindow(f.beforeCycles,f.preCycles,f.pre.states).realProgress>0);
+    for(const corrupt of [g=>g.FirstEntry.LocalWriter=false,g=>g.LastExit.Frozen=true,
+        g=>g.FirstEntry.Phase=4,g=>g.LastExit.Lease.Epoch++,g=>g.Classification='unexpected']) {
+        const v=naturalHandoffFixture();corrupt(v.preCycles[0].roleSimulation.groups.find(g=>g.Method==='Campaign.RealTick'));
+        assert.throws(()=>roleOracle.assertNaturalDayRoleWindow(v.beforeCycles,v.preCycles,v.pre.states));
+    }
+    const missing=naturalHandoffFixture();
+    for(const g of missing.preCycles[0].roleSimulation.groups.filter(g=>g.Method==='Campaign.RealTick')) {
+        g.Classification='writerBookkeeping';for(const key of ['FirstEntry','FirstExit','LastEntry','LastExit'])Object.assign(g[key],{Dt:0,DtBits:0});
+    }
+    assert.throws(()=>roleOracle.assertNaturalDayRoleWindow(missing.beforeCycles,missing.preCycles,missing.pre.states),/no actually qualified/);
+});
+
+test('role-window: simulation is one atomic section with actual node, PID and collector identity',()=>{
+    const r=nativeRoleReceipt('a');
+    const cycles={...r,section:'cycles'},effects={...r,section:'effects',rows:[]};
+    const simulation={...r,section:'simulation',offset:0,nextOffset:0,totalRows:0,hasMore:false,rows:[]};
+    const combine=s=>roleOracle.combineCycleSimulationSections(cycles,effects,s,'a');
+    assert.equal(combine(simulation).node,'a');
+    for(const corrupt of [s=>s.instance='other',s=>s.processId=999,s=>s.campaign='other',
+        s=>s.roleSimulation.node='guessed',s=>s.overflowed=true,s=>s.roleSimulation.overflowed=true,
+        s=>s.hasMore=true,s=>s.offset=1,s=>s.rows.push({}),s=>delete s.simulation['Campaign.Tick.failed']]) {
+        const invalid=structuredClone(simulation);corrupt(invalid);assert.throws(()=>combine(invalid));
+    }
+});
+
+test('role-window: observer local navigation does not require advancing native Campaign tick count',()=>{
+    const f=roleTailFixture();appendAiRole(f.after[0],'observerLocalNavigation',1,'a',4,'b');
+    const g=f.after[0].roleSimulation.groups.at(-1);
+    for(const key of ['FirstEntry','FirstExit','LastEntry','LastExit'])Object.assign(g[key],{GameStarted:false,CurrentTickCount:0});
+    f.after[0].simulation['MobilePartyAi.Tick.observerLocalNavigation.completed']++;
+    f.after[0].simulation['MobilePartyAi.Tick.completed']++;f.after[0].simulation['MobilePartyAi.Tick.observed']++;
+    assert.equal(roleOracle.assertHandoffCycleTail(f.before,f.after,f.source,f.target).observerLocalNavigation,1);
+});
+
+test('role-window: intentional skipped originals remain counted and never disguise before-original errors',()=>{
+    const f=roleTailFixture(),r=f.after[0],boundary=nativeBoundary('a',4,'b');boundary.Frozen=true;
+    r.roleSimulation.groups.push({Method:'MobilePartyAi.Tick',Outcome:'skipped',Classification:'skipped',AiClassification:'unknown',AiUnexpectedWorld:false,
+        Count:1,FirstEntry:boundary,FirstExit:structuredClone(boundary),LastEntry:structuredClone(boundary),LastExit:structuredClone(boundary)});
+    r.simulation['MobilePartyAi.Tick.observed']++;r.simulation['MobilePartyAi.Tick.skipped']++;r.simulation['MobilePartyAi.Tick.unknown.skipped']++;
+    assert.doesNotThrow(()=>roleOracle.assertHandoffCycleTail(f.before,f.after,f.source,f.target));
+    const failed=structuredClone(f);failed.after[0].roleSimulation.groups.at(-1).Error='failure before original';
+    failed.after[0].simulation['MobilePartyAi.Tick.beforeOriginal.failed']++;
+    assert.throws(()=>roleOracle.assertHandoffCycleTail(failed.before,failed.after,failed.source,failed.target),/before native original/);
 });

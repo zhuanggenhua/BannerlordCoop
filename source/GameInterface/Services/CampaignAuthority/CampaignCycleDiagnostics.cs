@@ -35,6 +35,8 @@ internal sealed class CampaignCycleDiagnostics
     private readonly List<CampaignEconomicRow> effects = new();
     private readonly Dictionary<string, long> simulation = new(StringComparer.Ordinal);
     private readonly Dictionary<string, CampaignAiTickEvidence> firstAiEvidence = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, CampaignSimulationRoleGroup> roleGroups = new(StringComparer.Ordinal);
+    private bool roleOverflowed;
     private int? lastRealTickFrame;
     public string InstanceId { get; } = Guid.NewGuid().ToString("N");
     public bool Overflowed { get; private set; }
@@ -105,17 +107,48 @@ internal sealed class CampaignCycleDiagnostics
     { lock (gate) { simulation.TryGetValue(name, out long count); simulation[name] = count + 1; } }
     public Dictionary<string, long> SimulationSnapshot()
     { lock (gate) return new Dictionary<string, long>(simulation); }
-    internal (Dictionary<string, long> Counts, CampaignAiTickEvidence[] FirstEntries) SimulationEvidenceSnapshot()
+    internal CampaignSimulationSnapshot SimulationEvidenceSnapshot()
     {
         lock (gate)
         {
             var counts = new Dictionary<string, long>(simulation);
             foreach (string key in CampaignAiTickEvidence.CounterKeys)
                 if (!counts.ContainsKey(key)) counts.Add(key, 0);
-            return (counts, firstAiEvidence.Values.Select(value => value.Copy()).ToArray());
+            foreach (string method in CampaignNativeBoundary.Methods)
+            {
+                foreach (string outcome in CampaignAiTickEvidence.Outcomes)
+                    if (!counts.ContainsKey(method + "." + outcome)) counts.Add(method + "." + outcome, 0);
+                if (!counts.ContainsKey(method + ".beforeOriginal.failed")) counts.Add(method + ".beforeOriginal.failed", 0);
+            }
+            return new CampaignSimulationSnapshot { Counts = counts,
+                FirstEntries = firstAiEvidence.Values.Select(value => value.Copy()).ToArray(),
+                RoleGroups = roleGroups.Values.Select(value => value.Copy()).ToArray(), RoleOverflowed = roleOverflowed };
         }
     }
-    internal void AiTick(CampaignAiTickEvidence entry, CampaignAiTickEvidence exit, bool ranOriginal, Exception error)
+    internal void NativeTick(string method, CampaignNativeBoundary entry, CampaignNativeBoundary exit, bool ranOriginal, Exception error)
+    {
+        string outcome = !ranOriginal ? "skipped" : error == null ? "completed" : "failed";
+        lock (gate)
+        {
+            Simulation(method + "." + outcome);
+            if (!ranOriginal && error != null) Simulation(method + ".beforeOriginal.failed");
+            RecordRole(method, outcome, CampaignNativeBoundary.Classify(method, entry, exit, ranOriginal, error), entry, exit, error: error);
+        }
+    }
+    private void RecordRole(string method, string outcome, string classification, CampaignNativeBoundary entry, CampaignNativeBoundary exit,
+        string aiClassification = null, Exception error = null, bool aiUnexpectedWorld = false)
+    {
+        entry = entry ?? new CampaignNativeBoundary();exit = exit ?? new CampaignNativeBoundary();
+        string key = JsonConvert.SerializeObject(new { method, outcome, classification, aiClassification, aiUnexpectedWorld, error = error?.ToString(), entry = entry.ContextKey(), exit = exit.ContextKey() });
+        if (roleGroups.TryGetValue(key, out var group))
+        { group.Count++;group.LastEntry = entry.Copy();group.LastExit = exit.Copy();return; }
+        if (roleGroups.Count >= Math.Min(capacity, 256)) { roleOverflowed = Overflowed = true;return; }
+        roleGroups.Add(key, new CampaignSimulationRoleGroup { Method = method, Outcome = outcome, Classification = classification,
+            AiClassification = aiClassification, AiUnexpectedWorld = aiUnexpectedWorld, Error = error?.ToString(),
+            Count = 1, FirstEntry = entry.Copy(), FirstExit = exit.Copy(), LastEntry = entry.Copy(), LastExit = exit.Copy() });
+    }
+    internal void AiTick(CampaignAiTickEvidence entry, CampaignAiTickEvidence exit, bool ranOriginal, Exception error,
+        CampaignNativeBoundary nativeEntry = null, CampaignNativeBoundary nativeExit = null)
     {
         string outcome = !ranOriginal ? "skipped" : error == null ? "completed" : "failed";
         entry.RanOriginal = ranOriginal;entry.Outcome = outcome;entry.Error = error?.ToString();
@@ -133,6 +166,10 @@ internal sealed class CampaignCycleDiagnostics
             Simulation("MobilePartyAi.Tick." + entry.Classification + "." + outcome);
             if (entry.UnexpectedWorld && ranOriginal) Simulation("MobilePartyAi.Tick.unexpectedWorld." + outcome);
             if (!ranOriginal && error != null) Simulation("MobilePartyAi.Tick.beforeOriginal.failed");
+            string role = !ranOriginal ? "skipped" : error != null || entry.UnexpectedWorld ||
+                !CampaignNativeBoundary.SameQualifiedContext(nativeEntry, nativeExit, requireWriter: false) ? "unexpected" : entry.Classification;
+            RecordRole("MobilePartyAi.Tick", outcome, role, nativeEntry?.WithAi(entry), nativeExit?.WithAi(exit),
+                entry.Classification, error, entry.UnexpectedWorld && ranOriginal);
             string key = entry.Classification + "|" + outcome + "|" + entry.UnexpectedWorld;
             if (!firstAiEvidence.ContainsKey(key))
             {
@@ -158,6 +195,71 @@ internal sealed class CampaignCycleDiagnostics
     {
         lock (gate) return rows.Values.OrderBy(row => row.Hour).ThenBy(row => row.Kind)
             .ThenBy(row => row.Party).Select(row => row.Copy()).ToArray();
+    }
+}
+
+internal sealed class CampaignSimulationSnapshot
+{
+    public Dictionary<string, long> Counts;
+    public CampaignAiTickEvidence[] FirstEntries;
+    public CampaignSimulationRoleGroup[] RoleGroups;
+    public bool RoleOverflowed;
+}
+
+internal sealed class CampaignSimulationRoleGroup
+{
+    public string Method, Outcome, Classification, AiClassification, Error;
+    public bool AiUnexpectedWorld;
+    public long Count;
+    public CampaignNativeBoundary FirstEntry, FirstExit, LastEntry, LastExit;
+    public CampaignSimulationRoleGroup Copy() => new() { Method = Method, Outcome = Outcome, Classification = Classification,
+        AiClassification = AiClassification, AiUnexpectedWorld = AiUnexpectedWorld, Error = Error,
+        Count = Count, FirstEntry = FirstEntry.Copy(), FirstExit = FirstExit.Copy(), LastEntry = LastEntry.Copy(), LastExit = LastExit.Copy() };
+}
+
+internal sealed class CampaignNativeBoundary
+{
+    [JsonIgnore] internal Campaign ActualCampaign;
+    internal static readonly string[] Methods = { "Campaign.RealTick", "Campaign.Tick", "Campaign.LateAITickAux" };
+    public string Node, CampaignId, DiagnosticError;
+    public string AiPartyId, AiPartyRole, AiController;
+    public int AiIdentity;
+    public bool AiMainParty;
+    public AuthorityLease Lease;
+    public bool LeaseKnown, LocalWriter, Frozen, Restricted, AllowedThread, GameStarted;
+    public CampaignExecutionPhase Phase;
+    public float Dt;
+    public int DtBits, CurrentTickCount, CampaignIdentity, ThreadId;
+    public long WorldTicks;
+    public DateTime Utc;
+    public CampaignNativeBoundary Copy() => (CampaignNativeBoundary)MemberwiseClone();
+    internal CampaignNativeBoundary WithAi(CampaignAiTickEvidence evidence)
+    {
+        var copy = Copy();copy.AiPartyId = evidence.PartyId;copy.AiPartyRole = evidence.PartyRole;
+        copy.AiController = evidence.ObjectController;copy.AiIdentity = evidence.AiIdentity;copy.AiMainParty = evidence.MainParty;
+        return copy;
+    }
+    internal object ContextKey() => new { Node, CampaignId, CampaignIdentity, Lease, LeaseKnown, LocalWriter, Frozen,
+        Restricted, AllowedThread, Phase, DiagnosticError, GameStarted };
+    internal static bool SameQualifiedContext(CampaignNativeBoundary entry, CampaignNativeBoundary exit, bool requireWriter = true) =>
+        entry != null && exit != null && entry.LeaseKnown && exit.LeaseKnown && entry.Lease.IsValid && entry.Lease == exit.Lease &&
+        !entry.Lease.IsPaused && !entry.Frozen && !exit.Frozen && !entry.Restricted && !exit.Restricted &&
+        !entry.AllowedThread && !exit.AllowedThread && entry.Phase == exit.Phase &&
+        (entry.Phase == CampaignExecutionPhase.Unspecified || entry.Phase == CampaignExecutionPhase.WorldWrite) &&
+        !string.IsNullOrWhiteSpace(entry.Node) && entry.Node == exit.Node && !string.IsNullOrWhiteSpace(entry.CampaignId) && entry.CampaignId == exit.CampaignId &&
+        entry.CampaignIdentity == exit.CampaignIdentity && ReferenceEquals(entry.ActualCampaign, exit.ActualCampaign) && entry.LocalWriter == exit.LocalWriter &&
+        entry.ThreadId == exit.ThreadId && entry.GameStarted == exit.GameStarted &&
+        entry.LocalWriter == (entry.Node == entry.Lease.AuthorityControllerId) && (!requireWriter || entry.LocalWriter) &&
+        entry.DiagnosticError == null && exit.DiagnosticError == null;
+    internal static string Classify(string method, CampaignNativeBoundary entry, CampaignNativeBoundary exit, bool ranOriginal, Exception error)
+    {
+        if (!ranOriginal) return "skipped";
+        if (error != null || !SameQualifiedContext(entry, exit) || !entry.GameStarted || entry.CurrentTickCount < 3 ||
+            float.IsNaN(entry.Dt) || float.IsInfinity(entry.Dt) || float.IsNaN(exit.Dt) || float.IsInfinity(exit.Dt) ||
+            entry.Dt < 0 || exit.Dt < 0 || exit.CurrentTickCount != entry.CurrentTickCount + (method == "Campaign.Tick" ? 1 : 0)) return "unexpected";
+        if (entry.Dt == 0 && exit.Dt == 0 && entry.WorldTicks == exit.WorldTicks) return "writerBookkeeping";
+        if (exit.WorldTicks < entry.WorldTicks || (method != "Campaign.RealTick" && entry.Dt == 0)) return "unexpected";
+        return "writerProgress";
     }
 }
 
@@ -845,20 +947,50 @@ internal static class CampaignSimulationEvidencePatches
     {
         public CampaignCycleDiagnostics Collector;
         public CampaignAiTickEvidence Evidence;
+        public CampaignNativeBoundary Native;
+        public Campaign Campaign;
+    }
+    internal static CampaignNativeBoundary CaptureNative(Campaign campaign)
+    {
+        var row = new CampaignNativeBoundary { Utc = DateTime.UtcNow, ThreadId = Thread.CurrentThread.ManagedThreadId,
+            Phase = CampaignExecutionScope.Current, Restricted = CampaignExecutionScope.IsWorldWriteRestricted,
+            AllowedThread = AllowedThread.IsThisThreadAllowed() };
+        try
+        {
+            if (campaign == null) { row.DiagnosticError = "Missing actual Campaign";return row; }
+            row.ActualCampaign = campaign;row.CampaignIdentity = RuntimeHelpers.GetHashCode(campaign);row.CampaignId = campaign.UniqueGameId;row.GameStarted = campaign.GameStarted;
+            if (!ReferenceEquals(campaign, Campaign.Current)) row.DiagnosticError = "Actual Campaign is no longer current";
+            row.Dt = campaign._dt;row.DtBits = BitConverter.ToInt32(BitConverter.GetBytes(row.Dt), 0);
+            row.CurrentTickCount = campaign.CurrentTickCount;row.WorldTicks = campaign.MapTimeTracker._numTicks;
+            if (!ContainerProvider.TryResolve<IControllerIdProvider>(out var controller) ||
+                !ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authority) ||
+                !ContainerProvider.TryResolve<ISessionIdentity>(out var identity))
+            { row.DiagnosticError = (row.DiagnosticError == null ? "" : row.DiagnosticError + "; ") + "Missing controller or authority identity";return row; }
+            row.Node = controller.ControllerId;
+            row.LeaseKnown = authority.TryGetCurrentLease(out row.Lease) && row.Lease.IsValid &&
+                identity.TryGetConfirmedLease(out var confirmed) && confirmed == row.Lease;
+            row.Frozen = identity.IsLocallyFrozen(row.Lease);
+            row.LocalWriter = authority.TryGetLocalAuthorityLease(out var local) && local == row.Lease;
+        }
+        catch (Exception error) { row.DiagnosticError = error.ToString(); }
+        return row;
     }
     [HarmonyPrefix]
     private static void Prefix(object __instance, MethodBase __originalMethod, out AiEntry __state)
     {
         __state = null;
-        if (__originalMethod.DeclaringType != typeof(MobilePartyAi) || Campaign.Current == null) return;
-        __state = new AiEntry { Collector = CampaignCycleDispatchPatches.For(Campaign.Current), Evidence = CaptureAi((MobilePartyAi)__instance) };
+        var campaign = __instance as Campaign ?? Campaign.Current;
+        if (campaign == null) return;
+        __state = new AiEntry { Collector = CampaignCycleDispatchPatches.For(campaign), Campaign = campaign, Native = CaptureNative(campaign),
+            Evidence = __originalMethod.DeclaringType == typeof(MobilePartyAi) ? CaptureAi((MobilePartyAi)__instance) : null };
     }
     [HarmonyFinalizer]
     private static Exception Finalizer(object __instance, MethodBase __originalMethod, bool __runOriginal, Exception __exception, AiEntry __state)
     {
         if (__originalMethod.DeclaringType == typeof(MobilePartyAi))
         {
-            if (__state != null) __state.Collector.AiTick(__state.Evidence, CaptureAi((MobilePartyAi)__instance), __runOriginal, __exception);
+            if (__state != null) __state.Collector.AiTick(__state.Evidence, CaptureAi((MobilePartyAi)__instance), __runOriginal, __exception,
+                __state.Native, CaptureNative(__state.Campaign));
             else if (Campaign.Current != null)
             {
                 var unknown = new CampaignAiTickEvidence { Reason = "Missing AI entry boundary" };
@@ -866,7 +998,13 @@ internal static class CampaignSimulationEvidencePatches
             }
             return __exception;
         }
-        if (Campaign.Current != null && __runOriginal)
+        if (__state != null && CampaignNativeBoundary.Methods.Contains("Campaign." + __originalMethod.Name))
+        {
+            __state.Collector.NativeTick("Campaign." + __originalMethod.Name, __state.Native, CaptureNative(__state.Campaign), __runOriginal, __exception);
+            if (__originalMethod.Name == "RealTick" && __runOriginal && __exception == null)
+                __state.Collector.RealTickFrame(TaleWorlds.Engine.Utilities.EngineFrameNo);
+        }
+        else if (Campaign.Current != null && __runOriginal)
         {
             var collector = CampaignCycleDispatchPatches.For(Campaign.Current);
             collector.Simulation(__originalMethod.DeclaringType.Name + "." + __originalMethod.Name +
