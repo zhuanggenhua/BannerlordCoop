@@ -150,9 +150,9 @@ internal sealed partial class CampaignNativeBehaviorCheckpointService
         var seen = new HashSet<uint>();
         foreach (var pair in source)
         {
-            if (!ValidValue(pair.Value.AverageBuySellPriceIndex) || !ValidValue(pair.Value.MinBuySellPriceIndex) ||
+            if (!ValidPrice(pair.Value.AverageBuySellPriceIndex, pair.Value.MinBuySellPriceIndex) ||
                 !TryStableHandle(pair.Key, out var handle) || !seen.Add(handle))
-                return RejectValue($"capture.caravan.price category={pair.Key?.StringId}, average={pair.Value.AverageBuySellPriceIndex:R}, min={pair.Value.MinBuySellPriceIndex:R}, invalid value/registry");
+                return RejectValue($"capture.caravan.price category={pair.Key?.StringId}, average={pair.Value.AverageBuySellPriceIndex:R}, averageBits={PriceBits(pair.Value.AverageBuySellPriceIndex):X8}, min={pair.Value.MinBuySellPriceIndex:R}, invalid value/registry");
             result.Add(new CampaignCategoryPriceState(handle, pair.Value.AverageBuySellPriceIndex, pair.Value.MinBuySellPriceIndex));
         }
         states = result.ToArray();
@@ -166,9 +166,9 @@ internal sealed partial class CampaignNativeBehaviorCheckpointService
         if (states == null) return Reject("prepare.caravan.categoryCache=null");
         foreach (var state in states)
         {
-            if (state.CategoryHandle == 0 || !ValidValue(state.Average) || !ValidValue(state.Minimum) ||
+            if (state.CategoryHandle == 0 || !ValidPrice(state.Average, state.Minimum) ||
                 !objects.TryGetObject<ItemCategory>(state.CategoryHandle, out var category) || result.ContainsKey(category))
-                return RejectValue($"prepare.caravan.price handle={state.CategoryHandle}, average={state.Average:R}, min={state.Minimum:R}, invalid/duplicate reference");
+                return RejectValue($"prepare.caravan.price handle={state.CategoryHandle}, average={state.Average:R}, averageBits={PriceBits(state.Average):X8}, min={state.Minimum:R}, invalid/duplicate reference");
             result.Add(category, new CaravansCampaignBehavior.PriceIndexData(state.Average, state.Minimum));
         }
         return true;
@@ -181,6 +181,11 @@ internal sealed partial class CampaignNativeBehaviorCheckpointService
             objects.TryGetObject<T>(handle, out var local) && ReferenceEquals(local, value);
     }
     private static bool ValidValue(float value) => !float.IsNaN(value) && !float.IsInfinity(value) && value >= 0;
+    // Native empty-population pricing leaves minimum1000 and the x64 0/0 NaN bits unchanged.
+    private static bool ValidPrice(float average, float minimum) => ValidValue(minimum) &&
+        (ValidValue(average) || (minimum == 1000f &&
+            PriceBits(average) == unchecked((int)0xffc00000)));
+    private static int PriceBits(float value) => BitConverter.ToInt32(BitConverter.GetBytes(value), 0);
     private static bool ValidDistance(float value) => value == -1f || ValidValue(value);
     private static void Replace<TKey, TValue>(Dictionary<TKey, TValue> target, Dictionary<TKey, TValue> source)
     {

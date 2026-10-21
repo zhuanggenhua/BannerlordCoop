@@ -1,22 +1,109 @@
 ﻿using Common;
 using GameInterface.Services.CampaignAuthority.NativeState;
+using Common.Util;
+using HarmonyLib;
 using Moq;
 using ProtoBuf;
 using Serilog;
 using System;
 using System.IO;
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.CampaignBehaviors;
 using TaleWorlds.CampaignSystem.Party;
+using TaleWorlds.CampaignSystem.Settlements;
 using TaleWorlds.Core;
+using TaleWorlds.Library;
 using Xunit;
 using NativeObjects = GameInterface.Services.ObjectManager.ObjectManager;
 
 namespace GameInterface.Tests.Services.CampaignAuthority.NativeState;
 
+[Collection(ModInformationRoleCollection.Name)]
 public class CampaignCaravanCheckpointTests
 {
+    [Fact]
+    public void NativeEmptyTownPriceSentinelRoundtripsExactBitsAndRemainsAnExistingNativePrice()
+    {
+        var source = new Fixture();
+        var target = new Fixture();
+        var previous = Campaign.Current;
+        try
+        {
+            var campaign = ObjectHelper.SkipConstructor<Campaign>();
+            campaign._towns = new MBList<Town>();
+            AccessTools.Property(typeof(Campaign), "AllItemCategories").SetValue(campaign,
+                new MBReadOnlyList<ItemCategory>(new List<ItemCategory> { source.Category, source.OtherCategory }));
+            Campaign.Current = campaign;
+            AccessTools.Method(typeof(CaravansCampaignBehavior), "CreatePriceDataCache").Invoke(source.Caravans, null);
+        }
+        finally { Campaign.Current = previous; }
+
+        int nativeBits = BitConverter.SingleToInt32Bits(source.Caravans._priceDictionary[source.Category].AverageBuySellPriceIndex);
+        Assert.Equal(unchecked((int)0xffc00000), nativeBits);
+        Assert.Equal(1000f, source.Caravans._priceDictionary[source.Category].MinBuySellPriceIndex);
+        Assert.Equal(nativeBits, BitConverter.SingleToInt32Bits(source.Caravans._coastalPriceDictionary[source.Category].AverageBuySellPriceIndex));
+        Assert.True(source.Capture(out var checkpoint));
+        using var stream = new MemoryStream();
+        Serializer.Serialize(stream, checkpoint); stream.Position = 0;
+        var copy = Serializer.Deserialize<CampaignNativeBehaviorCheckpoint>(stream);
+        Assert.All(copy.Caravans.Cache.LandPrices.Concat(copy.Caravans.Cache.CoastalPrices), value =>
+        {
+            Assert.Equal(nativeBits, BitConverter.SingleToInt32Bits(value.Average));
+            Assert.Equal(BitConverter.SingleToInt32Bits(1000f), BitConverter.SingleToInt32Bits(value.Minimum));
+        });
+        Assert.True(target.Service.TryPrepare(copy, target.Aging, target.Caravans,
+            new[] { target.Category, target.OtherCategory }, out var install));
+        install();
+        foreach (var category in new[] { target.Category, target.OtherCategory })
+        {
+            Assert.Equal(nativeBits, BitConverter.SingleToInt32Bits(target.Caravans._priceDictionary[category].AverageBuySellPriceIndex));
+            Assert.Equal(nativeBits, BitConverter.SingleToInt32Bits(target.Caravans._coastalPriceDictionary[category].AverageBuySellPriceIndex));
+            var args = new object[] { category, target.Party, default(CaravansCampaignBehavior.PriceIndexData) };
+            Assert.True((bool)AccessTools.Method(typeof(CaravansCampaignBehavior), "GetCategoryPriceData").Invoke(target.Caravans, args)!);
+            var consumed = (CaravansCampaignBehavior.PriceIndexData)args[2];
+            Assert.Equal(nativeBits, BitConverter.SingleToInt32Bits(consumed.AverageBuySellPriceIndex));
+            Assert.Equal(1000f, consumed.MinBuySellPriceIndex);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MalformedPricePairsAreRejectedOnCaptureAndPreparation(bool coastal)
+    {
+        var malformed = new[]
+        {
+            (float.NaN, 999f), (float.NaN, float.NaN),
+            (BitConverter.Int32BitsToSingle(0x7fc00000), 1000f),
+            (BitConverter.Int32BitsToSingle(unchecked((int)0xffc00001)), 1000f),
+            (float.PositiveInfinity, 1000f), (float.NegativeInfinity, 1000f),
+            (-1f, 1000f), (1f, float.NaN), (1f, float.PositiveInfinity), (1f, -1f)
+        };
+        foreach (var (average, minimum) in malformed)
+        {
+            var source = new Fixture();
+            var prices = coastal ? source.Caravans._coastalPriceDictionary : source.Caravans._priceDictionary;
+            prices[source.Category] = new(average, minimum);
+            Assert.False(source.Capture(out _));
+            var target = new Fixture();
+            var invalidPrices = new[] { new CampaignCategoryPriceState(20, average, minimum) };
+            var cache = new CampaignCaravanCacheState(-1, -1, 0, Array.Empty<CampaignCategoryValueState>(),
+                coastal ? Array.Empty<CampaignCategoryPriceState>() : invalidPrices,
+                coastal ? invalidPrices : Array.Empty<CampaignCategoryPriceState>());
+            var state = new CampaignNativeBehaviorCheckpoint(new CampaignAgingBehaviorState(0,
+                Array.Empty<CampaignHeroIntState>(), Array.Empty<CampaignHeroIntState>()),
+                new CampaignCaravanBehaviorState(Array.Empty<CampaignPartyTimeState>(), Array.Empty<CampaignPartyTimeState>(), cache));
+            Assert.False(target.Service.TryPrepare(state, target.Aging, target.Caravans,
+                new[] { target.Category, target.OtherCategory }, out var install));
+            Assert.Null(install);
+            Assert.Empty(target.Caravans._priceDictionary);
+            Assert.Empty(target.Caravans._coastalPriceDictionary);
+        }
+    }
+
     [Fact]
     public void CompositeRoundtripTransfersAiHistoryAndCachesWithoutReplacingLocalHistory()
     {
