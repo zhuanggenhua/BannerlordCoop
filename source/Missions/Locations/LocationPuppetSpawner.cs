@@ -10,6 +10,7 @@ using SandBox;
 using Serilog;
 using System;
 using System.Collections.Generic;
+using System.Runtime.ExceptionServices;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.Settlements.Locations;
 using TaleWorlds.Core;
@@ -65,7 +66,16 @@ public class LocationPuppetSpawner : ILocationPuppetSpawner
     private readonly ILocationControllerWithdrawalState withdrawalState;
 
     private readonly object pendingPuppetLock = new object();
-    private readonly List<LocationAgentSpawnData> pendingPuppets = new List<LocationAgentSpawnData>();
+    private readonly List<PendingSpawn> pendingPuppets = new List<PendingSpawn>();
+    private volatile bool disposed;
+
+    private sealed class PendingSpawn
+    {
+        internal readonly LocationAgentSpawnData Data;
+        internal readonly MessageApplyScope.RetainedObservation Observation;
+        internal PendingSpawn(LocationAgentSpawnData data)
+        { Data = data; Observation = MessageApplyScope.RetainCurrent(); }
+    }
 
     // Spawning needs the local mission fully set up; Mission.Current alone is not that signal.
     private volatile bool missionReady;
@@ -117,12 +127,14 @@ public class LocationPuppetSpawner : ILocationPuppetSpawner
 
     public void Dispose()
     {
+        disposed = true;
         messageBroker.Unsubscribe<NetworkSpawnLocationAgents>(Handle_NetworkSpawnLocationAgents);
         messageBroker.Unsubscribe<NetworkDespawnLocationAgents>(Handle_NetworkDespawnLocationAgents);
         messageBroker.Unsubscribe<NetworkNpcPointUse>(Handle_NetworkNpcPointUse);
         messageBroker.Unsubscribe<NetworkMissionPeerEntered>(Handle_PeerEntered);
         messageBroker.Unsubscribe<MissionPeerLeft>(Handle_PeerLeft);
         messageBroker.Unsubscribe<MissionPeerDisconnected>(Handle_PeerDisconnected);
+        CancelPending(_ => true, "Location puppet spawner disposed before pending apply.");
     }
 
     // [Peer] The host's native systems removed NPCs (passage exit, churn, death): fade our puppets
@@ -137,10 +149,8 @@ public class LocationPuppetSpawner : ILocationPuppetSpawner
             foreach (var id in ids)
                 despawnedAgentIds.Add(id);
         }
-        lock (pendingPuppetLock)
-        {
-            pendingPuppets.RemoveAll(data => System.Array.IndexOf(ids, data.AgentId) >= 0);
-        }
+        CancelPending(data => System.Array.IndexOf(ids, data.AgentId) >= 0,
+            "Location puppet despawned before pending apply.");
 
         var destinations = payload.What.DestinationLocationIds;
 
@@ -214,18 +224,20 @@ public class LocationPuppetSpawner : ILocationPuppetSpawner
         NetworkSpawnLocationAgents message,
         LocationAgentSpawnData[] agents)
     {
+        if (disposed)
+        {
+            MessageApplyScope.Fail("Location puppet batch reached a disposed spawner.");
+            return;
+        }
         if (Mission.Current == null)
         {
             // The mission can still be LOADING on a joiner when its catch-up burst lands — buffer, don't drop.
-            lock (pendingPuppetLock)
+            foreach (LocationAgentSpawnData data in agents)
             {
-                foreach (LocationAgentSpawnData data in agents)
+                if (data != null && data.AgentId != Guid.Empty)
                 {
-                    if (data != null && data.AgentId != Guid.Empty)
-                    {
-                        withdrawalState.IsRetainedFormerHostRecord(data.OwnerControllerId, data.AgentId);
-                        pendingPuppets.Add(data);
-                    }
+                    withdrawalState.IsRetainedFormerHostRecord(data.OwnerControllerId, data.AgentId);
+                    QueuePending(new PendingSpawn(data));
                 }
             }
             return;
@@ -236,16 +248,102 @@ public class LocationPuppetSpawner : ILocationPuppetSpawner
         {
             if (data == null || data.AgentId == Guid.Empty) continue;
 
+            var pending = new PendingSpawn(data);
             try
             {
-                if (!TrySpawnPuppetNow(data, ref slotsAvailable))
-                    lock (pendingPuppetLock) pendingPuppets.Add(data);
+                if (!TryApplyPending(pending, ref slotsAvailable)) QueuePending(pending);
             }
             catch (Exception e)
             {
                 Logger.Error(e, "[LocationSync] Failed to spawn puppet {AgentId}; dropping it", data.AgentId);
             }
         }
+    }
+
+    private void QueuePending(PendingSpawn pending)
+    {
+        lock (pendingPuppetLock)
+        {
+            if (!disposed) { pendingPuppets.Add(pending); return; }
+        }
+        pending.Observation?.Complete("Location puppet spawner disposed before enqueue.");
+    }
+
+    private bool TryApplyPending(PendingSpawn pending, ref int slotsAvailable)
+    {
+        IDisposable active = null;
+        Exception failure = null;
+        try
+        {
+            if (disposed)
+            {
+                pending.Observation?.Complete("Location puppet spawner disposed before pending apply.");
+                return true;
+            }
+            if (pending.Observation != null && !pending.Observation.IsCurrent)
+            {
+                pending.Observation.Complete("Location puppet pending source is no longer current.");
+                return true;
+            }
+            active = pending.Observation?.Activate();
+            // Source callbacks may reenter Dispose while this record is outside the queue.
+            if (disposed)
+            {
+                pending.Observation?.Complete("Location puppet spawner disposed during source validation.");
+                return true;
+            }
+            if (!TrySpawnPuppetNow(pending.Data, ref slotsAvailable, out var rejected)) return false;
+            pending.Observation?.Complete(rejected);
+            return true;
+        }
+        catch (Exception error)
+        {
+            failure = error;
+            try { pending.Observation?.Complete(error.ToString()); }
+            catch (Exception secondary)
+            { Logger.Error(secondary, "Location pending apply failure reporting failed after {ApplyError}", error); }
+            throw;
+        }
+        finally
+        {
+            if (failure == null) active?.Dispose();
+            else
+            {
+                try { active?.Dispose(); }
+                catch (Exception secondary)
+                { Logger.Error(secondary, "Location pending apply scope release failed after {ApplyError}", failure); }
+            }
+        }
+    }
+
+    private void CancelPending(Predicate<LocationAgentSpawnData> matches, string reason)
+    {
+        var cancelled = new List<PendingSpawn>();
+        lock (pendingPuppetLock)
+        {
+            pendingPuppets.RemoveAll(pending =>
+            {
+                if (!matches(pending.Data)) return false;
+                cancelled.Add(pending);
+                return true;
+            });
+        }
+        CompleteCancelled(cancelled, reason);
+    }
+
+    private static void CompleteCancelled(IReadOnlyList<PendingSpawn> cancelled, string reason)
+    {
+        ExceptionDispatchInfo failure = null;
+        foreach (var pending in cancelled)
+        {
+            try { pending.Observation?.Complete(reason); }
+            catch (Exception error)
+            {
+                if (failure == null) failure = ExceptionDispatchInfo.Capture(error);
+                else Logger.Error(error, "Additional location pending cancellation callback failed for {CancelReason}", reason);
+            }
+        }
+        failure?.Throw();
     }
 
     // [Peer] The host's NPC started or stopped using a scene point: have our puppet use the SAME
@@ -331,8 +429,9 @@ public class LocationPuppetSpawner : ILocationPuppetSpawner
     }
 
     // [Game thread] Spawn one puppet, consuming render slots on success. Returns false to buffer.
-    private bool TrySpawnPuppetNow(LocationAgentSpawnData data, ref int slotsAvailable)
+    private bool TrySpawnPuppetNow(LocationAgentSpawnData data, ref int slotsAvailable, out string rejected)
     {
+        rejected = null;
         var registry = coopMissionComponent.AgentRegistry;
         bool ownerIsRetainedFormerHost = withdrawalState.IsRetainedFormerHostRecord(
             data.OwnerControllerId,
@@ -340,7 +439,10 @@ public class LocationPuppetSpawner : ILocationPuppetSpawner
 
         bool ownerIsWithdrawnHost;
         if (IsWithdrawn(data.OwnerControllerId, out ownerIsWithdrawnHost) && !ownerIsWithdrawnHost)
+        {
+            rejected = "Location puppet owner withdrew before apply.";
             return true;                                                // stale player record — drop
+        }
 
         // Mission.Current exists while the scene is still LOADING — gate on the same readiness the
         // join-info path uses, or the crowd spawns before teams/the player agent are initialized.
@@ -349,8 +451,10 @@ public class LocationPuppetSpawner : ILocationPuppetSpawner
         // A departed plain player's records are stale (its puppet despawns, nothing adopts it). A
         // departed HOST's records are the crowd itself: retained, spawned, and — when WE are the
         // promoted host — adopted below, so a partially-applied catch-up never loses NPCs (SR-014).
-        if (IsTombstoned(data.AgentId)) return true;                    // already despawned by the host — drop
-        if (partyAgentMap.Contains(data.AgentId)) return true;          // party join info owns this id — never bind it as an NPC
+        if (IsTombstoned(data.AgentId))
+        { rejected = "Location puppet was tombstoned before apply."; return true; }
+        if (partyAgentMap.Contains(data.AgentId))
+        { rejected = "Location puppet identity is owned by party join info."; return true; }
         if (registry.TryGetAgentInfo(data.AgentId, out _)) return true; // already spawned (incl. our own natives) — dedupe
 
         int slotsNeeded = 1;
@@ -362,7 +466,8 @@ public class LocationPuppetSpawner : ILocationPuppetSpawner
         Agent agent = data.Kind == LocationAgentKind.Animal
             ? SpawnAnimalPuppet(data)
             : SpawnHumanPuppet(data, out rosterBoundEntry);
-        if (agent == null) return true;                                 // unresolvable — drop (already logged)
+        if (agent == null)
+        { rejected = "Location puppet is unresolvable."; return true; } // drop (already logged)
 
         agent.FadeIn();
         if (data.Health > 0) agent.Health = data.Health;
@@ -557,32 +662,39 @@ public class LocationPuppetSpawner : ILocationPuppetSpawner
 
     public void DrainPendingPuppets()
     {
-        if (!missionReady || Mission.Current == null) return;
+        if (disposed || !missionReady || Mission.Current == null) return;
 
-        LocationAgentSpawnData[] pending;
+        PendingSpawn[] pending;
         lock (pendingPuppetLock)
         {
             if (pendingPuppets.Count == 0) return;
             int count = Math.Min(MaxBufferedSpawnsPerTick, pendingPuppets.Count);
-            pending = new LocationAgentSpawnData[count];
+            pending = new PendingSpawn[count];
             pendingPuppets.CopyTo(0, pending, 0, count);
             pendingPuppets.RemoveRange(0, count);
         }
 
         // Count the live remaining capacity ONCE for the whole drain and decrement as puppets spawn.
-        int slotsAvailable = agentBudget.RemainingCapacity(agentBudget.CountLiveAgents(Mission.Current));
+        int slotsAvailable;
+        try { slotsAvailable = agentBudget.RemainingCapacity(agentBudget.CountLiveAgents(Mission.Current)); }
+        catch (Exception error)
+        {
+            try { CompleteCancelled(pending, error.ToString()); }
+            catch (Exception secondary)
+            { Logger.Error(secondary, "Location pending budget failure reporting failed after {ApplyError}", error); }
+            throw;
+        }
 
-        foreach (var data in pending)
+        foreach (var record in pending)
         {
             // One bad record must not abort the whole drain: drop on failure, never re-buffer it.
             try
             {
-                if (!TrySpawnPuppetNow(data, ref slotsAvailable))
-                    lock (pendingPuppetLock) pendingPuppets.Add(data);
+                if (!TryApplyPending(record, ref slotsAvailable)) QueuePending(record);
             }
             catch (Exception e)
             {
-                Logger.Error(e, "[LocationSync] Failed to spawn buffered puppet {AgentId}; dropping it", data.AgentId);
+                Logger.Error(e, "[LocationSync] Failed to spawn buffered puppet {AgentId}; dropping it", record.Data.AgentId);
             }
         }
     }
@@ -633,8 +745,9 @@ public class LocationPuppetSpawner : ILocationPuppetSpawner
         {
             lock (pendingPuppetLock)
             {
-                foreach (var data in pendingPuppets)
+                foreach (var pending in pendingPuppets)
                 {
+                    var data = pending.Data;
                     if (data.OwnerControllerId == controllerId)
                         withdrawalState.RetainFormerHostRecord(data.AgentId);
                 }
@@ -642,10 +755,8 @@ public class LocationPuppetSpawner : ILocationPuppetSpawner
         }
         else
         {
-            lock (pendingPuppetLock)
-            {
-                pendingPuppets.RemoveAll(data => data.OwnerControllerId == controllerId);
-            }
+            CancelPending(data => data.OwnerControllerId == controllerId,
+                "Location puppet player withdrew before pending apply.");
         }
     }
 
