@@ -15,6 +15,7 @@ import { UdpFaultProxy } from './udp-fault-proxy.mjs';
 import { assertFrozenMovementPair, assertFrozenNpcSamples } from './frozen-movement-evidence.mjs';
 import { createNativeJsonlWriter } from './native-jsonl-writer.mjs';
 import { runNativeScenarioPreflight } from './native-scenario-preflight.mjs';
+import { captureMissionAiObservation, assertMissionAiWindow } from './mission-ai-evidence.mjs';
 
 export { options };
 export const HELP = `Usage: node tools/mcp/scenarios/p2p-mission-lifecycle.mjs
@@ -525,23 +526,30 @@ export async function run(config, scenario = null) {
         if (scenario) await scenario.run({ initial, command, call, feature, summary, emit, state, bothStates,
             setTime, screenshot, poll, proxy, native, runId, config, consistentSnapshot });
         else {
+        const aiContext = { bothStates, command, emit, initial, processPids };
         await feature('A-Mission-B-automatic-map-writer', async () => {
             const freeMap = await readBMapActor(); assertFreeMapActor(freeMap, initial[1]);
             await setTime('Play_1x'); const entry = await enter('server');
             const before = await awaitWriter(1); await native('client1', false);
             const modesBefore = await runningModes('running modes after A enters Mission');
+            const aiBefore = await captureMissionAiObservation(aiContext, before, 'A-Mission-B-writer-before');
             await delay(5000); const after = await bothStates(); assertSingleWriterProgress(before, after, 1, initial);
+            const aiAfter = await captureMissionAiObservation(aiContext, before, 'A-Mission-B-writer-after');
+            const aiWindow = assertMissionAiWindow(aiBefore, aiAfter, 1);
             const modesAfter = await timeModes(); assertTimeModes(modesAfter, true);
-            const world = await consistentSnapshot('B writer critical world'); return { freeMap, entry, before, after, modesBefore, modesAfter, world };
+            const world = await consistentSnapshot('B writer critical world'); return { freeMap, entry, before, after, modesBefore, modesAfter, world, aiBefore, aiAfter, aiWindow };
         });
         await feature('both-Missions-exact-world-pause-native-frames-continue', async () => {
             await setTime('Play_1x'); const entry = await enter('client1');
             const before = await snapshot('all-away committed paused lease', true);
+            const aiBefore = await captureMissionAiObservation(aiContext, before.states, 'all-away-before');
             const modesBefore = await timeModes(); assertTimeModes(modesBefore);
             const udpBefore = proxy ? { utc: new Date().toISOString(), stats: structuredClone(proxy.stats) } : null;
             const first = await Promise.all(INSTANCES.map(instance => screenshot(instance, 'all-away-before')));
             await delay(5000); const after = await snapshot('all-away unchanged world', true);
             assertNoWorldProgress(before, after, initial);
+            const aiAfter = await captureMissionAiObservation(aiContext, before.states, 'all-away-after');
+            const aiWindow = assertMissionAiWindow(aiBefore, aiAfter, -1);
             const second = await Promise.all(INSTANCES.map(instance => screenshot(instance, 'all-away-after')));
             for (let index = 0; index < 2; index++) {
                 assertEngineProgress(first[index], second[index]);
@@ -552,7 +560,7 @@ export async function run(config, scenario = null) {
             const transport = proxy ? { ...assertTransportProgress(udpBefore.stats, udpAfter.stats), before: udpBefore, after: udpAfter }
                 : { acceptance: 'NOT_OBSERVED', scope: 'MCP and native frame receipts do not prove game P2P message exchange' };
             summary.transportAcceptance = transport.acceptance;
-            return { entry, before, after, modesBefore, modesAfter, first, second,
+            return { entry, before, after, modesBefore, modesAfter, first, second, aiBefore, aiAfter, aiWindow,
                 mcpControlAlive: 'Both game-thread commands and native frame receipts completed',
                 p2pNetworkAcceptance: transport.acceptance, transport };
         });
@@ -561,18 +569,24 @@ export async function run(config, scenario = null) {
             const freeMap = await freeBMapActor('B-returned-settlement-exit');
             const modesBefore = await runningModes('automatic selected-speed restore after B leaves settlement');
             const before = await awaitWriter(1);
+            const aiBefore = await captureMissionAiObservation(aiContext, before, 'B-return-writer-before');
             await delay(5000); const after = await bothStates(); assertSingleWriterProgress(before, after, 1, initial);
+            const aiAfter = await captureMissionAiObservation(aiContext, before, 'B-return-writer-after');
+            const aiWindow = assertMissionAiWindow(aiBefore, aiAfter, 1);
             const modesAfter = await timeModes(); assertTimeModes(modesAfter, true);
-            await native('server', true); return { freeMap, modesBefore, modesAfter, before, after, world: await consistentSnapshot('B resumed world') };
+            await native('server', true); return { freeMap, modesBefore, modesAfter, before, after, world: await consistentSnapshot('B resumed world'), aiBefore, aiAfter, aiWindow };
         });
         await feature('A-return-host-preference-final-A-B-A', async () => {
             const freeMap = await readBMapActor(); assertFreeMapActor(freeMap, initial[1]);
             await setTime('Play_1x'); await leave('server'); const before = await awaitWriter(0);
             const modesBefore = await runningModes('running modes after A returns');
+            const aiBefore = await captureMissionAiObservation(aiContext, before, 'A-return-writer-before');
             await delay(5000); const after = await bothStates(); assertSingleWriterProgress(before, after, 0, initial);
+            const aiAfter = await captureMissionAiObservation(aiContext, before, 'A-return-writer-after');
+            const aiWindow = assertMissionAiWindow(aiBefore, aiAfter, 0);
             const modesAfter = await timeModes(); assertTimeModes(modesAfter, true);
             for (const instance of INSTANCES) await native(instance, false);
-            return { freeMap, modesBefore, modesAfter, before, after, world: await consistentSnapshot('final A world') };
+            return { freeMap, modesBefore, modesAfter, before, after, world: await consistentSnapshot('final A world'), aiBefore, aiAfter, aiWindow };
         });
         }
     } catch (error) {

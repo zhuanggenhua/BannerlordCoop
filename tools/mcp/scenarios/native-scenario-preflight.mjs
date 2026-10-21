@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 
 export const QUICK_TEST_FILES = Object.freeze([
+    'mission-ai-evidence.test.mjs',
     'p2p-mission-lifecycle.test.mjs', 'p2p-map-authority-contracts.test.mjs',
     'frozen-movement-evidence.test.mjs', 'map-responsiveness-evidence.test.mjs',
     'native-log-archive.test.mjs', 'native-jsonl-writer.test.mjs',
