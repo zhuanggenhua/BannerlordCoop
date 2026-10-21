@@ -1,6 +1,7 @@
 ﻿using Common.Logging;
 using Common.Network;
 using Common.Network.Data;
+using Common.Network.Session;
 using GameInterface.Services.Entity;
 using GameInterface.Services.Missions;
 using GameInterface.Services.Players;
@@ -219,13 +220,16 @@ public sealed class MissionDeparture
 }
 
 /// <inheritdoc cref="IMissionManager"/>
-public class MissionManager : IMissionManager, IMissionMembershipRegistry, IMissionRelaySourceVerifier
+public class MissionManager : IMissionManager, IRoomMissionFactsView, IMissionRelaySourceVerifier
 {
     private static readonly ILogger Logger = LogManager.GetLogger<MissionManager>();
 
     private readonly object gate = new object();
     private readonly IPlayerManager playerManager;
     private readonly IControllerIdProvider controllerIdProvider;
+    private readonly ISessionIdentity sessionIdentity;
+    private long factsRevision;
+    public event Action FactsChanged;
     private readonly Dictionary<string, MissionInstance> byInstanceId = new Dictionary<string, MissionInstance>();
     private readonly Dictionary<NetPeer, MissionMembership> byPeer = new Dictionary<NetPeer, MissionMembership>();
     private readonly Dictionary<string, MissionMembership> byController = new Dictionary<string, MissionMembership>();
@@ -282,10 +286,14 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry, IMiss
     public MissionManager(IPlayerManager playerManager) : this(playerManager, null) { }
 
     public MissionManager(IPlayerManager playerManager, IControllerIdProvider controllerIdProvider)
+        : this(playerManager, controllerIdProvider, null) { }
+
+    public MissionManager(IPlayerManager playerManager, IControllerIdProvider controllerIdProvider, ISessionIdentity sessionIdentity)
     {
         if (playerManager == null) throw new ArgumentNullException(nameof(playerManager));
         this.playerManager = playerManager;
         this.controllerIdProvider = controllerIdProvider;
+        this.sessionIdentity = sessionIdentity;
     }
 
     public bool TryAuthorizeIntroduction(
@@ -568,6 +576,14 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry, IMiss
 
     private bool TryEnterMission(MissionPlayerEndpoint endpoint, string instanceId, out MissionEntryResult result)
     {
+        long before;
+        lock (gate) before = factsRevision;
+        try { return TryEnterMissionCore(endpoint, instanceId, out result); }
+        finally { NotifyFactsChanged(before); }
+    }
+
+    private bool TryEnterMissionCore(MissionPlayerEndpoint endpoint, string instanceId, out MissionEntryResult result)
+    {
         result = null;
         if (string.IsNullOrEmpty(instanceId)) return false;
         var controllerId = endpoint.ControllerId;
@@ -575,6 +591,7 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry, IMiss
 
         lock (gate)
         {
+            if (factsRevision > long.MaxValue - 3) return false;
             PruneExpired(DateTime.UtcNow);
             if (IsConclusionFenced(instanceId))
             {
@@ -616,6 +633,7 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry, IMiss
                 controllerMembership.Endpoint = endpoint;
                 controllerMembership.PeerCredential = CreatePeerCredential();
                 controllerMembership.Generation = checked(++nextMembershipGeneration);
+                factsRevision++;
                 if (peer != null) byPeer[peer] = controllerMembership;
 
                 var existingMembers = EntryMembers(controllerMembership.Instance, controllerId);
@@ -655,6 +673,7 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry, IMiss
             instance.Memberships.Add(membership);
             if (peer != null) byPeer[peer] = membership;
             byController[controllerId] = membership;
+            factsRevision++;
 
             Logger.Information("Controller {Controller} entered instance {Instance} on {Peer}",
                 controllerId, instanceId, peer);
@@ -672,6 +691,14 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry, IMiss
     }
 
     public bool TryLeaveMission(NetPeer peer, string controllerId, string instanceId, out MissionDeparture departure)
+    {
+        long before;
+        lock (gate) before = factsRevision;
+        try { return TryLeaveMissionCore(peer, controllerId, instanceId, out departure); }
+        finally { NotifyFactsChanged(before); }
+    }
+
+    private bool TryLeaveMissionCore(NetPeer peer, string controllerId, string instanceId, out MissionDeparture departure)
     {
         departure = null;
         if (peer == null)
@@ -693,6 +720,7 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry, IMiss
                 return false;
             }
 
+            if (factsRevision == long.MaxValue) return false;
             departure = RemoveMembership(membership);
             Logger.Information("Controller {Controller} left instance {Instance}", controllerId, instanceId);
             return true;
@@ -701,6 +729,14 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry, IMiss
 
     public bool TryLeaveMission(LocalPlayerEndpoint endpoint, string instanceId, out MissionDeparture departure)
     {
+        long before;
+        lock (gate) before = factsRevision;
+        try { return TryLeaveMissionCore(endpoint, instanceId, out departure); }
+        finally { NotifyFactsChanged(before); }
+    }
+
+    private bool TryLeaveMissionCore(LocalPlayerEndpoint endpoint, string instanceId, out MissionDeparture departure)
+    {
         departure = null;
         if (!IsRegisteredLocal(endpoint)) return false;
         lock (gate)
@@ -708,12 +744,21 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry, IMiss
             if (!byController.TryGetValue(endpoint.ControllerId, out var membership) ||
                 membership.Endpoint is not LocalPlayerEndpoint || membership.Instance.Id != instanceId)
                 return false;
+            if (factsRevision == long.MaxValue) return false;
             departure = RemoveMembership(membership);
             return true;
         }
     }
 
     public IReadOnlyList<MissionDeparture> HandleDisconnect(NetPeer peer)
+    {
+        long before;
+        lock (gate) before = factsRevision;
+        try { return HandleDisconnectCore(peer); }
+        finally { NotifyFactsChanged(before); }
+    }
+
+    private IReadOnlyList<MissionDeparture> HandleDisconnectCore(NetPeer peer)
     {
         if (peer == null)
             return Array.Empty<MissionDeparture>();
@@ -733,6 +778,8 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry, IMiss
                 .Distinct()
                 .ToList();
 
+            if (staleMemberships.Count > long.MaxValue - factsRevision)
+                throw new InvalidOperationException("Mission membership revision exhausted; room facts cannot advance.");
             var departures = new List<MissionDeparture>(staleMemberships.Count);
             foreach (var membership in staleMemberships)
             {
@@ -748,6 +795,31 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry, IMiss
             return departures;
         }
     }
+
+    private void NotifyFactsChanged(long before)
+    {
+        bool changed;
+        lock (gate) changed = before != factsRevision;
+        if (changed) FactsChanged?.Invoke();
+    }
+
+    public bool TryCapture(out RoomMissionFactsSnapshot snapshot)
+    {
+        snapshot = null;
+        if (sessionIdentity == null || !sessionIdentity.TryGetConfirmedLease(out var lease)) return false;
+        lock (gate)
+        {
+            return RoomMissionFactsSnapshot.TryCreate(lease.RoomId, factsRevision,
+                byController.Values.Select(member => new RoomMissionMember(member.ControllerId,
+                    member.Instance.Id, member.Generation)), out snapshot);
+        }
+    }
+
+    public bool HasApplied(RoomMissionFactsVersion version) =>
+        version.IsValid && TryCapture(out var snapshot) && snapshot.Version == version;
+
+    public bool CanActivateCampaign(RoomMissionFactsVersion version) =>
+        HasApplied(version) && TryCapture(out var snapshot) && snapshot.Members.Length == 0;
 
     public bool IsControllerInMission(string controllerId)
     {
@@ -1060,6 +1132,7 @@ public class MissionManager : IMissionManager, IMissionMembershipRegistry, IMiss
     // Snapshot the (controllerId, peer) pairs still routed through the instance. Caller holds the lock.
     private MissionDeparture RemoveMembership(MissionMembership membership)
     {
+        checked { factsRevision++; }
         membership.Instance.Memberships.Remove(membership);
         if (introductionAuthorizations.TryGetValue(membership.ControllerId, out var authorization) &&
             ReferenceEquals(authorization.Peer, membership.Peer) &&
