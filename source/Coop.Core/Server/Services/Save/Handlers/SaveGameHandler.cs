@@ -146,7 +146,8 @@ internal class SaveGameHandler : IHandler
             string.IsNullOrWhiteSpace(sessionIdentity?.RoomHostControllerId)
                 ? current?.RoomHostControllerId
                 : sessionIdentity.RoomHostControllerId,
-            lease?.IsPaused ?? current?.AuthorityPaused ?? false);
+            lease?.IsPaused ?? current?.AuthorityPaused ?? false,
+            current?.BattlePreparations ?? empty.BattlePreparations);
 
         coopSessionProvider.CoopSession = session;
 
@@ -177,7 +178,8 @@ internal class SaveGameHandler : IHandler
             loaded?.AuthorityControllerId,
             loaded?.AuthorityEpoch ?? 0,
             loaded?.RoomHostControllerId,
-            loaded?.AuthorityPaused ?? false);
+            loaded?.AuthorityPaused ?? false,
+            loaded?.BattlePreparations ?? empty.BattlePreparations);
 
         var savedLease = new AuthorityLease(
             savedSession.RoomId,
@@ -185,6 +187,11 @@ internal class SaveGameHandler : IHandler
             savedSession.AuthorityControllerId,
             savedSession.AuthorityEpoch,
             savedSession.AuthorityPaused);
+        if (!savedSession.BattlePreparations.CanTransferHistory(out var battleReason))
+        {
+            RejectColdBoot(battleReason);
+            return;
+        }
         if (ModInformation.IsListenAuthority && sessionIdentity != null && !sessionIdentity.IsConfirmed &&
             HasSavedAuthorityMetadata(savedSession))
         {
@@ -266,7 +273,7 @@ internal class SaveGameHandler : IHandler
         session.UniqueGameId, session.Players, session.CraftingPlayerData, session.WorkshopPlayerData,
         session.CaravansPlayerData, session.AlleyPlayerData, session.InteractionsPlayerData, session.TradePlayerData,
         session.InventoryPlayerData, session.HeroMeetingData, session.AgingPlayerData, session.ClanFinance,
-        lease.RoomId, lease.AuthorityId, lease.AuthorityControllerId, lease.Epoch, roomHostController, lease.IsPaused);
+        lease.RoomId, lease.AuthorityId, lease.AuthorityControllerId, lease.Epoch, roomHostController, lease.IsPaused, session.BattlePreparations);
 
     private void Handle_AllGameObjectsRegistered(MessagePayload<AllGameObjectsRegistered> obj)
     {

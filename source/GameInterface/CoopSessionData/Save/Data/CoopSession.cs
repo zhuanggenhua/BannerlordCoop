@@ -38,6 +38,7 @@ public interface ICoopSession
     long AuthorityEpoch { get; }
     bool AuthorityPaused { get; }
     string RoomHostControllerId { get; }
+    BattlePreparationState BattlePreparations { get; }
 }
 
 [ProtoContract(SkipConstructor = true)]
@@ -96,6 +97,11 @@ public class CoopSession : ICoopSession
     [ProtoMember(18)]
     public bool AuthorityPaused { get; }
 
+    private BattlePreparationState battlePreparations;
+    [ProtoMember(19)]
+    public BattlePreparationState BattlePreparations
+    { get => battlePreparations ??= new BattlePreparationState(); private set => battlePreparations = value; }
+
     public CoopSession(
         string uniqueGameId,
         Player[] players,
@@ -114,7 +120,8 @@ public class CoopSession : ICoopSession
         string authorityControllerId = null,
         long authorityEpoch = 0,
         string roomHostControllerId = null,
-        bool authorityPaused = false)
+        bool authorityPaused = false,
+        BattlePreparationState battlePreparations = null)
     {
         UniqueGameId = uniqueGameId;
         Players = players;
@@ -134,5 +141,6 @@ public class CoopSession : ICoopSession
         AuthorityEpoch = authorityEpoch;
         RoomHostControllerId = roomHostControllerId ?? string.Empty;
         AuthorityPaused = authorityPaused;
+        BattlePreparations = battlePreparations?.Copy() ?? new BattlePreparationState();
     }
 }

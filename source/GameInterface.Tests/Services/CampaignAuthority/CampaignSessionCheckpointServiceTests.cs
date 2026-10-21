@@ -1,4 +1,5 @@
 ﻿using Common;
+using GameInterface.Tests.Services.CampaignAuthority.Battles;
 using Common.Tests.Utils;
 using GameInterface.CoopSessionData;
 using GameInterface.CoopSessionData.Save.Data;
@@ -105,6 +106,62 @@ public class CampaignSessionCheckpointServiceTests
         Assert.Null(checkpoint);
     }
 
+    [Fact]
+    public void RetiredBattleHistoryTransfersWithoutRevivingRetiredNativeObjectsOrRebindingRoom()
+    {
+        var source = new Fixture();var target = new Fixture();
+        source.Provider.CoopSession = BattlePreparationTestData.Session(BattlePreparationTestData.State());
+        Assert.True(source.Service.TryCapture("campaign", out var checkpoint));
+        Assert.True(target.Service.TryApply(checkpoint, "campaign"));
+        var row = Assert.Single(target.Provider.CoopSession.BattlePreparations.Records);
+        Assert.Equal("original-room", row.Key.RoomId);Assert.Equal("native-campaign", row.Key.CampaignId);
+        Assert.Equal(7, row.Key.ClaimGeneration);Assert.Equal(937, row.Prepared.Parties[0].Troops[0].UniqueSeed);
+        Assert.Equal("room", target.Provider.CoopSession.RoomId);
+        Assert.NotSame(source.Provider.CoopSession.BattlePreparations, target.Provider.CoopSession.BattlePreparations);
+        Assert.False(target.Objects.TryGetObject<object>(row.Key.MapEvent.Id, out _));
+    }
+
+    [Theory]
+    [InlineData(BattlePreparationPhase.Prepared)][InlineData(BattlePreparationPhase.Preparing)][InlineData(BattlePreparationPhase.Unknown)]
+    public void ActiveOrPartialBattleCheckpointCannotAcknowledgeMissingAuthAndDrain(BattlePreparationPhase phase)
+    {
+        var source = new Fixture();var target = new Fixture();
+        source.Provider.CoopSession = BattlePreparationTestData.Session(BattlePreparationTestData.State(phase));
+        Assert.False(source.Service.TryCapture("campaign", out _));
+        Assert.False(Common.Session.CampaignApplyCompletion.For(source.Identity).CanAcknowledgeThrough(source.Identity.CurrentLease, out _));
+        var valid = new Fixture();Assert.True(valid.Service.TryCapture("campaign", out var checkpoint));
+        var json = JObject.Parse(checkpoint.SessionJson);
+        json["BattlePreparations"] = JObject.FromObject(BattlePreparationTestData.State(phase));
+        var original = target.Provider.CoopSession;
+        Assert.False(target.Service.TryApply(new CampaignSessionCheckpoint("campaign", json.ToString()), "campaign"));
+        Assert.Same(original, target.Provider.CoopSession);
+        Assert.False(Common.Session.CampaignApplyCompletion.For(target.Identity).CanAcknowledgeThrough(target.Identity.CurrentLease, out _));
+        var next = new AuthorityLease("room", "next", "A", 4);
+        Assert.True(target.Identity.TryApply(next, "A"));
+        Assert.False(Common.Session.CampaignApplyCompletion.For(target.Identity).CanAcknowledgeThrough(next, out _));
+    }
+
+    [Theory]
+    [InlineData("drop")][InlineData("replace")][InlineData("clearPartial")]
+    public void CheckpointCannotForgetCompletedResultsOrEraseAnUnresolvedLocalFailure(string change)
+    {
+        var source = new Fixture();var target = new Fixture();
+        target.Provider.CoopSession = BattlePreparationTestData.Session(BattlePreparationTestData.State(
+            change == "clearPartial" ? BattlePreparationPhase.Unknown : BattlePreparationPhase.Retired));
+        if (change == "replace") source.Provider.CoopSession = BattlePreparationTestData.Session(BattlePreparationTestData.State());
+        Assert.True(source.Service.TryCapture("campaign", out var checkpoint));
+        if (change == "replace")
+        {
+            var document = JObject.Parse(checkpoint.SessionJson);
+            document["BattlePreparations"]["Records"][0]["Prepared"]["Parties"][0]["Troops"][0]["Xp"] = 999;
+            checkpoint = new CampaignSessionCheckpoint("campaign", document.ToString());
+        }
+        var original = target.Provider.CoopSession;
+        Assert.False(target.Service.TryApply(checkpoint, "campaign"));
+        Assert.Same(original, target.Provider.CoopSession);
+        Assert.False(Common.Session.CampaignApplyCompletion.For(target.Identity).CanAcknowledgeThrough(target.Identity.CurrentLease, out _));
+    }
+
     private sealed class Fixture
     {
         internal readonly ObjectManagerService Objects = new(Mock.Of<ILogger>());
@@ -113,12 +170,13 @@ public class CampaignSessionCheckpointServiceTests
         internal readonly TestMessageBroker Broker = new();
         internal readonly Player[] Registrations;
         internal readonly CampaignSessionCheckpointService Service;
+        internal readonly SessionIdentity Identity = new();
 
         internal Fixture()
         {
             Registrations = new[] { CreatePlayer("A", 1), CreatePlayer("B", 5) };
             Players.SetupGet(value => value.Players).Returns(Registrations);
-            var identity = new SessionIdentity();
+            var identity = Identity;
             Assert.True(identity.TryApply(new AuthorityLease("room", "paused", "", 3, isPaused: true), "A"));
             Service = new CampaignSessionCheckpointService(Objects, Players.Object, Provider, identity, Broker);
         }

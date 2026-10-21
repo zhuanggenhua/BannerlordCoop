@@ -1,4 +1,16 @@
 ﻿using Autofac;
+using Common;
+using Common.Network;
+using Coop.Core.Common;
+using GameInterface.Services.Heroes.Messages;
+using Common.Tests.Utils;
+using Coop.Core.Server.Services.Save.Handlers;
+using Coop.Core.Server.Services.Shutdown;
+using GameInterface.CoopSessionData;
+using GameInterface.Services.ObjectManager;
+using GameInterface.Services.Players;
+using Moq;
+using System.Reflection;
 using Common.Logging;
 using Coop.Core.Server.Services.Save;
 using GameInterface.CoopSessionData.Save.Data;
@@ -436,5 +448,65 @@ namespace Coop.Tests.Server.Services.Save
                 File.Delete(file);
             }
         }
+    }
+
+    public sealed class BattlePreparationSaveCopyTests
+    {
+        [Fact]
+        public void BattleHistorySurvivesActualWriteLoadAndLeaseCopyWithoutChangingOriginalLifetime()
+        {
+            var saveManager = new CoopSaveManager();var saveName = "BattleHistoryCopy_" + Guid.NewGuid().ToString("N");
+            var party = new BattleObjectReference("party", 12);
+            var key = new BattlePreparationKey("original-room", "native-campaign", new BattleObjectReference("event", 11), "room-claim", 7);
+            var row = new BattlePreparationRecord(key, new BattlePreparationInput(party, new[] { new BattleCohortMember("A", party, "reservation") }),
+                BattlePreparationPhase.Retired, 3, new BattlePreparedPayload(Array.Empty<BattlePreparedParty>(), Array.Empty<BattlePreparedSide>(), new byte[] { 1, 2, 3 }), null);
+            var e = CoopSession.Empty;
+            var state = new BattlePreparationState(records: new[] { row });
+            var provider = new CoopSessionProvider { CoopSession = new CoopSession(saveName, e.Players, e.CraftingPlayerData, e.WorkshopPlayerData,
+                e.CaravansPlayerData, e.AlleyPlayerData, e.InteractionsPlayerData, e.TradePlayerData, e.InventoryPlayerData,
+                e.HeroMeetingData, e.AgingPlayerData, battlePreparations: state) };
+            var broker = new TestMessageBroker();var players = new Mock<IPlayerManager>();players.SetupGet(value => value.Players).Returns(Array.Empty<Player>());
+            using var handler = new SaveGameHandler(broker, saveManager, provider, players.Object, Mock.Of<IPlayerPartyRestorer>(), Mock.Of<INetwork>(), Mock.Of<IObjectManager>());
+            try
+            {
+                broker.Publish(this, new GameSaved(saveName));
+                Assert.NotSame(state, provider.CoopSession.BattlePreparations);
+                Assert.Equal(7, Assert.Single(saveManager.LoadCoopSession(saveName).BattlePreparations.Records).Key.ClaimGeneration);
+                provider.CoopSession = CoopSession.Empty;
+                broker.Publish(this, new GameLoaded(saveName));
+                Assert.Equal("original-room", Assert.Single(provider.CoopSession.BattlePreparations.Records).Key.RoomId);
+                var copied = (ICoopSession)typeof(SaveGameHandler).GetMethod("CopyWithLease", BindingFlags.NonPublic | BindingFlags.Static).Invoke(null,
+                    new object[] { provider.CoopSession, new AuthorityLease("fresh-room", "next", "A", 9), "A" });
+                Assert.Equal("fresh-room", copied.RoomId);Assert.Equal("original-room", Assert.Single(copied.BattlePreparations.Records).Key.RoomId);
+                Assert.NotSame(provider.CoopSession.BattlePreparations, copied.BattlePreparations);
+            }
+            finally { File.Delete(Path.Combine(saveManager.DefaultPath, saveName + saveManager.FileType)); }
+        }
+
+        [Fact]
+        public void ActiveBattleLoadRetainsSavedEvidenceAndRefusesUnsupportedRestore()
+        {
+            var e = CoopSession.Empty;var saveManager = new CoopSaveManager();var finalizer = new Mock<ICoopFinalizer>();
+            var saveName = "UnsupportedBattleLoad_" + Guid.NewGuid().ToString("N");
+            var party = new BattleObjectReference("party", 12);
+            var row = new BattlePreparationRecord(new BattlePreparationKey("room", "campaign", new BattleObjectReference("event", 11), "claim", 7),
+                new BattlePreparationInput(party, new[] { new BattleCohortMember("A", party, "reservation") }), BattlePreparationPhase.Unknown, 3, null, "partial");
+            var saved = new CoopSession("save", e.Players, e.CraftingPlayerData, e.WorkshopPlayerData, e.CaravansPlayerData, e.AlleyPlayerData,
+                e.InteractionsPlayerData, e.TradePlayerData, e.InventoryPlayerData, e.HeroMeetingData, e.AgingPlayerData,
+                battlePreparations: new BattlePreparationState(records: new[] { row }));
+            saveManager.SaveCoopSession(saveName, saved);
+            var provider = new CoopSessionProvider();var original = provider.CoopSession;var broker = new TestMessageBroker();
+            using var handler = new SaveGameHandler(broker, saveManager, provider, Mock.Of<IPlayerManager>(), Mock.Of<IPlayerPartyRestorer>(),
+                Mock.Of<INetwork>(), Mock.Of<IObjectManager>(), finalizer: finalizer.Object);
+            try
+            {
+                broker.Publish(this, new GameLoaded(saveName));
+                Assert.Same(original, provider.CoopSession);Assert.Equal("partial", Assert.Single(saved.BattlePreparations.Records).Failure);
+                Assert.Equal("partial", Assert.Single(saveManager.LoadCoopSession(saveName).BattlePreparations.Records).Failure);
+                finalizer.Verify(value => value.Finalize(It.Is<string>(text => text.Contains("NOT_IMPLEMENTED"))), Times.Once);
+            }
+            finally { File.Delete(Path.Combine(saveManager.DefaultPath, saveName + saveManager.FileType)); }
+        }
+
     }
 }

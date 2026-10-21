@@ -62,7 +62,7 @@ internal sealed class CampaignSessionCheckpointService : ICampaignSessionCheckpo
         checkpoint = null;
         if (string.IsNullOrWhiteSpace(campaignId) || !identity.TryGetConfirmedLease(out var lease)) return false;
         var currentPlayers = players.Players?.ToArray();
-        if (!ValidatePlayers(currentPlayers, out _)) return false;
+        if (!ValidatePlayers(currentPlayers, out _) || !ValidateBattleHistory(provider.CoopSession?.BattlePreparations, lease)) return false;
         try
         {
             var detachedPlayers = currentPlayers.Select(player => new Player(player.ControllerId, player.HeroId,
@@ -97,7 +97,7 @@ internal sealed class CampaignSessionCheckpointService : ICampaignSessionCheckpo
         if (!HasRequiredSharedData(snapshot) || snapshot.RoomId != lease.RoomId || snapshot.AuthorityId != lease.AuthorityId ||
             snapshot.AuthorityControllerId != lease.AuthorityControllerId || snapshot.AuthorityEpoch != lease.Epoch ||
             snapshot.AuthorityPaused != lease.IsPaused || snapshot.RoomHostControllerId != identity.RoomHostControllerId ||
-            !ValidatePlayers(snapshot.Players, out var registered)) return false;
+            !ValidatePlayers(snapshot.Players, out var registered) || !ValidateBattleHistory(snapshot.BattlePreparations, lease) || !ValidateBattleHistoryInstall(snapshot.BattlePreparations, lease)) return false;
 
         Action installNative = null;
         if (nativeState != null && (!nativeState.TryPrepare(checkpoint.NativeBehaviors, out installNative) || installNative == null)) return false;
@@ -114,6 +114,22 @@ internal sealed class CampaignSessionCheckpointService : ICampaignSessionCheckpo
             CoopSessionUpdateHandler.InitializeSessionReaders(broker, this, merged);
             installed = true;
         }) && installed;
+    }
+
+    private bool ValidateBattleHistoryInstall(BattlePreparationState incoming, AuthorityLease lease)
+    {
+        if (incoming.CanInstallHistoryOver(provider.CoopSession?.BattlePreparations, out var reason)) return true;
+        Common.Session.CampaignApplyCompletion.For(identity).RecordFailure(lease, reason);
+        Logger.Warning("Rejected battle preparation history replacement: {Reason}", reason);
+        return false;
+    }
+
+    private bool ValidateBattleHistory(BattlePreparationState state, AuthorityLease lease)
+    {
+        if (state == null || state.CanTransferHistory(out var reason)) return true;
+        Common.Session.CampaignApplyCompletion.For(identity).RecordFailure(lease, reason);
+        Logger.Warning("Rejected battle preparation checkpoint: {Reason}", reason);
+        return false;
     }
 
     private bool ValidatePlayers(Player[] snapshot, out Dictionary<string, Player> registered)
@@ -165,6 +181,6 @@ internal sealed class CampaignSessionCheckpointService : ICampaignSessionCheckpo
             source.InteractionsPlayerData ?? empty.InteractionsPlayerData, source.TradePlayerData ?? empty.TradePlayerData,
             inventory, source.HeroMeetingData ?? empty.HeroMeetingData, source.AgingPlayerData ?? empty.AgingPlayerData,
             source.ClanFinance ?? empty.ClanFinance, lease.RoomId, lease.AuthorityId, lease.AuthorityControllerId,
-            lease.Epoch, roomHost, lease.IsPaused);
+            lease.Epoch, roomHost, lease.IsPaused, source.BattlePreparations);
     }
 }
