@@ -1,4 +1,5 @@
 ﻿using Common;
+using GameInterface.Services.CampaignAuthority;
 using HarmonyLib;
 using TaleWorlds.CampaignSystem;
 
@@ -9,5 +10,5 @@ class ArmyDisablePatches
 {
     [HarmonyPatch(nameof(Army.Tick))]
     [HarmonyPrefix]
-    private static bool DisableArmyTick() => ModInformation.IsServer;
+    private static bool DisableArmyTick() => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
 }

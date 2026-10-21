@@ -1,4 +1,5 @@
 ﻿using Common;
+using GameInterface.Services.CampaignAuthority;
 using HarmonyLib;
 using TaleWorlds.CampaignSystem;
 using TaleWorlds.CampaignSystem.CampaignBehaviors.AiBehaviors;
@@ -9,5 +10,5 @@ namespace GameInterface.Services.Armies.Patches.Disable;
 internal class DisableArmyHourlyTick
 {
     [HarmonyPatch(nameof(Army.HourlyTick))]
-    static bool Prefix() => ModInformation.IsServer;
+    static bool Prefix() => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
 }

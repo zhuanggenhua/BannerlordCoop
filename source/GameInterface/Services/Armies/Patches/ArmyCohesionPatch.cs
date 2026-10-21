@@ -1,6 +1,7 @@
 ﻿using Common;
 using Common.Messaging;
 using GameInterface.Policies;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Armies.Messages;
 using GameInterface.Services.Clans.Messages;
 using HarmonyLib;
@@ -19,7 +20,7 @@ internal class ArmyCohesionPatch
     private static void Postfix_BoostCohesionWithInfluence(Army __instance) => PublishCohesion(__instance);
     private static void PublishCohesion(Army army)
     {
-        if (!ModInformation.IsServer) return;
+        if (!CampaignSimulationAuthorityPolicy.CanPublishAppliedWorldResult()) return;
 
         if (CallOriginalPolicy.IsOriginalAllowed()) return;
 

@@ -1,4 +1,5 @@
 ﻿using Common;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.MobileParties.Extensions;
 using HarmonyLib;
 using Helpers;
@@ -14,8 +15,9 @@ namespace GameInterface.Services.Armies.Patches.Disable;
 [HarmonyPatch(typeof(AiArmyMemberBehavior))]
 internal class DisableAiArmyMemberBehavior
 {
-    [HarmonyPatch(nameof(AiArmyMemberBehavior.RegisterEvents))]
-    static bool Prefix() => ModInformation.IsServer;
+    [HarmonyPatch("OnSiegeEventStarted")]
+    [HarmonyPrefix]
+    private static bool OnSiegeEventStartedPrefix() => CampaignSimulationAuthorityPolicy.CanRunWorldSimulation();
 
     /// <summary>
     /// Patch for replacing IsMainParty to IsPlayerParty
@@ -24,6 +26,8 @@ internal class DisableAiArmyMemberBehavior
     [HarmonyPrefix]
     public static bool AiHourlyTickPrefix(AiArmyMemberBehavior __instance, MobileParty mobileParty, PartyThinkParams p)
     {
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation()) return false;
+
         if (mobileParty.Army == null || mobileParty.Army.LeaderParty == mobileParty)
         {
             return false;
