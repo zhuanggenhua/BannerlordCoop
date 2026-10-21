@@ -1,5 +1,7 @@
 ﻿using Common;
 using GameInterface.Services.MapEvents;
+using GameInterface.Services.CampaignAuthority;
+using GameInterface.Services.Players;
 using HarmonyLib;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,6 +15,39 @@ namespace GameInterface.Services.MobilePartyAIs.Patches;
 [HarmonyPatch(typeof(DefaultMobilePartyAIModel))]
 internal class DefaultMobilePartyAIModelPatches
 {
+    [HarmonyPatch(nameof(DefaultMobilePartyAIModel.ShouldPartyCheckInitiativeBehavior))]
+    [HarmonyPostfix]
+    private static void ShouldPartyCheckInitiativeBehavior_Postfix(MobileParty mobileParty, ref bool __result)
+    {
+        if (!__result || !CampaignSimulationAuthorityPolicy.ShouldSuppressPlayerInitiative(mobileParty)) return;
+        __result = false;
+#if DEBUG
+        RecordPlayerInitiativeSuppression(mobileParty);
+#endif
+    }
+
+#if DEBUG
+    private sealed class InitiativeSuppressionObservation { internal AuthorityLease Lease; }
+    private static readonly ConditionalWeakTable<MobileParty, InitiativeSuppressionObservation> InitiativeObservations = new();
+
+    private static void RecordPlayerInitiativeSuppression(MobileParty party)
+    {
+        if (!ContainerProvider.TryResolve<ISessionIdentity>(out var identity) ||
+            !identity.TryGetConfirmedLease(out var lease)) return;
+        var observed = InitiativeObservations.GetValue(party, _ => new InitiativeSuppressionObservation());
+        lock (observed)
+        {
+            if (observed.Lease == lease) return;
+            observed.Lease = lease;
+        }
+        PlayerManager.TryGetControlledObjectInfo(party, out var control);
+        Serilog.Log.Information("[PlayerInitiativeQualification] Suppressed native initiative party={Party} controller={Controller} " +
+            "mainParty={MainParty} nativeEligible=true room={Room} authority={Authority} writer={Writer} epoch={Epoch} paused={Paused} phase={Phase}",
+            party.StringId, control?.ObjectControllerId, MobileParty.MainParty?.StringId,
+            lease.RoomId, lease.AuthorityId, lease.AuthorityControllerId, lease.Epoch, lease.IsPaused, CampaignExecutionScope.Current);
+    }
+#endif
+
     public static readonly ConditionalWeakTable<MobilePartyAi, Dictionary<MobileParty, CampaignTime>> DisablePlayerAttackTimes = new ConditionalWeakTable<MobilePartyAi, Dictionary<MobileParty, CampaignTime>>();
     private static readonly Dictionary<MobileParty, Dictionary<MobileParty, CampaignTime>> PersistedDisablePlayerAttackTimes = new Dictionary<MobileParty, Dictionary<MobileParty, CampaignTime>>();
     private static readonly Dictionary<MobileParty, Dictionary<IFaction, CampaignTime>> DisabledFactionAttackTimes =

@@ -1,5 +1,6 @@
 ﻿using Common;
 using Common.Util;
+using GameInterface.Services.ObjectManager;
 using GameInterface.Services.MobileParties.Extensions;
 using GameInterface.Services.Players;
 using System;
@@ -85,6 +86,31 @@ public static class CampaignSimulationAuthorityPolicy
         !AllowedThread.IsThisThreadAllowed() &&
         !CampaignExecutionScope.IsWorldWriteRestricted &&
         CampaignExecutionScope.Current != CampaignExecutionPhase.Bootstrap;
+
+    internal static bool ShouldSuppressPlayerInitiative(MobileParty party)
+    {
+        if (party == null || ModInformation.IsDedicatedAuthority ||
+            !PlayerManager.TryGetControlledObjectInfo(party, out var control) || control == null) return false;
+        if (!ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var context) ||
+            !context.TryGetCurrentLease(out var lease) || !lease.IsValid ||
+            !ContainerProvider.TryResolve<ISessionIdentity>(out var identity) ||
+            !identity.TryGetConfirmedLease(out var confirmed) || confirmed != lease ||
+            !ContainerProvider.TryResolve<IPlayerManager>(out var players) ||
+            !ContainerProvider.TryResolve<IObjectManager>(out var objects) ||
+            !MatchesRegisteredPlayerParty(players, objects, control.ObjectControllerId, party)) return false;
+
+        return players.TryGetPlayer(identity.RoomHostControllerId, out var host) && host != null &&
+            objects.TryGetObject<MobileParty>(host.MobilePartyId, out var hostParty) &&
+            MatchesRegisteredPlayerParty(players, objects, identity.RoomHostControllerId, hostParty);
+    }
+
+    private static bool MatchesRegisteredPlayerParty(IPlayerManager players, IObjectManager objects,
+        string controllerId, MobileParty party) =>
+        party != null && players.TryGetPlayer(controllerId, out var player) && player != null &&
+        player.ControllerId == controllerId &&
+        objects.TryGetObject<MobileParty>(player.MobilePartyId, out var registered) &&
+        ReferenceEquals(registered, party) && PlayerManager.TryGetControlledObjectInfo(party, out var control) && control != null &&
+        control.ObjectControllerId == controllerId;
 
     internal static bool ShouldRunWorldSimulation(
         bool authorityKnown,
