@@ -7,7 +7,7 @@ namespace Coop.Core.Server.Services.Settlements.Messages
     /// Notify clients of <see cref="TaleWorlds.CampaignSystem.Settlements.SettlementComponent.Gold"/> set
     /// </summary>
     [ProtoContract(SkipConstructor = true)]
-    public record NetworkChangeSettlementComponentGold : ICommand
+    public record NetworkChangeSettlementComponentGold : ICommand, ICampaignAuthorityScopedMessage
     {
         [ProtoMember(1)]
         public string SettlementComponentId { get; }

@@ -1,5 +1,7 @@
 ﻿using Common.Logging;
 using Common.Messaging;
+using Common;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.ObjectManager;
 using GameInterface.Services.Settlements.Messages;
 using GameInterface.Services.Settlements.Patches;
@@ -34,23 +36,32 @@ namespace GameInterface.Services.Settlements.Handlers
         }
         private void HandleOwnerChanged(MessagePayload<ChangeSettlementComponentOwner> payload)
         {
-            if (!objectManager.TryGetObject<SettlementComponent>(payload.What.SettlementComponentId, out var obj))
+            GameThread.RunSafe(() => ApplyOwner(payload.What), context: nameof(HandleOwnerChanged));
+        }
+
+        private void ApplyOwner(ChangeSettlementComponentOwner message)
+        {
+            using var replay = CampaignExecutionScope.Enter(CampaignExecutionPhase.Replay);
+            if (!objectManager.TryGetObject<SettlementComponent>(message.SettlementComponentId, out var obj))
             {
-                Logger.Error("Unable to find SettlementComponent ({SettlementComponentId})", payload.What.SettlementComponentId);
+                MessageApplyScope.Fail("Missing SettlementComponent " + message.SettlementComponentId);
+                Logger.Error("Unable to find SettlementComponent ({SettlementComponentId})", message.SettlementComponentId);
                 return;
             }
             PartyBase owner;
-            if (objectManager.TryGetObject<Settlement>(payload.What.OwnerId, out var settlement))
+            if (message.OwnerId == null) owner = null;
+            else if (objectManager.TryGetObject<Settlement>(message.OwnerId, out var settlement))
             {
                 owner = settlement.Party;
             }
-            else if (objectManager.TryGetObject<MobileParty>(payload.What.OwnerId, out var party))
+            else if (objectManager.TryGetObject<MobileParty>(message.OwnerId, out var party))
             {
                 owner = party.Party;
             }
             else
             {
-                Logger.Error("Unable to find PartyBase ({OwnerId})", payload.What.OwnerId);
+                MessageApplyScope.Fail("Missing SettlementComponent owner PartyBase " + message.OwnerId);
+                Logger.Error("Unable to find PartyBase ({OwnerId})", message.OwnerId);
                 return;
             }
             OwnerSettlementComponentPatch.RunSettlementComponentOwnerChanged(obj, owner);
@@ -58,22 +69,36 @@ namespace GameInterface.Services.Settlements.Handlers
 
         private void HandleIsOwnerUnassignedChanged(MessagePayload<ChangeSettlementComponentIsOwnerUnassigned> payload)
         {
-            if (!objectManager.TryGetObject<SettlementComponent>(payload.What.SettlementComponentId, out var obj))
+            GameThread.RunSafe(() => ApplyIsOwnerUnassigned(payload.What), context: nameof(HandleIsOwnerUnassignedChanged));
+        }
+
+        private void ApplyIsOwnerUnassigned(ChangeSettlementComponentIsOwnerUnassigned message)
+        {
+            using var replay = CampaignExecutionScope.Enter(CampaignExecutionPhase.Replay);
+            if (!objectManager.TryGetObject<SettlementComponent>(message.SettlementComponentId, out var obj))
             {
-                Logger.Error("Unable to find SettlementComponent ({SettlementComponentId})", payload.What.SettlementComponentId);
+                MessageApplyScope.Fail("Missing SettlementComponent " + message.SettlementComponentId);
+                Logger.Error("Unable to find SettlementComponent ({SettlementComponentId})", message.SettlementComponentId);
                 return;
             }
-            IsOwnerUnassignedSettlementComponentPatch.RunSettlementComponentIsOwnerUnassignedChanged(obj, payload.What.IsOwnerUnassigned);
+            IsOwnerUnassignedSettlementComponentPatch.RunSettlementComponentIsOwnerUnassignedChanged(obj, message.IsOwnerUnassigned);
         }
 
         private void HandleGoldChanged(MessagePayload<ChangeSettlementComponentGold> payload)
         {
-            if (!objectManager.TryGetObject<SettlementComponent>(payload.What.SettlementComponentId, out var obj))
+            GameThread.RunSafe(() => ApplyGold(payload.What), context: nameof(HandleGoldChanged));
+        }
+
+        private void ApplyGold(ChangeSettlementComponentGold message)
+        {
+            using var replay = CampaignExecutionScope.Enter(CampaignExecutionPhase.Replay);
+            if (!objectManager.TryGetObject<SettlementComponent>(message.SettlementComponentId, out var obj))
             {
-                Logger.Error("Unable to find SettlementComponent ({SettlementComponentId})", payload.What.SettlementComponentId);
+                MessageApplyScope.Fail("Missing SettlementComponent " + message.SettlementComponentId);
+                Logger.Error("Unable to find SettlementComponent ({SettlementComponentId})", message.SettlementComponentId);
                 return;
             }
-            GoldSettlementComponentPatch.RunSettlementComponentGoldChanged(obj, payload.What.Gold);
+            GoldSettlementComponentPatch.RunSettlementComponentGoldChanged(obj, message.Gold);
         }
     }
 }

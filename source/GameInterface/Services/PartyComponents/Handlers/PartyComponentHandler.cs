@@ -4,6 +4,7 @@ using Common.Messaging;
 using Common.Network;
 using Common.Util;
 using GameInterface.Services.MobileParties.Extensions;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.MobileParties.Messages;
 using GameInterface.Services.ObjectManager;
 using GameInterface.Services.PartyComponents.Data;
@@ -78,6 +79,7 @@ internal class PartyComponentHandler : IHandler
 
     private void Handle(MessagePayload<PartyComponentCreated> payload)
     {
+        if (!CampaignSimulationAuthorityPolicy.CanPublishAppliedWorldResult()) return;
         uint settlementHandle = 0;
         if (payload.What.SettlementId != null &&
             (!objectManager.TryGetObjectWithLogging<Settlement>(payload.What.SettlementId, out var settlement) ||
@@ -93,6 +95,7 @@ internal class PartyComponentHandler : IHandler
             IsNaval = payload.What.IsNaval,
         };
 
+        if (!CampaignSimulationAuthorityPolicy.CanSendWorldResult()) return;
         network.SendAll(new NetworkCreatePartyComponent(data));
     }
 
@@ -102,6 +105,7 @@ internal class PartyComponentHandler : IHandler
 
         GameThread.Run(() =>
         {
+            using var replay = CampaignExecutionScope.Enter(CampaignExecutionPhase.Replay);
             try
             {
                 var obj = CreatePartyComponent(data);
@@ -109,16 +113,20 @@ internal class PartyComponentHandler : IHandler
                 switch (data.TypeIndex)
                 {
                     case 0:
-                        objectManager.AddExisting(data.Id, obj, data.Handle);
+                        if (!objectManager.AddExisting(data.Id, obj, data.Handle))
+                        { MessageApplyScope.Fail("Failed to register PartyComponent " + data.Id); return; }
                         break;
                     case 1:
-                        objectManager.AddExisting(data.Id, obj, data.Handle);
+                        if (!objectManager.AddExisting(data.Id, obj, data.Handle))
+                        { MessageApplyScope.Fail("Failed to register PartyComponent " + data.Id); return; }
                         break;
                     case 2:
-                        objectManager.AddExisting(data.Id, obj, data.Handle);
+                        if (!objectManager.AddExisting(data.Id, obj, data.Handle))
+                        { MessageApplyScope.Fail("Failed to register PartyComponent " + data.Id); return; }
                         break;
                     case 3:
-                        objectManager.AddExisting(data.Id, obj, data.Handle);
+                        if (!objectManager.AddExisting(data.Id, obj, data.Handle))
+                        { MessageApplyScope.Fail("Failed to register PartyComponent " + data.Id); return; }
 
                         var garrisonComponent = (GarrisonPartyComponent)obj;
 
@@ -130,6 +138,7 @@ internal class PartyComponentHandler : IHandler
                         // (Settlement.OwnerClan.Leader) throws and crashes the nameplate VM.
                         if (!objectManager.TryGetObject(data.HomeSettlementId, out Settlement garrisonSettlement))
                         {
+                            MessageApplyScope.Fail("Missing garrison Settlement " + data.HomeSettlementId);
                             Logger.Warning(
                                 "GarrisonPartyComponent {Id}: could not find Settlement '{SettlementId}' in ObjectManager; " +
                                 "Settlement will not be set on client",
@@ -150,10 +159,12 @@ internal class PartyComponentHandler : IHandler
 
                         break;
                     case 4:
-                        objectManager.AddExisting(data.Id, obj, data.Handle);
+                        if (!objectManager.AddExisting(data.Id, obj, data.Handle))
+                        { MessageApplyScope.Fail("Failed to register PartyComponent " + data.Id); return; }
                         break;
                     case 5:
-                        objectManager.AddExisting(data.Id, obj, data.Handle);
+                        if (!objectManager.AddExisting(data.Id, obj, data.Handle))
+                        { MessageApplyScope.Fail("Failed to register PartyComponent " + data.Id); return; }
 
                         var militiaComponent = (MilitiaPartyComponent)obj;
 
@@ -166,6 +177,7 @@ internal class PartyComponentHandler : IHandler
                         // every frame, freezing every client at the siege menus.
                         if (!objectManager.TryGetObject(data.HomeSettlementId, out Settlement militiaSettlement))
                         {
+                            MessageApplyScope.Fail("Missing militia Settlement " + data.HomeSettlementId);
                             Logger.Warning(
                                 "MilitiaPartyComponent {Id}: could not find Settlement '{SettlementId}' in ObjectManager; " +
                                 "Settlement will not be set on client",
@@ -183,7 +195,8 @@ internal class PartyComponentHandler : IHandler
 
                         break;
                     case 6:
-                        objectManager.AddExisting(data.Id, obj, data.Handle);
+                        if (!objectManager.AddExisting(data.Id, obj, data.Handle))
+                        { MessageApplyScope.Fail("Failed to register PartyComponent " + data.Id); return; }
 
                         var patrolComponent = (PatrolPartyComponent)obj;
 
@@ -194,6 +207,7 @@ internal class PartyComponentHandler : IHandler
                         // message to avoid any dependency on AutoSync field-update ordering.
                         if (!objectManager.TryGetObject(data.HomeSettlementId, out Settlement homeSettlement))
                         {
+                            MessageApplyScope.Fail("Missing patrol Settlement " + data.HomeSettlementId);
                             Logger.Warning(
                                 "PatrolPartyComponent {Id}: could not find Settlement '{SettlementId}' in ObjectManager; " +
                                 "Settlement.PatrolParty will not be set on client",
@@ -213,9 +227,11 @@ internal class PartyComponentHandler : IHandler
 
                         break;
                     case 7:
-                        objectManager.AddExisting(data.Id, obj, data.Handle);
+                        if (!objectManager.AddExisting(data.Id, obj, data.Handle))
+                        { MessageApplyScope.Fail("Failed to register PartyComponent " + data.Id); return; }
                         break;
                     default:
+                        MessageApplyScope.Fail("Invalid PartyComponent type " + data.TypeIndex);
                         Logger.Error(
                             "Invalid TypeIndex {TypeIndex}. Valid range: [0..{MaxIndex}] (0=Bandit,1=Caravan,2=Custom,3=Garrison,4=Lord,5=Militia,6=Patrol,7=Villager). PacketId: {Id}",
                             data.TypeIndex,
@@ -226,6 +242,7 @@ internal class PartyComponentHandler : IHandler
             }
             catch (Exception e)
             {
+                MessageApplyScope.Fail(e.ToString());
                 Logger.Error(e, "Failed to apply {Message}", nameof(NetworkCreatePartyComponent));
             }
         });
@@ -240,6 +257,7 @@ internal class PartyComponentHandler : IHandler
 
         if (!objectManager.TryGetObjectWithLogging(data.HomeSettlementId, out Settlement relatedSettlement))
         {
+            MessageApplyScope.Fail("Missing bandit Settlement " + data.HomeSettlementId);
             return (PartyComponent)ObjectHelper.SkipConstructor(partyTypes[data.TypeIndex]);
         }
 
@@ -251,6 +269,7 @@ internal class PartyComponentHandler : IHandler
 
     private void Handle_PartyComponentMobilePartyUpdated(MessagePayload<PartyComponentMobilePartyUpdated> payload)
     {
+        if (!CampaignSimulationAuthorityPolicy.CanSendWorldResult()) return;
         var obj = payload.What;
 
         string partyComponentId = null;
@@ -270,15 +289,16 @@ internal class PartyComponentHandler : IHandler
         // Re-resolve inside in case the object is removed concurrently.
         GameThread.Run(() =>
         {
+            using var replay = CampaignExecutionScope.Enter(CampaignExecutionPhase.Replay);
             try
             {
                 PartyComponent partyComponent = null;
                 if (obj.InstanceId != null &&
                     !objectManager.TryGetObjectWithLogging(obj.InstanceId, out partyComponent))
-                    return;
+                { MessageApplyScope.Fail("Missing PartyComponent " + obj.InstanceId); return; }
 
                 if (!objectManager.TryGetObjectWithLogging<MobileParty>(obj.MobilePartyId, out var mobileParty))
-                    return;
+                { MessageApplyScope.Fail("Missing MobileParty " + obj.MobilePartyId); return; }
 
                 using (new AllowedThread())
                 {
@@ -287,6 +307,7 @@ internal class PartyComponentHandler : IHandler
             }
             catch (Exception e)
             {
+                MessageApplyScope.Fail(e.ToString());
                 Logger.Error(e, "Failed to apply {Message}", nameof(NetworkPartyComponentMobilePartyUpdated));
             }
         });
@@ -311,6 +332,7 @@ internal class PartyComponentHandler : IHandler
 
     private void Handle_PartyComponentLeaderChanged(MessagePayload<PartyComponentLeaderChanged> payload)
     {
+        if (!CampaignSimulationAuthorityPolicy.CanSendWorldResult()) return;
         var obj = payload.What;
 
         var mobileParty = obj.Instance.MobileParty;
@@ -336,12 +358,15 @@ internal class PartyComponentHandler : IHandler
 
         GameThread.Run(() =>
         {
+            using var replay = CampaignExecutionScope.Enter(CampaignExecutionPhase.Replay);
             try
             {
-                if (!objectManager.TryGetObjectWithLogging<PartyComponent>(obj.PartyComponentId, out var partyComponent)) return;
+                if (!objectManager.TryGetObjectWithLogging<PartyComponent>(obj.PartyComponentId, out var partyComponent))
+                { MessageApplyScope.Fail("Missing PartyComponent " + obj.PartyComponentId); return; }
 
                 Hero newLeader = null;
-                if (obj.NewLeaderId != null && !objectManager.TryGetObjectWithLogging<Hero>(obj.NewLeaderId, out newLeader)) return;
+                if (obj.NewLeaderId != null && !objectManager.TryGetObjectWithLogging<Hero>(obj.NewLeaderId, out newLeader))
+                { MessageApplyScope.Fail("Missing leader Hero " + obj.NewLeaderId); return; }
 
                 using (new AllowedThread())
                 {
@@ -351,6 +376,7 @@ internal class PartyComponentHandler : IHandler
             }
             catch (Exception e)
             {
+                MessageApplyScope.Fail(e.ToString());
                 Logger.Error(e, "Failed to apply {Message}", nameof(NetworkPartyComponentLeaderChanged));
             }
         });

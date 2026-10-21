@@ -11,8 +11,12 @@ namespace GameInterface.Services.CampaignAuthority;
 /// Resolves who may advance shared campaign simulation while preserving the legacy
 /// dedicated/listen authority behavior until a confirmed campaign lease is available.
 /// </summary>
-internal static class CampaignSimulationAuthorityPolicy
+public static class CampaignSimulationAuthorityPolicy
 {
+    internal static bool CanInitializeUnregisteredNativeObject(bool registered) =>
+        !registered && (CampaignExecutionScope.Current == CampaignExecutionPhase.Bootstrap ||
+            CampaignExecutionScope.Current == CampaignExecutionPhase.CheckpointInstall);
+
     /// <summary>
     /// Shared simulation uses the confirmed campaign lease when one is known. Before that,
     /// retain the existing process-role behavior so a session can initialize normally.
@@ -27,7 +31,7 @@ internal static class CampaignSimulationAuthorityPolicy
     /// Publishing an already executed result does not authorize simulation. AllowedThread alone
     /// neither grants authority nor identifies replay; receive paths must carry Replay provenance.
     /// </summary>
-    internal static bool CanPublishAppliedWorldResult()
+    public static bool CanPublishAppliedWorldResult()
     {
         if (CampaignExecutionScope.IsWorldWriteRestricted) return false;
         bool hasAuthorityContext = ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var authorityContext);
@@ -46,6 +50,10 @@ internal static class CampaignSimulationAuthorityPolicy
             localAuthority: false,
             legacyIsServer: ModInformation.IsServer);
     }
+
+    public static bool CanSendWorldResult() =>
+        CanPublishAppliedWorldResult() &&
+        ContainerProvider.TryResolve<ICampaignAuthorityContext>(out var context) && context.IsAuthorityKnown;
 
     /// <summary>
     /// The authority runs world AI. An observer also updates its own player's navigation,

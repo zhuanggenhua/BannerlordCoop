@@ -4,7 +4,7 @@ using ProtoBuf;
 namespace GameInterface.Services.PartyComponents.Messages;
 
 [ProtoContract]
-internal readonly struct NetworkPartyComponentMobilePartyUpdated : ICommand
+internal readonly struct NetworkPartyComponentMobilePartyUpdated : ICommand, ICampaignAuthorityScopedMessage
 {
     [ProtoMember(1)]
     public readonly string InstanceId;

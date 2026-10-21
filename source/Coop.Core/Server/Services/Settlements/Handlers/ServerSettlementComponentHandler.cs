@@ -4,6 +4,7 @@ using Common.Network;
 using Common.Network.Coalescing;
 using Coop.Core.Server.Services.Settlements.Messages;
 using GameInterface.Services.ObjectManager;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Settlements.Messages;
 using Serilog;
 using TaleWorlds.CampaignSystem.Settlements;
@@ -44,6 +45,7 @@ namespace Coop.Core.Server.Services.Settlements.Handlers
 
         private void ChangedOwner(MessagePayload<SettlementComponentOwnerChanged> payload)
         {
+            if (!CampaignSimulationAuthorityPolicy.CanSendWorldResult()) return;
             var obj = payload.What;
 
             if (!objectManager.TryGetId(obj.SettlementComponent, out var settlementComponentId))
@@ -57,6 +59,7 @@ namespace Coop.Core.Server.Services.Settlements.Handlers
 
         private void ChangedIsOwnerUnassigned(MessagePayload<SettlementComponentIsOwnerUnassignedChanged> payload)
         {
+            if (!CampaignSimulationAuthorityPolicy.CanSendWorldResult()) return;
             var obj = payload.What;
 
             if (!objectManager.TryGetId(obj.SettlementComponent, out var settlementComponentId))
@@ -70,6 +73,7 @@ namespace Coop.Core.Server.Services.Settlements.Handlers
 
         private void ChangedGold(MessagePayload<SettlementComponentGoldChanged> payload)
         {
+            if (!CampaignSimulationAuthorityPolicy.CanSendWorldResult()) return;
             var obj = payload.What;
 
             if (!objectManager.TryGetId(obj.SettlementComponent, out var settlementComponentId))

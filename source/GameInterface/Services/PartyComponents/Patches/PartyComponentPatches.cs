@@ -2,6 +2,7 @@
 using Common.Logging;
 using Common.Messaging;
 using GameInterface.Policies;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.PartyComponents.Messages;
 using HarmonyLib;
 using Serilog;
@@ -22,19 +23,20 @@ internal class PartyComponentPatches
 
     [HarmonyPatch(nameof(PartyComponent.MobileParty), MethodType.Setter)]
     [HarmonyPrefix]
-    private static void PrefixMobileParty(PartyComponent __instance, MobileParty value)
+    private static bool PrefixMobileParty(PartyComponent __instance, MobileParty value)
     {
         if (CallOriginalPolicy.IsOriginalAllowed())
-            return;
+            return true;
         
-        if (ModInformation.IsClient)
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation())
         {
-            Logger.Error("Client called managed PartyComponent.MobileParty setter");
-            return;
+            Logger.Error("Non-authority called managed PartyComponent.MobileParty setter");
+            return false;
         }
 
         var message = new PartyComponentMobilePartyUpdated(__instance, value);
         MessageBroker.Instance.Publish(__instance, message);
+        return true;
     }
 }
 
@@ -75,10 +77,9 @@ public class PartyComponentTranspilers
             return;
         }
 
-        if (ModInformation.IsClient)
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation())
         {
-            Logger.Error("Client ran managed {type}", "PartyComponent.OnChangePartyLeader");
-            instance.OnChangePartyLeader(newLeader);
+            Logger.Error("Non-authority ran managed {type}", "PartyComponent.OnChangePartyLeader");
             return;
         }
 
@@ -94,7 +95,7 @@ internal class PartyComponentClearPatch
     [HarmonyPostfix]
     private static void Postfix(MobileParty __instance, PartyComponent partyComponent, bool __runOriginal)
     {
-        if (!__runOriginal || CallOriginalPolicy.IsOriginalAllowed() || ModInformation.IsClient) return;
+        if (!__runOriginal || CallOriginalPolicy.IsOriginalAllowed() || !CampaignSimulationAuthorityPolicy.CanPublishAppliedWorldResult()) return;
         if (partyComponent != null) return;
 
         // Clearing has no component setter to announce the otherwise atomic binding update.

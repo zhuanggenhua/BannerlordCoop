@@ -2,6 +2,7 @@
 using Common.Logging;
 using Common.Messaging;
 using Common.Network;
+using Common.Network.Coalescing;
 using Common.PacketHandlers;
 using Common.Serialization;
 using Coop.Core.Client.Messages;
@@ -42,6 +43,7 @@ public class CoopClient : CoopNetworkBase, ICoopClient, IRoomHostPeerProvider
     private readonly IMessageBroker messageBroker;
     private readonly IPacketManager packetManager;
     private readonly IMessagePacketHandler messagePacketHandler;
+    private readonly ISendCoalescer sendCoalescer;
     private bool isConnected = false;
     private bool reconnectPending = false;
     private DateTime reconnectAfter = DateTime.MinValue;
@@ -87,12 +89,14 @@ public class CoopClient : CoopNetworkBase, ICoopClient, IRoomHostPeerProvider
         IReliableMessageBatcher<NetPeer> reliableMessageBatcher,
         CancellationTokenSource sessionCancellation,
         ICampaignAuthorityContext campaignAuthorityContext = null,
-        ICampaignAuthorityMessageSender authorityMessageSender = null)
+        ICampaignAuthorityMessageSender authorityMessageSender = null,
+        ISendCoalescer sendCoalescer = null)
         : base(config, serializer, reliableMessageBatcher, sessionCancellation, campaignAuthorityContext, authorityMessageSender)
     {
         this.messageBroker = messageBroker;
         this.packetManager = packetManager;
         this.messagePacketHandler = messagePacketHandler;
+        this.sendCoalescer = sendCoalescer;
     }
 
     public override void OnConnectionRequest(ConnectionRequest request)
@@ -354,6 +358,9 @@ public class CoopClient : CoopNetworkBase, ICoopClient, IRoomHostPeerProvider
     public override void Update(TimeSpan frameTime)
     {
         netManager.PollEvents();
+
+        if (sendCoalescer?.HasPending == true)
+            GameThread.RunSafe(() => sendCoalescer.Flush(this));
 
         // Send any sub-budget aggregated messages so nothing waits longer than one poll interval.
         FlushPendingMessages();

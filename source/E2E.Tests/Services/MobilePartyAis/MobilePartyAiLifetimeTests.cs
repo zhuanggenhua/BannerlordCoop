@@ -1,5 +1,9 @@
 ﻿using E2E.Tests.Environment;
 using E2E.Tests.Util;
+using Common;
+using GameInterface.Services.Entity;
+using GameInterface.Services.CampaignAuthority;
+using HarmonyLib;
 using TaleWorlds.CampaignSystem.Party;
 using Xunit.Abstractions;
 
@@ -37,6 +41,7 @@ public class MobilePartyAiLifetimeTests : IDisposable
         });
 
         // Assert
+        TestEnvironment.PumpGameThreads();
         Assert.NotNull(aiId);
 
         foreach (var client in TestEnvironment.Clients)
@@ -62,5 +67,51 @@ public class MobilePartyAiLifetimeTests : IDisposable
 
             Assert.False(server.ObjectManager.TryGetId(partyAi, out _));
         });
+        TestEnvironment.PumpGameThreads();
+    }
+
+    [Fact]
+    public void RemoteProcessRoleWithConfirmedWriterCreatesNativeAiAndReplicatesItsIdentity()
+    {
+        var server = TestEnvironment.Server;
+        var mobilePartyId = TestEnvironment.CreateRegisteredObject<MobileParty>();
+        TestEnvironment.PumpGameThreads();
+        var previousLease = server.Resolve<ISessionIdentity>().CurrentLease;
+        var writerLease = new AuthorityLease(previousLease.RoomId, Guid.NewGuid().ToString("N"), "writer-b", previousLease.Epoch + 1);
+        Assert.True(server.Resolve<ISessionIdentity>().TryApply(writerLease));
+        foreach (var client in TestEnvironment.Clients)
+            Assert.True(client.Resolve<ISessionIdentity>().TryApply(writerLease));
+        string? aiId = null;
+        server.Call(() =>
+        {
+            var identity = server.Resolve<ISessionIdentity>();
+            var controller = server.Resolve<IControllerIdProvider>();
+            var previousController = controller.ControllerId;
+            var previousMode = ModInformation.SessionMode;
+            try
+            {
+                controller.SetControllerId(identity.CurrentLease.AuthorityControllerId);
+                ModInformation.SessionMode = SessionMode.RemoteReplica;
+                Assert.True(server.Resolve<ICampaignAuthorityContext>().IsLocalCampaignAuthority);
+                Assert.True(server.ObjectManager.TryGetObject<MobileParty>(mobilePartyId, out var party));
+                var ai = new MobilePartyAi(party);
+                Assert.Same(party, ai._mobileParty);
+                Assert.NotNull(AccessTools.Field(typeof(MobilePartyAi), "_fleeingData").GetValue(ai));
+                Assert.True(server.ObjectManager.TryGetId(ai, out aiId));
+            }
+            finally
+            {
+                ModInformation.SessionMode = previousMode;
+                controller.SetControllerId(previousController);
+            }
+        });
+        TestEnvironment.PumpGameThreads();
+        Assert.NotNull(aiId);
+        foreach (var client in TestEnvironment.Clients)
+        {
+            Assert.True(client.ObjectManager.TryGetObject<MobilePartyAi>(aiId, out var ai));
+            Assert.True(client.ObjectManager.TryGetObject<MobileParty>(mobilePartyId, out var party));
+            Assert.Same(party, ai._mobileParty);
+        }
     }
 }

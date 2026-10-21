@@ -2,6 +2,7 @@
 using Common.Logging;
 using Common.Messaging;
 using GameInterface.Policies;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Registry.Auto;
 using GameInterface.Services.MobilePartyAIs.Messages;
 using HarmonyLib;
@@ -22,9 +23,9 @@ class MobilePartyAiLifetimePatches
     {
         if (CallOriginalPolicy.IsOriginalAllowed()) return;
 
-        if (ModInformation.IsClient)
+        if (!CampaignSimulationAuthorityPolicy.CanPublishAppliedWorldResult())
         {
-            Logger.Error("Client created managed {name}", typeof(MobilePartyAi));
+            Logger.Error("Non-authority created managed {name}", typeof(MobilePartyAi));
             return;
         }
 
@@ -37,9 +38,9 @@ class MobilePartyAiLifetimePatches
     {
         if (CallOriginalPolicy.IsOriginalAllowed()) return;
 
-        if (ModInformation.IsClient)
+        if (!CampaignSimulationAuthorityPolicy.CanPublishAppliedWorldResult())
         {
-            Logger.Error("Client destroyed unmanaged {name}", typeof(MobileParty));
+            Logger.Error("Non-authority destroyed unmanaged {name}", typeof(MobileParty));
             return;
         }
 

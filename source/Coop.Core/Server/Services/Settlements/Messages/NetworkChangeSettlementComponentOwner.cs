@@ -7,7 +7,7 @@ namespace Coop.Core.Server.Services.Settlements.Messages
     /// Notify clients of <see cref="TaleWorlds.CampaignSystem.Settlements.SettlementComponent.Owner"/> set
     /// </summary>
     [ProtoContract(SkipConstructor = true)]
-    public record NetworkChangeSettlementComponentOwner : ICommand
+    public record NetworkChangeSettlementComponentOwner : ICommand, ICampaignAuthorityScopedMessage
     {
         [ProtoMember(1)]
         public string SettlementComponentId { get; }

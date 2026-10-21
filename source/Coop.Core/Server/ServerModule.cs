@@ -7,6 +7,7 @@ using Common.Network;
 using Common.Network.Coalescing;
 using Common.Network.Session;
 using Common.PacketHandlers;
+using Coop.Core.Client.Services.Settlements.Handlers;
 using Coop.Core.Client.Services.Kingdoms;
 using Coop.Core.Client.Services.MobileParties;
 using Coop.Core.Common;
@@ -162,6 +163,7 @@ public class ServerModule : CommonModule
 
         RegisterAllTypesWithInterface<ServerModule, IHandler>(builder, autoInstantiate: true);
         RegisterAllTypesWithInterface<ServerModule, IPacketHandler>(builder, autoInstantiate: true);
+        builder.RegisterType<ClientSettlementComponentHandler>().AsSelf().InstancePerLifetimeScope().AutoActivate();
     }
 
     // Non-inlined so referencing the Steam tunnel transport (its layout embeds Steamworks value

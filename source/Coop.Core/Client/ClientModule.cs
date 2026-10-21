@@ -5,6 +5,8 @@ using Common.Messaging;
 using Common.Network;
 using Common.Network.Session;
 using Common.PacketHandlers;
+using Common.Network.Coalescing;
+using Coop.Core.Server.Services.Settlements.Handlers;
 using Coop.Core.Client.Policies;
 using Coop.Core.Client.Services.Discord;
 using Coop.Core.Client.Services.Kingdoms;
@@ -104,6 +106,8 @@ public class ClientModule : CommonModule
 
         RegisterAllTypesWithInterface<ClientModule, IHandler>(builder, autoInstantiate: true);
         RegisterAllTypesWithInterface<ClientModule, IPacketHandler>(builder, autoInstantiate: true);
+        builder.RegisterType<SendCoalescer>().As<ISendCoalescer>().InstancePerLifetimeScope();
+        builder.RegisterType<ServerSettlementComponentHandler>().AsSelf().InstancePerLifetimeScope().AutoActivate();
     }
 
     // The tunnel transport's layout embeds Steamworks value types, so mentioning it in Load

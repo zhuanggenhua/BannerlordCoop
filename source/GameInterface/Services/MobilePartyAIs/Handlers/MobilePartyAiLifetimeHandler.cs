@@ -4,6 +4,7 @@ using Common.Messaging;
 using Common.Network;
 using Common.Util;
 using GameInterface.Services.MobilePartyAIs.Messages;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.ObjectManager;
 using HarmonyLib;
 using Serilog;
@@ -42,6 +43,7 @@ internal class MobilePartyAiLifetimeHandler : IHandler
 
     private void Handle_MobilePartyAiCreated(MessagePayload<MobilePartyAiCreated> payload)
     {
+        if (!CampaignSimulationAuthorityPolicy.CanPublishAppliedWorldResult()) return;
         // Save loading constructs AI attachments before InitialServerState registers campaign objects.
         // MobilePartyAiRegistry registers those existing attachments after loading.
         if (!objectManager.TryGetHandle(payload.What.Party, out var partyHandle)) return;
@@ -49,6 +51,7 @@ internal class MobilePartyAiLifetimeHandler : IHandler
         if (!objectManager.AddNewObject(payload.What.Instance, out var partyAiId)) return;
         if (!objectManager.TryGetHandleWithLogging(payload.What.Instance, out var partyAiHandle)) return;
 
+        if (!CampaignSimulationAuthorityPolicy.CanSendWorldResult()) return;
         network.SendAll(new NetworkCreateMobilePartyAi(partyAiId, partyAiHandle, partyHandle));
     }
 
@@ -60,21 +63,26 @@ internal class MobilePartyAiLifetimeHandler : IHandler
 
         GameThread.RunSafe(() =>
         {
-            if (!objectManager.TryGetObjectWithLogging<MobileParty>(partyId, out var party)) return;
+            using var replay = CampaignExecutionScope.Enter(CampaignExecutionPhase.Replay);
+            if (!objectManager.TryGetObjectWithLogging<MobileParty>(partyId, out var party))
+            { MessageApplyScope.Fail("Missing MobileParty " + partyId); return; }
 
             var newAi = ObjectHelper.SkipConstructor<MobilePartyAi>();
             AccessTools.Field(typeof(MobilePartyAi), nameof(MobilePartyAi._mobileParty)).SetValue(newAi, party);
 
-            objectManager.AddExisting(aiId, newAi, payload.What.MobilePartyAiHandle);
+            if (!objectManager.AddExisting(aiId, newAi, payload.What.MobilePartyAiHandle))
+                MessageApplyScope.Fail("Failed to register MobilePartyAi " + aiId);
         }, context: nameof(Handle_NetworkCreateMobilePartyAi));
     }
 
     private void Handle_MobilePartyAiDestroyed(MessagePayload<MobilePartyAiDestroyed> payload)
     {
+        if (!CampaignSimulationAuthorityPolicy.CanPublishAppliedWorldResult()) return;
         var ai = payload.What.Instance;
 
         if (objectManager.TryGetHandle(ai, out var aiId) == false) return;
 
+        if (!CampaignSimulationAuthorityPolicy.CanSendWorldResult()) return;
         network.SendAll(new NetworkDestroyMobilePartyAi(aiId));
     }
 
@@ -84,10 +92,13 @@ internal class MobilePartyAiLifetimeHandler : IHandler
 
         GameThread.RunSafe(() =>
         {
-            if (!objectManager.TryGetObjectWithLogging<MobilePartyAi>(aiId, out var ai)) return;
+            using var replay = CampaignExecutionScope.Enter(CampaignExecutionPhase.Replay);
+            if (!objectManager.TryGetObjectWithLogging<MobilePartyAi>(aiId, out var ai))
+            { MessageApplyScope.Fail("Missing MobilePartyAi " + aiId); return; }
 
             if (!objectManager.Remove(ai))
             {
+                MessageApplyScope.Fail("Failed to remove MobilePartyAi " + aiId);
                 Logger.Error("Failed to remove Ai with id {id} from object manager", aiId);
             }
         }, context: nameof(Handle_NetworkDestroyMobilePartyAi));

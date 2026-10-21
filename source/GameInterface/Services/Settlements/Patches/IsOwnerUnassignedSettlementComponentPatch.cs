@@ -3,6 +3,7 @@ using Common.Logging;
 using Common.Messaging;
 using Common.Util;
 using GameInterface.Policies;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.Settlements.Messages;
 using HarmonyLib;
 using Serilog;
@@ -18,26 +19,22 @@ namespace GameInterface.Services.Settlements.Patches
     {
         private static ILogger Logger = LogManager.GetLogger<SettlementComponent>();
         [HarmonyPatch(nameof(SettlementComponent.IsOwnerUnassigned), MethodType.Setter)]
-        public static bool Prefix(SettlementComponent __instance, bool value)
+        public static bool Prefix(SettlementComponent __instance, bool value, out bool __state) =>
+            OwnerSettlementComponentPatch.CanAssignNativeProperty(__instance, nameof(SettlementComponent.IsOwnerUnassigned), out __state);
+
+        [HarmonyPatch(nameof(SettlementComponent.IsOwnerUnassigned), MethodType.Setter)]
+        [HarmonyPostfix]
+        public static void Postfix(SettlementComponent __instance, bool __state, bool __runOriginal)
         {
-            if (CallOriginalPolicy.IsOriginalAllowed()) return true;
-
-            if (ModInformation.IsClient)
-            {
-                Logger.Error("Client created managed {name}", typeof(SettlementComponent));
-                return false;
-            }
-
-            var message = new SettlementComponentIsOwnerUnassignedChanged(__instance, value);
-
-            MessageBroker.Instance.Publish(__instance, message);
-            return true;
+            if (!__runOriginal || !__state || !CampaignSimulationAuthorityPolicy.CanPublishAppliedWorldResult()) return;
+            MessageBroker.Instance.Publish(__instance, new SettlementComponentIsOwnerUnassignedChanged(__instance, __instance.IsOwnerUnassigned));
         }
 
         internal static void RunSettlementComponentIsOwnerUnassignedChanged(SettlementComponent settlementComp, bool value)
         {
             GameThread.Run(() =>
             {
+                using var replay = CampaignExecutionScope.Enter(CampaignExecutionPhase.Replay);
                 using (new AllowedThread())
                 {
                     settlementComp.IsOwnerUnassigned = value;

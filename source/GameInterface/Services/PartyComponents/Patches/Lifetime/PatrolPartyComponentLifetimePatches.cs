@@ -1,7 +1,8 @@
-using Common;
+﻿using Common;
 using Common.Logging;
 using Common.Messaging;
 using GameInterface.Policies;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.PartyComponents.Messages;
 using HarmonyLib;
 using Serilog;
@@ -34,10 +35,10 @@ internal class PatrolPartyComponentLifetimePatches
     {
         if (CallOriginalPolicy.IsOriginalAllowed()) return true;
 
-        if (ModInformation.IsClient)
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation())
         {
-            Logger.Error("Client created managed {name}", typeof(PatrolPartyComponent));
-            return true;
+            Logger.Error("Non-authority created managed {name}", typeof(PatrolPartyComponent));
+            return false;
         }
 
         var message = new PartyComponentCreated(__instance,

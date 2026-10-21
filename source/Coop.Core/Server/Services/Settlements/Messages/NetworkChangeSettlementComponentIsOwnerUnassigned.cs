@@ -7,7 +7,7 @@ namespace Coop.Core.Server.Services.Settlements.Messages
     /// Notify clients of <see cref="TaleWorlds.CampaignSystem.Settlements.SettlementComponent.IsOwnerUnassigned"/> set
     /// </summary>
     [ProtoContract(SkipConstructor = true)]
-    public record NetworkChangeSettlementComponentIsOwnerUnassigned : ICommand
+    public record NetworkChangeSettlementComponentIsOwnerUnassigned : ICommand, ICampaignAuthorityScopedMessage
     {
         [ProtoMember(1)]
         public string SettlementComponentId { get; }

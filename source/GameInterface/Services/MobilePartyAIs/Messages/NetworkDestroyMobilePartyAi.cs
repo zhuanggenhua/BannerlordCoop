@@ -4,7 +4,7 @@ using ProtoBuf;
 namespace GameInterface.Services.MobilePartyAIs.Messages;
 
 [ProtoContract(SkipConstructor = true)]
-internal class NetworkDestroyMobilePartyAi : ICommand
+internal class NetworkDestroyMobilePartyAi : ICommand, ICampaignAuthorityScopedMessage
 {
     public NetworkDestroyMobilePartyAi(uint mobilePartyAiId)
     {

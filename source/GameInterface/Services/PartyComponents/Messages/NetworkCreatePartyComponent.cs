@@ -5,7 +5,7 @@ using ProtoBuf;
 namespace GameInterface.Services.PartyComponents.Messages;
 
 [ProtoContract(SkipConstructor = true)]
-internal record NetworkCreatePartyComponent(PartyComponentData Data) : ICommand
+internal record NetworkCreatePartyComponent(PartyComponentData Data) : ICommand, ICampaignAuthorityScopedMessage
 {
     [ProtoMember(1)]
     public PartyComponentData Data { get; } = Data;

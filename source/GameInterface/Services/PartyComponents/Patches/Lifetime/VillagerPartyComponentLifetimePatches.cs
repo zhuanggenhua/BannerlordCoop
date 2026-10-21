@@ -2,6 +2,7 @@
 using Common.Logging;
 using Common.Messaging;
 using GameInterface.Policies;
+using GameInterface.Services.CampaignAuthority;
 using GameInterface.Services.PartyComponents.Messages;
 using HarmonyLib;
 using Serilog;
@@ -27,9 +28,9 @@ internal class VillagerPartyComponentLifetimePatches
         // Call original if we call this function
         if (CallOriginalPolicy.IsOriginalAllowed()) return true;
 
-        if (ModInformation.IsClient)
+        if (!CampaignSimulationAuthorityPolicy.CanRunWorldSimulation())
         {
-            Logger.Error("Client created managed {name}", typeof(VillagerPartyComponent));
+            Logger.Error("Non-authority created managed {name}", typeof(VillagerPartyComponent));
             return false;
         }
 
