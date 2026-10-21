@@ -29,9 +29,9 @@ export async function capturePredictedMapState(context, label) {
 
 // Reuses original input/prediction probes, native snapshot comparison and immutable log archive.
 // Yield is solely a map-only readiness injection; this scenario does not accept Mission transitions.
-export async function exerciseMapAuthorityContracts(context) {
+export async function exerciseMapAuthorityContracts(context, movementStage = exerciseMapMovement) {
     const { command, feature, initial, bothStates, poll, setTime, emit } = context;
-    await exerciseMapMovement(context);
+    await movementStage(context);
     for (const [mode, writerIndex, name] of [['yield', 1, 'A-to-B-map-handoff'], ['auto', 0, 'B-to-A-map-handoff']]) {
         await feature(name, async () => {
             const beforeTransfer = await capturePredictedMapState(context, name + '-critical-before-barrier');

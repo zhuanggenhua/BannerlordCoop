@@ -14,6 +14,7 @@ import { collectNativeLog } from './native-log-archive.mjs';
 import { UdpFaultProxy } from './udp-fault-proxy.mjs';
 import { assertFrozenMovementPair, assertFrozenNpcSamples } from './frozen-movement-evidence.mjs';
 import { createNativeJsonlWriter } from './native-jsonl-writer.mjs';
+import { runNativeScenarioPreflight } from './native-scenario-preflight.mjs';
 
 export { options };
 export const HELP = `Usage: node tools/mcp/scenarios/p2p-mission-lifecycle.mjs
@@ -309,6 +310,7 @@ export async function run(config, scenario = null) {
     assert.ok((await stat(join(config.repo, '.git'))).isDirectory(), 'Use coordinator main checkout');
     const git = args => execFileSync('git', args, { cwd: config.repo, encoding: 'utf8', windowsHide: true }).trim();
     assert.equal(await realpath(config.repo), await realpath(git(['rev-parse', '--show-toplevel'])));
+    const toolPreflight = await runNativeScenarioPreflight(config.repo);
     const profiles = JSON.parse(await readFile(config.config, 'utf8')), profile = profiles.profiles?.[config.profile];
     assert.ok(profile?.listenAuthority, 'ListenAuthority profile required');
     assert.ok(profile.serverPlatformId && profile.clientPlatformIds?.[0]);
@@ -322,7 +324,7 @@ export async function run(config, scenario = null) {
     await writeFile(config.record, '', { flag: 'wx' });
     const summaryPath = config.record + '.summary.json';
     const summary = { scenario: scenario?.name ?? 'p2p-mission-lifecycle', codeHead: git(['rev-parse', 'HEAD']), config,
-        startedUtc: new Date().toISOString(), features: [], screenshots: [], logs: {}, runId: null,
+        startedUtc: new Date().toISOString(), toolPreflight, features: [], screenshots: [], logs: {}, runId: null,
         cleanupConfirmed: false, passed: false,
         transportAcceptance: 'NOT_OBSERVED',
         network: proxyOptions ? 'Direct IP through original transparent loopback UDP proxy; no injected packet faults' : 'Direct IP; transport liveness NOT_OBSERVED',
