@@ -66,6 +66,7 @@ internal class BattleHostHandler : IHandler
     private readonly IBattleTroopReserveBuilder reserveBuilder;
     private readonly IBattleTroopLedger ledger;
     private readonly IBattleSizeProvider battleSizeProvider;
+    private readonly ISessionIdentity sessionIdentity;
 
     // [Server] Highest host epoch ever issued per battle instance (BR-102), retained across assignment
     // removal: clients keep their last assignment when a battle is fully abandoned (only the server's entry
@@ -223,7 +224,8 @@ internal class BattleHostHandler : IHandler
         IControllerIdProvider controllerIdProvider,
         IBattleTroopReserveBuilder reserveBuilder,
         IBattleTroopLedger ledger,
-        IBattleSizeProvider battleSizeProvider)
+        IBattleSizeProvider battleSizeProvider,
+        ISessionIdentity sessionIdentity = null)
     {
         this.messageBroker = messageBroker;
         this.network = network;
@@ -234,6 +236,7 @@ internal class BattleHostHandler : IHandler
         this.reserveBuilder = reserveBuilder;
         this.ledger = ledger;
         this.battleSizeProvider = battleSizeProvider;
+        this.sessionIdentity = sessionIdentity;
 
         messageBroker.Subscribe<PlayerEnteredBattle>(Handle_PlayerEnteredBattle);
         messageBroker.Subscribe<BattleMissionReady>(Handle_BattleMissionReady);
@@ -1268,7 +1271,18 @@ internal class BattleHostHandler : IHandler
     private void SendController<T>(NetPeer peer, string controllerId, T message) where T : IMessage
     {
         if (peer != null) network.Send(peer, message);
-        else if (IsLocalController(controllerId)) messageBroker.Publish(this, message);
+        else if (IsLocalController(controllerId))
+        {
+            if (sessionIdentity == null)
+            {
+                Logger.Warning("[BattleHost] Refused local control {MessageType}: session identity is unavailable", typeof(T).Name);
+                return;
+            }
+            var source = new LocalMissionControlEndpoint(sessionIdentity, controllerId);
+            if (source.IsCurrent(sessionIdentity, controllerIdProvider.ControllerId))
+                messageBroker.Publish(source, message);
+            else Logger.Warning("[BattleHost] Refused local control {MessageType}: room endpoint is not current", typeof(T).Name);
+        }
     }
 
     // True if the requesting controller's player party is in this map event. Defends against a stale or

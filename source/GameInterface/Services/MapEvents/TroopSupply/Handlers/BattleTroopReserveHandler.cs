@@ -1,7 +1,9 @@
 ﻿using Common;
 using Common.Messaging;
 using Common.Network;
+using GameInterface.Services.Entity;
 using GameInterface.Services.MapEvents.TroopSupply.Messages;
+using GameInterface.Services.Missions;
 using System;
 using TaleWorlds.Core;
 
@@ -26,11 +28,19 @@ internal class BattleTroopReserveHandler : IHandler
 {
     private readonly IMessageBroker messageBroker;
     private readonly INetwork network;
+    private readonly IRelayNetwork roomNetwork;
+    private readonly ISessionIdentity sessionIdentity;
+    private readonly IControllerIdProvider controllerIdProvider;
 
-    public BattleTroopReserveHandler(IMessageBroker messageBroker, INetwork network)
+    public BattleTroopReserveHandler(IMessageBroker messageBroker, INetwork network,
+        IRelayNetwork roomNetwork = null, ISessionIdentity sessionIdentity = null,
+        IControllerIdProvider controllerIdProvider = null)
     {
         this.messageBroker = messageBroker;
         this.network = network;
+        this.roomNetwork = roomNetwork;
+        this.sessionIdentity = sessionIdentity;
+        this.controllerIdProvider = controllerIdProvider;
         messageBroker.Subscribe<NetworkBattleTroopReserve>(Handle_NetworkBattleTroopReserve);
     }
 
@@ -41,7 +51,11 @@ internal class BattleTroopReserveHandler : IHandler
 
     private void Handle_NetworkBattleTroopReserve(MessagePayload<NetworkBattleTroopReserve> payload)
     {
-        if (ModInformation.IsServer) return;
+        bool local = ModInformation.IsListenAuthority;
+        if (ModInformation.IsDedicatedAuthority) return;
+        if (local && (roomNetwork == null || sessionIdentity == null || controllerIdProvider == null ||
+            payload.Who is not LocalMissionControlEndpoint source ||
+            !source.IsCurrent(sessionIdentity, controllerIdProvider.ControllerId))) return;
 
         var message = payload.What;
         var dropped = CoopTroopSupplierRegistry.Feed(
@@ -60,7 +74,7 @@ internal class BattleTroopReserveHandler : IHandler
         for (int i = 0; i < entries.Length; i++)
             entries[i] = new SupplyProgressEntry(dropped[i].PartyId, dropped[i].Supplied);
 
-        // On a client, SendAll targets the server (its only connected peer).
-        network.SendAll(new NetworkBattleSupplyProgress(message.MapEventId, entries, isFlush: true));
+        // Listen room control returns locally; its campaign network would broadcast to remote players.
+        (local ? roomNetwork : network).SendAll(new NetworkBattleSupplyProgress(message.MapEventId, entries, isFlush: true));
     }
 }

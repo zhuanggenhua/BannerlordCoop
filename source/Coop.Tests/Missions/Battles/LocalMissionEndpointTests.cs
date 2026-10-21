@@ -5,6 +5,7 @@ using Coop.Tests.Mocks;
 using GameInterface.Services.Entity;
 using GameInterface.Services.MapEvents;
 using GameInterface.Services.MapEvents.TroopSupply;
+using GameInterface.Services.MapEvents.TroopSupply.Handlers;
 using GameInterface.Services.MapEvents.TroopSupply.Messages;
 using GameInterface.Services.Missions;
 using GameInterface.Services.ObjectManager;
@@ -46,6 +47,28 @@ public class LocalMissionEndpointTests
     }
 
     [Fact]
+    public void OriginalLocalElectionRepliesReachOriginalSupplierConsumer()
+    {
+        using var fixture = new Fixture();
+        using var consumer = new BattleTroopReserveHandler(fixture.Broker, fixture.Network,
+            Mock.Of<Common.Network.IRelayNetwork>(), fixture.Session, fixture.Controller);
+        try
+        {
+            fixture.Broker.Publish(fixture, new BattleMissionReady("battle"));
+            fixture.Drain();
+            foreach (var side in new[] { BattleSideEnum.Attacker, BattleSideEnum.Defender })
+            {
+                var supplier = new CoopTroopSupplier("battle", side, null, Mock.Of<IBattleAgentBudget>());
+                CoopTroopSupplierRegistry.Register(supplier);
+                Assert.True(supplier.IsPopulated);
+                Assert.True(supplier.AllocationRevision > 0);
+            }
+            Assert.Equal(2, fixture.Broker.Messages.GetMessageCount<NetworkBattleTroopReserve>());
+        }
+        finally { CoopTroopSupplierRegistry.ClearBattle("battle"); }
+    }
+
+    [Fact]
     public void LocalAssignmentKeepsMissionEpochIndependentAndRejectsOlderAssignments()
     {
         using var fixture = new Fixture();
@@ -82,11 +105,13 @@ public class LocalMissionEndpointTests
         public readonly BattleHostRegistry Hosts;
         public readonly MapEvent Event = ObjectHelper.SkipConstructor<MapEvent>();
         public readonly Mock<IBattleTroopReserveBuilder> Reserves = new();
+        public readonly ControllerIdProvider Controller = new();
+        public readonly SessionIdentity Session = new();
 
         public Fixture()
         {
             ModInformation.SessionMode = SessionMode.ListenAuthority;
-            var controller = new ControllerIdProvider();
+            var controller = Controller;
             controller.SetControllerId("A");
             var objects = new ObjectManager(Mock.Of<ILogger>());
             var players = new PlayerManager(Mock.Of<ILogger>(), objects, controller);
@@ -112,8 +137,9 @@ public class LocalMissionEndpointTests
                 .Returns(new[] {
                     new SideReserve(BattleSideEnum.Attacker, Array.Empty<PartyReserve>()),
                     new SideReserve(BattleSideEnum.Defender, Array.Empty<PartyReserve>()) });
+            Assert.True(Session.TryApply(new AuthorityLease("room", "writer", "A", 1), "A"));
             handler = new BattleHostHandler(Broker, Network, objects, players, Hosts, controller,
-                Reserves.Object, Mock.Of<IBattleTroopLedger>(), Mock.Of<IBattleSizeProvider>());
+                Reserves.Object, Mock.Of<IBattleTroopLedger>(), Mock.Of<IBattleSizeProvider>(), Session);
         }
 
         public void Drain() => GameThread.Run(() => { }, blocking: true);
