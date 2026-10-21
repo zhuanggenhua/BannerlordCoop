@@ -102,7 +102,7 @@ public sealed class CampaignApplyCompletion : IMessageApplySessionObserver
             state.Pending++;
             return new MessageApplyReceipt(reason =>
             { lock (gate) state.Fault ??= messageType.FullName + ": " + reason; NotifyProgress(); }, () =>
-            { lock (gate) state.Pending--; NotifyProgress(); }, () => IsBindingCurrent(generation) && isCurrent());
+            { lock (gate) state.Pending--; NotifyProgress(); }, () => IsBindingCurrent(generation) && isCurrent(), this);
         }
     }
     public void RecordFailure(AuthorityLease lease, string reason)

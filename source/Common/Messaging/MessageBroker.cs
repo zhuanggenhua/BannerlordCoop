@@ -138,7 +138,7 @@ public class MessageBroker : IMessageBroker
         bool classified = message is ICampaignAuthorityScopedMessage;
         // Even an explicit observation cannot make a process-global multi-session delivery safe.
         var observer = classified ? ValidateClassifiedPublication() : null;
-        using var apply = classified && !MessageApplyScope.HasCurrent
+        using var apply = classified && !MessageApplyScope.Observes(observer)
             ? MessageApplyScope.Begin(observer, typeof(T)) : null;
         List<WeakDelegate> delegates;
         lock (bookkeepingLock)
