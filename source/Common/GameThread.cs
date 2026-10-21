@@ -196,8 +196,8 @@ public class GameThread : IUpdateable
                 cancellationReason = completedCancellationReason;
                 completionState = state;
                 act = null;
-                applyContinuation?.Complete(completedFailure?.ToString() ?? completedCancellationReason);
-                if (!waiterDetached) Wait?.Set();
+                try { applyContinuation?.Complete(completedFailure?.ToString() ?? completedCancellationReason); }
+                finally { if (!waiterDetached) Wait?.Set(); }
             }
         }
     }
@@ -998,15 +998,15 @@ public class GameThread : IUpdateable
             return false;
         }
 
-        if (!task.IsApplyLeaseCurrent)
-        {
-            task.CompleteCanceled("Campaign apply source lease changed before queued execution.");
-            return false;
-        }
-        if (!task.TryBeginRun(out Action action)) return false;
-
         try
         {
+            if (!task.IsApplyLeaseCurrent)
+            {
+                task.CompleteCanceled("Campaign apply source lease changed before queued execution.");
+                return false;
+            }
+            if (!task.TryBeginRun(out Action action)) return false;
+
             using (task.ActivateApplyObservation())
             using (ActivateCancellation(task.Cancellation))
             {

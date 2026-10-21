@@ -95,7 +95,23 @@ public sealed class MessageApplyScope : IDisposable
     {
         private MessageApplyReceipt receipt;
         internal Continuation(MessageApplyReceipt receipt) { this.receipt = receipt; receipt.Retain(); }
-        internal bool IsCurrent => receipt == null || receipt.IsCurrent;
+        internal bool IsCurrent
+        {
+            get
+            {
+                try { return receipt == null || receipt.IsCurrent; }
+                catch (Exception error)
+                {
+                    try { Complete(error.ToString()); }
+                    catch (Exception completionError)
+                    {
+                        Serilog.Log.Error(completionError,
+                            "Apply observation completion failed after source validation threw {ValidationError}", error);
+                    }
+                    throw;
+                }
+            }
+        }
         internal IDisposable Activate() => receipt == null ? null : new MessageApplyScope(receipt, false);
         internal void Complete(string failure = null)
         {

@@ -174,6 +174,99 @@ public class ComposedApplyObservationTests : IDisposable
         Assert.Equal(1, completed);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ThrowingSourceValidatorAfterDequeueSettlesBothReceiptsAndRethrowsOriginal(bool failureCallbackThrows)
+    {
+        int completed = 0;
+        int campaignNotifications = 0;
+        Completion.Progressed += () => campaignNotifications++;
+        bool applied = false;
+        bool laterApplied = false;
+        var original = new InvalidOperationException("source validator failure");
+        var failures = new List<string>();
+        using (Completion.Observe(typeof(Result)))
+        using (MessageApplyScope.Observe(() => throw original, reason =>
+        {
+            failures.Add(reason);
+            if (failureCallbackThrows) throw new InvalidOperationException("failure observer also threw");
+        }, () => completed++))
+            GameThread.EnqueueSafe(() => applied = true);
+        GameThread.EnqueueSafe(() => laterApplied = true);
+        Assert.Equal(2, GameThread.Instance.QueueLength);
+        Assert.False(Completion.CanAcknowledgeThrough(lease, out var pending));
+        Assert.Equal("pending classified applies: 1", pending);
+        Assert.Equal(0, campaignNotifications);
+        Assert.Same(original, Assert.Throws<InvalidOperationException>(Drain));
+        Assert.False(applied);
+        Assert.False(laterApplied);
+        Assert.Equal(0, GameThread.Instance.QueueLength);
+        Assert.Equal(1, completed);
+        Assert.Single(failures);
+        Assert.Contains("source validator failure", failures[0]);
+        Assert.Equal(2, campaignNotifications); // Original Campaign fault and actual receipt completion.
+        Assert.False(Completion.CanAcknowledgeThrough(lease, out var reason));
+        Assert.Contains("source validator failure", reason);
+        Drain();
+        Assert.Equal(1, completed);
+        Assert.Equal(2, campaignNotifications);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ValidatorFailureSignalsTheBlockingQueuedTaskWithItsOriginalFailure(bool failureCallbackThrows)
+    {
+        var original = new InvalidOperationException("blocking source validator failure");
+        int completed = 0;
+        bool applied = false;
+        using var signal = new EventWaitHandle(false, EventResetMode.ManualReset);
+        GameThread.QueuedAction task;
+        using (Completion.Observe(typeof(Result)))
+        using (MessageApplyScope.Observe(() => throw original, _ =>
+        {
+            if (failureCallbackThrows) throw new InvalidOperationException("blocking failure observer also threw");
+        }, () => completed++))
+        {
+            task = new GameThread.QueuedAction(() => applied = true, signal, "blocking validation", CancellationToken.None);
+            lock (queue.gate) queue.queue.Enqueue(task);
+        }
+        Assert.Same(original, Assert.Throws<InvalidOperationException>(Drain));
+        Assert.False(applied);
+        Assert.Equal(1, completed);
+        Assert.True(signal.WaitOne(0), "The blocking caller must be signalled when validation fails after dequeue.");
+        Assert.Same(original, Assert.Throws<InvalidOperationException>(() => GameThread.WaitForBlockingCompletion(task, CancellationToken.None)));
+        Assert.False(Completion.CanAcknowledgeThrough(lease, out var reason));
+        Assert.Contains("blocking source validator failure", reason);
+    }
+
+    [Fact]
+    public void CancellationFailureObserverCannotStrandTheBlockingQueuedTaskSignal()
+    {
+        var observerError = new InvalidOperationException("cancellation observer failure");
+        int completed = 0;
+        int campaignNotifications = 0;
+        Completion.Progressed += () => campaignNotifications++;
+        bool applied = false;
+        using var signal = new EventWaitHandle(false, EventResetMode.ManualReset);
+        GameThread.QueuedAction task;
+        using (Completion.Observe(typeof(Result)))
+        using (MessageApplyScope.Observe(() => false, _ => throw observerError, () => completed++))
+        {
+            task = new GameThread.QueuedAction(() => applied = true, signal, "blocking cancellation", CancellationToken.None);
+            lock (queue.gate) queue.queue.Enqueue(task);
+        }
+        Assert.Same(observerError, Assert.Throws<InvalidOperationException>(Drain));
+        Assert.False(applied);
+        Assert.Equal(1, completed);
+        Assert.True(signal.WaitOne(0), "A failure observer cannot suppress the blocking completion signal.");
+        Assert.Throws<OperationCanceledException>(() => GameThread.WaitForBlockingCompletion(task, CancellationToken.None));
+        Assert.Equal(2, campaignNotifications);
+        Assert.False(Completion.CanAcknowledgeThrough(lease, out var reason));
+        Assert.Contains("source lease changed", reason);
+    }
+
     [Fact]
     public void CampaignObservationBetweenTwoDistinctDomainsRetainsAndFaultsEveryAncestor()
     {
