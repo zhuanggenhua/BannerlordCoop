@@ -606,3 +606,52 @@ test('source-drain-proof: equal final peer phases cannot hide unsupported source
         await assert.rejects(completeNaturalDayHandoff(f.args),/Missing source drain provenance/);
     }
 });
+function emptyPausedLateAiFixture() {
+    const f=roleTailFixture();
+    for(const state of f.target)state.lease.epoch=5;
+    for(const group of f.after[1].roleSimulation.groups)for(const key of ['FirstEntry','FirstExit','LastEntry','LastExit'])group[key].Lease.Epoch=5;
+    const g=appendNative(f.after[0],'Campaign.LateAITickAux','a',4,'','observerLateAiNoOp',2);
+    for(const key of ['FirstEntry','FirstExit','LastEntry','LastExit'])Object.assign(g[key],{
+        Lease:{RoomId:'room',AuthorityId:'paused',AuthorityControllerId:'',Epoch:4,IsPaused:true},LocalWriter:false,
+        LateAiCoverageVersion:1,LateAiPartiesThinkAttempts:0,LateAiScopeMatched:true});
+    return f;
+}
+test('late-AI branch: confirmed intermediate paused lease accepts actually covered empty LateAI only',()=>{
+    const f=emptyPausedLateAiFixture();
+    assert.equal(roleOracle.assertHandoffCycleTail(f.before,f.after,f.source,f.target).observerLateAiNoOp,2);
+});
+test('late-AI branch: missing coverage or attempt, bootstrap, unsafe context and other methods remain rejected',()=>{
+    for(const change of [g=>delete g.FirstEntry.LateAiCoverageVersion,g=>g.LastExit.LateAiCoverageVersion=0,
+        g=>delete g.LastExit.LateAiPartiesThinkAttempts,g=>g.LastExit.LateAiPartiesThinkAttempts=1,
+        g=>g.LastExit.LateAiScopeMatched=false,g=>g.FirstEntry.CurrentTickCount=2,
+        g=>g.LastExit.WorldTicks++,g=>g.LastExit.CurrentTickCount++,g=>g.FirstEntry.Dt=0.1,
+        g=>g.FirstEntry.Frozen=true,g=>g.FirstEntry.AllowedThread=true,g=>g.FirstEntry.Phase=4,
+        g=>g.FirstEntry.LeaseKnown=false,g=>g.FirstEntry.Lease.RoomId='other',
+        g=>{for(const k of ['FirstEntry','FirstExit','LastEntry','LastExit'])g[k].Lease.Epoch=3;},
+        g=>g.LastExit.Lease.Epoch=5,g=>g.Error='native failure',
+        g=>g.Method='Campaign.Tick',g=>g.Method='Campaign.RealTick',
+        g=>g.LastExit.LateAiPartiesThinkAttempts=NaN]) {
+        const f=emptyPausedLateAiFixture();change(f.after[0].roleSimulation.groups.at(-1));
+        assert.throws(()=>roleOracle.assertHandoffCycleTail(f.before,f.after,f.source,f.target));
+    }
+});
+test('late-AI branch: proof belongs to group identity and mixed last witness is rejected',()=>{
+    const f=emptyPausedLateAiFixture(),g=f.after[0].roleSimulation.groups.at(-1);
+    g.LastExit.LateAiPartiesThinkAttempts=1;
+    assert.throws(()=>roleOracle.assertHandoffCycleTail(f.before,f.after,f.source,f.target));
+});
+
+test('late-AI branch: unpaused empty observer must use exact source or target lease',()=>{
+    for(const useSource of [true,false]) {
+        const f=emptyPausedLateAiFixture(),g=f.after[0].roleSimulation.groups.pop();
+        const node=useSource?'b':'a',index=useSource?1:0;
+        f.after[0].simulation['Campaign.LateAITickAux.completed']-=2;
+        f.after[index].simulation['Campaign.LateAITickAux.completed']+=2;
+        for(const k of ['FirstEntry','FirstExit','LastEntry','LastExit'])Object.assign(g[k],{
+            ...nativeBoundary(node,useSource?3:5,useSource?'a':'b'),LateAiCoverageVersion:1,LateAiPartiesThinkAttempts:0,LateAiScopeMatched:true});
+        f.after[index].roleSimulation.groups.push(g);
+        assert.equal(roleOracle.assertHandoffCycleTail(f.before,f.after,f.source,f.target).observerLateAiNoOp,2);
+        for(const k of ['FirstEntry','FirstExit','LastEntry','LastExit'])g[k].Lease.Epoch=4;
+        assert.throws(()=>roleOracle.assertHandoffCycleTail(f.before,f.after,f.source,f.target),/neither exact/);
+    }
+});

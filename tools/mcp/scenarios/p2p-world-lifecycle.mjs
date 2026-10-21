@@ -215,14 +215,15 @@ export function assertSchedulerHandoff(previous, next) {
 const NATIVE_METHODS=['Campaign.RealTick','Campaign.Tick','Campaign.LateAITickAux'];
 const roleContext=b=>Object.fromEntries(['node','campaignId','campaignIdentity','lease','leaseKnown','localWriter','frozen',
     'restricted','allowedThread','phase','diagnosticError','gameStarted'].map(key=>[key,field(b,key)]));
+const branchKey=b=>Object.fromEntries(['lateAiCoverageVersion','lateAiPartiesThinkAttempts','lateAiScopeMatched'].map(key=>[key,field(b,key)??null]));
 const roleKey=g=>JSON.stringify([field(g,'method'),field(g,'outcome'),field(g,'classification'),field(g,'aiClassification')??null,
-    field(g,'aiUnexpectedWorld')??false,field(g,'error')??null,roleContext(field(g,'firstEntry')),roleContext(field(g,'firstExit'))]);
+    field(g,'aiUnexpectedWorld')??false,field(g,'error')??null,roleContext(field(g,'firstEntry')),roleContext(field(g,'firstExit')),branchKey(field(g,'firstEntry')),branchKey(field(g,'firstExit'))]);
 const strictCount=(counts,key)=>{
     assert.ok(Object.hasOwn(counts??{},key),'Role counter unavailable: '+key);
     assert.ok(Number.isSafeInteger(counts[key])&&counts[key]>=0,'Invalid role counter: '+key);return counts[key];
 };
 const exactLease=lease=>['roomId','authorityId','authorityControllerId','epoch','isPaused'].map(key=>field(lease,key));
-function assertRoleBoundary(entry,exit,node,{writer:mustWrite=true,nativeWorld=true}={}) {
+function assertRoleBoundary(entry,exit,node,{writer:mustWrite=true,nativeWorld=true,allowPaused=false}={}) {
     assert.ok(entry&&exit,'Native role boundary missing');
     assert.deepEqual(roleContext(exit),roleContext(entry),'Native call changed role context');
     assert.equal(field(entry,'node'),node,'Native evidence belongs to another node');
@@ -235,8 +236,11 @@ function assertRoleBoundary(entry,exit,node,{writer:mustWrite=true,nativeWorld=t
     assert.ok([0,3].includes(field(entry,'phase')),'Native original ran in restricted phase');
     assert.ok(!field(entry,'diagnosticError'),'Native diagnostic failed');
     const lease=field(entry,'lease');assert.ok(lease,'Native lease missing');
-    assert.ok(field(lease,'roomId')&&field(lease,'authorityId')&&field(lease,'authorityControllerId')&&field(lease,'epoch')>0);
-    assert.equal(field(lease,'isPaused'),false);
+    assert.ok(field(lease,'roomId')&&field(lease,'authorityId')&&field(lease,'epoch')>0);
+    assert.equal(typeof field(lease,'isPaused'),'boolean');
+    if(field(lease,'isPaused')) {assert.equal(allowPaused,true);assert.equal(field(lease,'authorityControllerId'),'');}
+    else assert.ok(field(lease,'authorityControllerId'));
+    if(!allowPaused)assert.equal(field(lease,'isPaused'),false);
     assert.equal(field(entry,'localWriter'),node===field(lease,'authorityControllerId'));
     if(mustWrite)assert.equal(field(entry,'localWriter'),true,'Observer ran native world original');
     for(const b of [entry,exit]) {
@@ -262,7 +266,7 @@ export function assertRoleSimulationEvidence(receipt) {
         const method=field(group,'method'),outcome=field(group,'outcome'),count=field(group,'count');
         assert.ok([...NATIVE_METHODS,'MobilePartyAi.Tick'].includes(method));assert.ok(AI_OUTCOMES.includes(outcome));
         assert.ok((method==='MobilePartyAi.Tick'?[...AI_CLASSES,'unexpected','skipped']:
-            ['writerBookkeeping','writerProgress','unexpected','skipped']).includes(field(group,'classification')),'Unknown native role classification');
+            ['writerBookkeeping','writerProgress','observerLateAiNoOp','unexpected','skipped']).includes(field(group,'classification')),'Unknown native role classification');
         assert.ok(Number.isSafeInteger(count)&&count>0,'Invalid native group count');
         const key=roleKey(group);assert.ok(!keys.has(key),'Duplicate native role group');keys.add(key);
         sums.set(method+'.'+outcome,(sums.get(method+'.'+outcome)??0)+count);
@@ -298,6 +302,8 @@ function roleWindowDeltas(before,after) {
             if(delta) {
                 assert.deepEqual(roleContext(field(group,'firstEntry')),roleContext(field(group,'lastEntry')),'Native group combined different entry contexts');
                 assert.deepEqual(roleContext(field(group,'firstExit')),roleContext(field(group,'lastExit')),'Native group combined different exit contexts');
+                assert.deepEqual(branchKey(field(group,'firstEntry')),branchKey(field(group,'lastEntry')),'Native group combined different entry branch proofs');
+                assert.deepEqual(branchKey(field(group,'firstExit')),branchKey(field(group,'lastExit')),'Native group combined different exit branch proofs');
                 deltas.push({end,group,delta});
             }
         }
@@ -344,6 +350,20 @@ export function assertNaturalDayRoleWindow(before,after,states) {
     }
     assert.ok(realProgress>0,'Natural day has no actually qualified native RealTick progress');return {realProgress};
 }
+function assertObserverLateAiNoOp(group,entry,exit,node) {
+    assert.equal(field(group,'method'),'Campaign.LateAITickAux','Empty branch proof only applies to LateAI');
+    const lease=assertRoleBoundary(entry,exit,node,{writer:false,nativeWorld:true,allowPaused:true});
+    assert.equal(field(entry,'localWriter'),false,'Empty observer proof cannot grant writer');
+    for(const b of [entry,exit]) {
+        assert.equal(field(b,'lateAiCoverageVersion'),1,'LateAI branch coverage missing');
+        assert.equal(field(b,'lateAiScopeMatched'),true,'LateAI branch scope changed');
+        assert.equal(field(b,'lateAiPartiesThinkAttempts'),0,'LateAI attempted PartiesThink');
+        assert.equal(field(b,'dt'),0);assert.equal(field(b,'dtBits'),0);
+    }
+    assert.equal(field(entry,'worldTicks'),field(exit,'worldTicks'),'Empty LateAI moved world clock');
+    assert.equal(field(entry,'currentTickCount'),field(exit,'currentTickCount'),'Empty LateAI changed native counter');
+    return lease;
+}
 export function assertHandoffCycleTail(before,after,sourceStates,targetStates) {
     assert.equal(before.length,2);assert.equal(after.length,2);assert.equal(sourceStates.length,2);assert.equal(targetStates.length,2);
     const source=sourceStates[0].lease,target=targetStates[0].lease;
@@ -368,7 +388,7 @@ export function assertHandoffCycleTail(before,after,sourceStates,targetStates) {
         assert.ok(oldWriter[key]&&nextTarget[key],'Paused target installed phase missing: '+key);
         assert.deepEqual(nextTarget[key],oldWriter[key],'Paused target advanced installed phase: '+key);
     }
-    const result={sourceBookkeeping:0,targetBookkeeping:0,sourceAiDrain:0,observerLocalNavigation:0};
+    const result={sourceBookkeeping:0,targetBookkeeping:0,sourceAiDrain:0,observerLocalNavigation:0,observerLateAiNoOp:0};
     for(const {end,group:g,delta} of roleWindowDeltas(before,after)) {
         if(field(g,'outcome')==='skipped') {assert.equal(field(g,'classification'),'skipped');assert.ok(!field(g,'error'),'Failure before native original');continue;}
         assert.equal(field(g,'outcome'),'completed','Native tail exception');
@@ -376,10 +396,14 @@ export function assertHandoffCycleTail(before,after,sourceStates,targetStates) {
         const method=field(g,'method'),classification=field(g,'classification');
         for(const [en,ex] of [['firstEntry','firstExit'],['lastEntry','lastExit']]) {
             const entry=field(g,en),exit=field(g,ex),ai=method==='MobilePartyAi.Tick';
-            const lease=assertRoleBoundary(entry,exit,end.node,{writer:!ai||classification!=='observerLocalNavigation',nativeWorld:!ai});
+            const empty=classification==='observerLateAiNoOp';
+            const lease=empty?assertObserverLateAiNoOp(g,entry,exit,end.node):assertRoleBoundary(entry,exit,end.node,{writer:!ai||classification!=='observerLocalNavigation',nativeWorld:!ai});
             const sourceLease=JSON.stringify(exactLease(lease))===JSON.stringify(exactLease(source));
             const targetLease=JSON.stringify(exactLease(lease))===JSON.stringify(exactLease(target));
-            assert.ok(sourceLease||targetLease,'Tail used neither exact source nor target lease');
+            const intermediatePaused=empty&&field(lease,'isPaused')===true&&field(lease,'roomId')===field(source,'roomId')&&
+                field(lease,'epoch')>field(source,'epoch')&&field(lease,'epoch')<field(target,'epoch');
+            assert.ok(sourceLease||targetLease||intermediatePaused,'Tail used neither exact source/target nor confirmed intermediate paused lease');
+            if(empty)continue;
             if(ai) {
                 assertAiRole(g,entry,exit,end.node);
                 if(classification!=='observerLocalNavigation')assert.equal(sourceLease,true,'Paused new writer advanced authoritative AI');
@@ -390,7 +414,8 @@ export function assertHandoffCycleTail(before,after,sourceStates,targetStates) {
                 assert.equal(field(exit,'currentTickCount'),field(entry,'currentTickCount')+(method==='Campaign.Tick'?1:0));
             }
         }
-        if(method==='MobilePartyAi.Tick')result[classification==='observerLocalNavigation'?'observerLocalNavigation':'sourceAiDrain']+=delta;
+        if(classification==='observerLateAiNoOp')result.observerLateAiNoOp+=delta;
+        else if(method==='MobilePartyAi.Tick')result[classification==='observerLocalNavigation'?'observerLocalNavigation':'sourceAiDrain']+=delta;
         else result[JSON.stringify(exactLease(field(field(g,'firstEntry'),'lease')))===JSON.stringify(exactLease(target))?'targetBookkeeping':'sourceBookkeeping']+=delta;
     }
     return result;

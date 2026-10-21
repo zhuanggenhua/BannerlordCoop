@@ -139,7 +139,8 @@ internal sealed class CampaignCycleDiagnostics
         string aiClassification = null, Exception error = null, bool aiUnexpectedWorld = false)
     {
         entry = entry ?? new CampaignNativeBoundary();exit = exit ?? new CampaignNativeBoundary();
-        string key = JsonConvert.SerializeObject(new { method, outcome, classification, aiClassification, aiUnexpectedWorld, error = error?.ToString(), entry = entry.ContextKey(), exit = exit.ContextKey() });
+        string key = JsonConvert.SerializeObject(new { method, outcome, classification, aiClassification, aiUnexpectedWorld, error = error?.ToString(),
+            entry = entry.ContextKey(), exit = exit.ContextKey(), entryBranch = entry.BranchKey(), exitBranch = exit.BranchKey() });
         if (roleGroups.TryGetValue(key, out var group))
         { group.Count++;group.LastEntry = entry.Copy();group.LastExit = exit.Copy();return; }
         if (roleGroups.Count >= Math.Min(capacity, 256)) { roleOverflowed = Overflowed = true;return; }
@@ -225,6 +226,8 @@ internal sealed class CampaignNativeBoundary
     public string AiPartyId, AiPartyRole, AiController;
     public int AiIdentity;
     public bool AiMainParty;
+    public int LateAiCoverageVersion, LateAiPartiesThinkAttempts;
+    public bool LateAiScopeMatched;
     public AuthorityLease Lease;
     public bool LeaseKnown, LocalWriter, Frozen, Restricted, AllowedThread, GameStarted;
     public CampaignExecutionPhase Phase;
@@ -239,11 +242,12 @@ internal sealed class CampaignNativeBoundary
         copy.AiController = evidence.ObjectController;copy.AiIdentity = evidence.AiIdentity;copy.AiMainParty = evidence.MainParty;
         return copy;
     }
+    internal object BranchKey() => new { LateAiCoverageVersion, LateAiPartiesThinkAttempts, LateAiScopeMatched };
     internal object ContextKey() => new { Node, CampaignId, CampaignIdentity, Lease, LeaseKnown, LocalWriter, Frozen,
         Restricted, AllowedThread, Phase, DiagnosticError, GameStarted };
-    internal static bool SameQualifiedContext(CampaignNativeBoundary entry, CampaignNativeBoundary exit, bool requireWriter = true) =>
+    internal static bool SameQualifiedContext(CampaignNativeBoundary entry, CampaignNativeBoundary exit, bool requireWriter = true, bool allowPaused = false) =>
         entry != null && exit != null && entry.LeaseKnown && exit.LeaseKnown && entry.Lease.IsValid && entry.Lease == exit.Lease &&
-        !entry.Lease.IsPaused && !entry.Frozen && !exit.Frozen && !entry.Restricted && !exit.Restricted &&
+        (allowPaused || !entry.Lease.IsPaused) && !entry.Frozen && !exit.Frozen && !entry.Restricted && !exit.Restricted &&
         !entry.AllowedThread && !exit.AllowedThread && entry.Phase == exit.Phase &&
         (entry.Phase == CampaignExecutionPhase.Unspecified || entry.Phase == CampaignExecutionPhase.WorldWrite) &&
         !string.IsNullOrWhiteSpace(entry.Node) && entry.Node == exit.Node && !string.IsNullOrWhiteSpace(entry.CampaignId) && entry.CampaignId == exit.CampaignId &&
@@ -254,6 +258,15 @@ internal sealed class CampaignNativeBoundary
     internal static string Classify(string method, CampaignNativeBoundary entry, CampaignNativeBoundary exit, bool ranOriginal, Exception error)
     {
         if (!ranOriginal) return "skipped";
+        if (method == "Campaign.LateAITickAux" && error == null &&
+            SameQualifiedContext(entry, exit, requireWriter: false, allowPaused: true) && !entry.LocalWriter &&
+            entry.ActualCampaign != null && entry.ThreadId > 0 &&
+            (entry.Lease.IsPaused || !string.IsNullOrWhiteSpace(entry.Lease.AuthorityControllerId)) &&
+            entry.GameStarted && entry.CurrentTickCount >= 3 && exit.CurrentTickCount == entry.CurrentTickCount &&
+            entry.DtBits == 0 && exit.DtBits == 0 && entry.Dt == 0 && exit.Dt == 0 && entry.WorldTicks == exit.WorldTicks &&
+            entry.LateAiCoverageVersion == 1 && exit.LateAiCoverageVersion == 1 &&
+            entry.LateAiScopeMatched && exit.LateAiScopeMatched &&
+            entry.LateAiPartiesThinkAttempts == 0 && exit.LateAiPartiesThinkAttempts == 0) return "observerLateAiNoOp";
         if (error != null || !SameQualifiedContext(entry, exit) || !entry.GameStarted || entry.CurrentTickCount < 3 ||
             float.IsNaN(entry.Dt) || float.IsInfinity(entry.Dt) || float.IsNaN(exit.Dt) || float.IsInfinity(exit.Dt) ||
             entry.Dt < 0 || exit.Dt < 0 || exit.CurrentTickCount != entry.CurrentTickCount + (method == "Campaign.Tick" ? 1 : 0)) return "unexpected";
@@ -876,9 +889,30 @@ internal static class CampaignMobilePartyCallbackEvidencePatches
 [HarmonyPatch]
 internal static class CampaignSimulationEvidencePatches
 {
+    [ThreadStatic] private static LateAiScope currentLateAi;
+    internal sealed class LateAiScope
+    {
+        public LateAiScope Parent;
+        public Campaign Campaign;
+        public int ThreadId, Attempts, CoverageVersion;
+        public bool Matched = true;
+    }
+    private static int BranchCoverage()
+    {
+        var patch = AccessTools.Method(typeof(CampaignSimulationEvidencePatches), nameof(Prefix));
+        var info = Harmony.GetPatchInfo(AccessTools.Method(typeof(Campaign), "PartiesThink"));
+        return info?.Prefixes.Any(value => value.PatchMethod == patch) == true ? 1 : 0;
+    }
+    private static void BranchBoundary(CampaignNativeBoundary boundary, LateAiScope scope)
+    {
+        boundary.LateAiCoverageVersion = Math.Min(scope.CoverageVersion, BranchCoverage());
+        boundary.LateAiPartiesThinkAttempts = scope.Attempts;
+        boundary.LateAiScopeMatched = scope.Matched && ReferenceEquals(scope.Campaign, boundary.ActualCampaign) &&
+            scope.ThreadId == boundary.ThreadId && ReferenceEquals(currentLateAi, scope);
+    }
     private static IEnumerable<MethodBase> TargetMethods()
     {
-        foreach (string name in new[] { "RealTick", "Tick", "LateAITickAux", "WaitAsyncTasks" }) yield return AccessTools.Method(typeof(Campaign), name);
+        foreach (string name in new[] { "RealTick", "Tick", "LateAITickAux", "WaitAsyncTasks", "PartiesThink" }) yield return AccessTools.Method(typeof(Campaign), name);
         yield return AccessTools.Method(typeof(MobilePartyAi), "Tick");
     }
     [HarmonyCleanup]
@@ -949,6 +983,7 @@ internal static class CampaignSimulationEvidencePatches
         public CampaignAiTickEvidence Evidence;
         public CampaignNativeBoundary Native;
         public Campaign Campaign;
+        public LateAiScope LateAi;
     }
     internal static CampaignNativeBoundary CaptureNative(Campaign campaign)
     {
@@ -975,17 +1010,40 @@ internal static class CampaignSimulationEvidencePatches
         catch (Exception error) { row.DiagnosticError = error.ToString(); }
         return row;
     }
-    [HarmonyPrefix]
+    [HarmonyPrefix, HarmonyPriority(Priority.First)]
     private static void Prefix(object __instance, MethodBase __originalMethod, out AiEntry __state)
     {
         __state = null;
+        if (__originalMethod.DeclaringType == typeof(Campaign) && __originalMethod.Name == "PartiesThink")
+        {
+            if (currentLateAi != null)
+            {
+                currentLateAi.Attempts++;
+                currentLateAi.Matched &= ReferenceEquals(currentLateAi.Campaign, __instance) &&
+                    currentLateAi.ThreadId == Thread.CurrentThread.ManagedThreadId;
+            }
+            return;
+        }
         var campaign = __instance as Campaign ?? Campaign.Current;
         if (campaign == null) return;
         __state = new AiEntry { Collector = CampaignCycleDispatchPatches.For(campaign), Campaign = campaign, Native = CaptureNative(campaign),
             Evidence = __originalMethod.DeclaringType == typeof(MobilePartyAi) ? CaptureAi((MobilePartyAi)__instance) : null };
+        if (__originalMethod.DeclaringType == typeof(Campaign) && __originalMethod.Name == "LateAITickAux")
+        {
+            __state.LateAi = new LateAiScope { Parent = currentLateAi, Campaign = campaign,
+                ThreadId = Thread.CurrentThread.ManagedThreadId, CoverageVersion = BranchCoverage() };
+            currentLateAi = __state.LateAi;
+            BranchBoundary(__state.Native, __state.LateAi);
+        }
     }
     [HarmonyFinalizer]
     private static Exception Finalizer(object __instance, MethodBase __originalMethod, bool __runOriginal, Exception __exception, AiEntry __state)
+    {
+        if (__originalMethod.DeclaringType == typeof(Campaign) && __originalMethod.Name == "PartiesThink") return __exception;
+        try { return Complete(__instance, __originalMethod, __runOriginal, __exception, __state); }
+        finally { if (__state?.LateAi != null) currentLateAi = __state.LateAi.Parent; }
+    }
+    private static Exception Complete(object __instance, MethodBase __originalMethod, bool __runOriginal, Exception __exception, AiEntry __state)
     {
         if (__originalMethod.DeclaringType == typeof(MobilePartyAi))
         {
@@ -1000,7 +1058,9 @@ internal static class CampaignSimulationEvidencePatches
         }
         if (__state != null && CampaignNativeBoundary.Methods.Contains("Campaign." + __originalMethod.Name))
         {
-            __state.Collector.NativeTick("Campaign." + __originalMethod.Name, __state.Native, CaptureNative(__state.Campaign), __runOriginal, __exception);
+            var exit = CaptureNative(__state.Campaign);
+            if (__state.LateAi != null) BranchBoundary(exit, __state.LateAi);
+            __state.Collector.NativeTick("Campaign." + __originalMethod.Name, __state.Native, exit, __runOriginal, __exception);
             if (__originalMethod.Name == "RealTick" && __runOriginal && __exception == null)
                 __state.Collector.RealTickFrame(TaleWorlds.Engine.Utilities.EngineFrameNo);
         }
