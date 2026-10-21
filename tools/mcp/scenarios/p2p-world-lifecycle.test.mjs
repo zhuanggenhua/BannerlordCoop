@@ -20,7 +20,7 @@ function aiEvidence(kind='writerNpc',completed=1,priorUnknown=0) {
     simulation['MobilePartyAi.Tick.unexpectedWorld.completed']=priorUnknown;
     return {simulation,aiSimulation:{schemaVersion:1,classes:aiClasses,firstEntries:[]}};
 }
-const receipt = (node,rows) => ({node,instance:node,campaign:'campaign',overflowed:false,rows,tickerAudits:[],duplicateRealTicks:0,failedRealTicks:0,...aiEvidence(node==='a'?'writerNpc':'observerLocalNavigation')});
+const receipt = (node,rows) => ({node,instance:node,campaign:'campaign',overflowed:false,rows,effects:[],tickerAudits:[],duplicateRealTicks:0,failedRealTicks:0,...aiEvidence(node==='a'?'writerNpc':'observerLocalNavigation')});
 
 test('AI explicit zero baseline preserves default positivity and complete schema validation', () => {
     const empty = aiEvidence('writerNpc', 0);
@@ -416,7 +416,8 @@ function seedRolePartition(r) {
     }
 }
 function nativeRoleReceipt(node) {
-    const r={...receipt(node,[]),processId:node==='a'?1:2,hours:124,ticks:124};
+    const r={...receipt(node,[]),processId:node==='a'?1:2,hours:124,ticks:124,effects:[],
+        hourly:{next:125,period:1},daily:{next:144,period:24},scheduler:{LastGameTimeTicks:124,tickers:[]}};
     for(const method of nativeMethods)for(const outcome of ['completed','failed','skipped'])r.simulation[method+'.'+outcome]=0;
     for(const method of nativeMethods)r.simulation[method+'.beforeOriginal.failed']=0;
     r.roleSimulation={schemaVersion:1,node,overflowed:false,groups:[]};
@@ -541,4 +542,67 @@ test('role-window: intentional skipped originals remain counted and never disgui
     const failed=structuredClone(f);failed.after[0].roleSimulation.groups.at(-1).Error='failure before original';
     failed.after[0].simulation['MobilePartyAi.Tick.beforeOriginal.failed']++;
     assert.throws(()=>roleOracle.assertHandoffCycleTail(failed.before,failed.after,failed.source,failed.target),/before native original/);
+});
+
+for(const injected of ['Wage','DailyTickParty','TickerBatch'])test('paused-target-tail: rejects valid new '+injected+' despite unchanged world and native-role counters',async()=>{
+    const f=naturalHandoffFixture(),target=f.tailCycles[1];
+    if(injected==='Wage')target.effects=[{Kind:'Wage',Entity:'party-b',Hero:'hero-b',Node:'b',Epoch:4,
+        Known:true,LocalWriter:true,Error:null,Ticks:124,GoldBefore:100,GoldAfter:100,Wage:0}];
+    if(injected==='DailyTickParty')target.rows.push({...row('b',5),Epoch:4,AuthorityId:'world',DueTicks:-1});
+    if(injected==='TickerBatch')target.tickerAudits.push({Ticker:'_dailyTickHeroTicker',Node:'b',Epoch:4,AuthorityId:'world',RoomId:'room',
+        Batches:1,Expected:0,Completed:0,ExpectedHash:hash,CompletedHash:hash,Mismatches:0,LeaseKnown:true,LocalWriter:true});
+    assert.doesNotThrow(()=>assertCycles(f.tailCycles),'The counterexample must satisfy the existing full-history audit');
+    await assert.rejects(completeNaturalDayHandoff(f.args),/Paused target advanced business evidence/);
+});
+
+test('paused-target-tail: checkpoint installation can update stale target phase but no target business work',async()=>{
+    const f=naturalHandoffFixture();
+    f.preCycles[1].hourly.next=101;f.preCycles[1].daily.next=120;f.preCycles[1].scheduler.LastGameTimeTicks=100;
+    await completeNaturalDayHandoff(f.args);
+    for(const key of ['hourly','daily','scheduler']) {
+        const invalid=naturalHandoffFixture();
+        if(key==='scheduler')invalid.tailCycles[1][key].LastGameTimeTicks++;
+        else invalid.tailCycles[1][key].next++;
+        await assert.rejects(completeNaturalDayHandoff(invalid.args));
+    }
+});
+
+for(const injected of ['Wage','DailyTickParty','TickerBatch'])test('source-drain-proof: missing exact source business provenance rejects new '+injected,async()=>{
+    const f=naturalHandoffFixture(),source=f.tailCycles[0];
+    if(injected==='Wage')source.effects.push({Kind:'Wage',Entity:'party-a',Hero:'hero-a',Node:'a',Epoch:3,
+        Known:true,LocalWriter:true,Error:null,Ticks:124,GoldBefore:100,GoldAfter:100,Wage:0});
+    if(injected==='DailyTickParty')source.rows.push({...row('a',5),Epoch:3,AuthorityId:'world',DueTicks:-1});
+    if(injected==='TickerBatch')source.tickerAudits.push({Ticker:'unobserved-tail-ticker',Node:'a',Epoch:3,AuthorityId:'world',RoomId:'room',
+        Batches:1,Expected:0,Completed:0,ExpectedHash:hash,CompletedHash:hash,Mismatches:0,LeaseKnown:true,LocalWriter:true});
+    assert.doesNotThrow(()=>assertCycles(f.tailCycles));
+    await assert.rejects(completeNaturalDayHandoff(f.args),/source.*provenance/i);
+});
+
+test('paused-target-tail: previous legitimate writer history cannot be edited or removed during installation',async()=>{
+    for(const key of ['rows','effects','tickerAudits'])for(const action of ['edit','remove']) {
+        const f=naturalHandoffFixture(),prior=f.preCycles[1],next=f.tailCycles[1];
+        prior.rows=[{...row('b',4),Party:'historical-party',Epoch:1,AuthorityId:'historical',DueTicks:-1}];
+        prior.effects=[{Kind:'Wage',Entity:'historical-party',Known:true,LocalWriter:true,Error:null,Epoch:1,Node:'b',Ticks:100,Wage:0}];
+        prior.tickerAudits=[{Ticker:'historical-ticker',Batches:1,Expected:0,Completed:0,ExpectedHash:hash,CompletedHash:hash,
+            Mismatches:0,LeaseKnown:true,LocalWriter:true,Epoch:1,Node:'b',AuthorityId:'historical',RoomId:'room'}];
+        for(const part of ['rows','effects','tickerAudits'])next[part]=structuredClone(prior[part]);
+        if(action==='remove')next[key].pop();
+        else if(key==='rows')next[key][0].Count++;
+        else if(key==='effects')next[key][0].Wage++;
+        else next[key][0].Batches++;
+        assert.doesNotThrow(()=>assertCycles(f.tailCycles));
+        await assert.rejects(completeNaturalDayHandoff(f.args),/Paused target advanced business evidence/);
+    }
+});
+
+test('source-drain-proof: equal final peer phases cannot hide unsupported source scheduling progress',async()=>{
+    for(const key of ['hourly','daily','scheduler']) {
+        const f=naturalHandoffFixture();
+        for(const receipt of f.tailCycles) {
+            if(key==='scheduler')receipt[key].LastGameTimeTicks++;
+            else receipt[key].next++;
+        }
+        assert.doesNotThrow(()=>assertSchedulerHandoff(f.tailCycles[0],f.tailCycles));
+        await assert.rejects(completeNaturalDayHandoff(f.args),/Missing source drain provenance/);
+    }
 });

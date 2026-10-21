@@ -349,6 +349,25 @@ export function assertHandoffCycleTail(before,after,sourceStates,targetStates) {
     const source=sourceStates[0].lease,target=targetStates[0].lease;
     assert.deepEqual(exactLease(sourceStates[1].lease),exactLease(source));assert.deepEqual(exactLease(targetStates[1].lease),exactLease(target));
     assert.equal(field(source,'roomId'),field(target,'roomId'));assert.ok(field(target,'epoch')>field(source,'epoch'));
+    const oldWriter=after.find(receipt=>receipt.node===field(source,'authorityControllerId'));
+    const priorWriter=before.find(receipt=>receipt.node===field(source,'authorityControllerId'));
+    const priorTarget=before.find(receipt=>receipt.node===field(target,'authorityControllerId'));
+    const nextTarget=after.find(receipt=>receipt.node===field(target,'authorityControllerId'));
+    assert.ok(priorWriter&&oldWriter&&priorTarget&&nextTarget,'Paused handoff business receipts missing');
+    // Existing cycle/economic aggregates do not prove callback entry/exit freeze boundaries for a new source tail.
+    for(const key of ['rows','effects','tickerAudits','hourly','daily','scheduler']) {
+        assert.ok(priorWriter[key]&&oldWriter[key],'Missing source drain provenance: '+key);
+        assert.deepEqual(oldWriter[key],priorWriter[key],'Missing source drain provenance for changed '+key);
+    }
+    for(const key of ['rows','effects','tickerAudits']) {
+        assert.ok(Array.isArray(priorTarget[key])&&Array.isArray(nextTarget[key]),'Paused target evidence missing: '+key);
+        assert.deepEqual(nextTarget[key],priorTarget[key],'Paused target advanced business evidence: '+key);
+    }
+    // A replica may install the source checkpoint; its stale pre-handoff scheduler is not the installed baseline.
+    for(const key of ['hourly','daily','scheduler']) {
+        assert.ok(oldWriter[key]&&nextTarget[key],'Paused target installed phase missing: '+key);
+        assert.deepEqual(nextTarget[key],oldWriter[key],'Paused target advanced installed phase: '+key);
+    }
     const result={sourceBookkeeping:0,targetBookkeeping:0,sourceAiDrain:0,observerLocalNavigation:0};
     for(const {end,group:g,delta} of roleWindowDeltas(before,after)) {
         if(field(g,'outcome')==='skipped') {assert.equal(field(g,'classification'),'skipped');assert.ok(!field(g,'error'),'Failure before native original');continue;}
@@ -412,9 +431,9 @@ export async function completeNaturalDayHandoff({node,nextController,initial,bef
     const cycles=assertCycles(await readCycles());
     const roleTail=assertHandoffCycleTail(preCycles.receipts,cycles.receipts,pre.states,post.states);
     // Re-audit the original writer's complete day after its final asynchronous drain.
-    // The promoted target is checked by actual per-call roles, not its obsolete observer role.
-    const coverage=assertCycleWindow(beforeCycles,cycles.receipts.map(receipt=>receipt.node===node?receipt:
-        preCycles.receipts.find(previous=>previous.node===receipt.node)),node);
+    // Full final history and the target's actual business/role tail were checked above; no stale target receipt is substituted.
+    const coverage=assertCycleWindow(beforeCycles.filter(receipt=>receipt.node===node),
+        cycles.receipts.filter(receipt=>receipt.node===node),node);
     const sealedWriter=cycles.receipts.find(receipt=>receipt.node===node);
     assertSchedulerHandoff(sealedWriter,cycles.receipts);
     await record({phase:'native_day_post_handoff',node,nextController,confirmed,post,cycles,coverage,roleTail});

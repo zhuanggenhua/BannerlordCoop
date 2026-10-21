@@ -88,3 +88,26 @@ All managed commands use GameInterface.Tests Debug, -p:ModName= -p:NuGetAudit=fa
 | node-full11/final12/final13 logs | 35,36,36 PASS, actual exit0; final13 is final JS source |
 
 No production assertion was relaxed to resolve fixture failures. Fixtures now describe all raw observations and exact bounded groups, preserve baseline unknown history and include both valid and invalid role transitions. strict-oracle-integrity.json confirms the entire original assertCycleWindow function is unchanged from e268. AI local-navigation qualification does not require an observer to advance CurrentTickCount or initialize world AI; it records those fields and retains the existing confirmed identity qualification. World-method bookkeeping still requires GameStarted and nonbootstrap count, with no unknown-to-bootstrap reclassification. The existing observer-frame initialization adapter remains unmodified.
+
+## Independent-review correction, revision02
+
+The independent counterexample against 65a67dfc76c2a11addcab60a4305a2b94fcca51a showed a real oracle coverage gap: a valid target Wage, DailyTickParty or ticker batch could be added during the paused handoff while assertCycles, role-only tail validation and final scheduler equality all accepted it. This is a validator defect, not evidence of a newly observed native/network failure. The original submitted commit, handoff and all failures remain sealed.
+
+The corrected assertHandoffCycleTail now requires the target's actual rows/effects/tickerAudits to remain exactly unchanged, including no additions, edits or deletion of its prior legitimate writer history. Its installed hourly/daily/scheduler phase must equal the strictly audited drained source phase. It is intentionally not compared to the target's stale pre-install scheduler. Actual original natural01 pre receipts have different A/B phases; final B installs A's phase, while both nodes' business arrays remain unchanged. That bounded historical comparison is evidence for the contract, not retrospective PASS.
+
+Existing economic rows contain Node and Epoch, but do not carry exact RoomId/AuthorityId plus callback entry/exit/freeze proof. DailyTickParty lacks an exact due slot, and aggregate ticker audits cannot establish complete per-callback freeze/drain timing. Therefore a new source periodic/economic/phase tail cannot be proved safe from those aggregates alone. This version rejects such changes explicitly as Missing source drain provenance. It continues to permit actually qualified source old-lease AI drain and zero-dt bookkeeping. This is an evidence limitation, not a blanket ban on the old writer or a claim that every observed source callback is illegitimate. Supporting additional source business drain requires a separately reviewed finite proof extension; it is not guessed here.
+
+Final assertCycles still audits both actual final histories. The entire original two-node day-before to pre-handoff strict oracle is unchanged. After role/business tails pass, the same unchanged assertCycleWindow re-audits the actual old writer's source-only before/final collectors; no target pre receipt or simulated counter replaces actual final target data. Target actual final history is covered separately by the full-history audit, immutable business history, installed-phase equality and exact per-call role tail.
+
+Revision02 is limited to this existing oracle, its tests and this document; native diagnostics/permissions/algorithms have no diff from 65a, so the unchanged 108-case native regression was not rerun. No new game was launched.
+
+### Revision02 verification
+
+- target-red01: three counterexamples initially reproduce missing rejection, exit1. The first narrow green used incomplete old fixtures and is retained but not accepted as sufficient fix proof.
+- source-red03: retained early negative run; incomplete target fixture prevented the intended source-specific failure, so it is not accepted as source proof.
+- node-full04: 39 PASS /4 FAIL, exit1; old valid fixtures omitted the now-required explicit empty target effects array. Correcting fixture shape strengthens evidence completeness; no assertion was relaxed.
+- sealed baseline replay uses the unmodified 65a oracle with only import paths rebound to existing tool modules. With the final complete fixtures, target-baseline-red06 and source-baseline-red07 each show 0 PASS /3 FAIL, actual exit1, all with Missing expected rejection. These establish six genuine missing-rejection cases; baseline-replay-provenance.json retains exact source/fixture hashes.
+- node-full05: 43 PASS /0 FAIL, exit0.
+- node-final08: final 45 PASS /0 FAIL, exit0. Tests include correct stale-phase installation, target history edits/deletion, illegal target Wage/party-day/ticker work, unsupported source business/phase changes, plus prior exact-role AI drain/navigation positives and all original cycle/semantic negatives.
+
+The review counterexample SHA256 remains 5c405df160a28d2e1665203e094cdf01a94938b4af3141963a447b9804e388a0. Original assertCycleWindow integrity is rechecked against e268 in revision02/strict-oracle-integrity.json. Candidate real-game acceptance remains NOT_RUN and the original natural01 FAIL remains unchanged.
