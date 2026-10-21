@@ -43,8 +43,8 @@ public class SnapshotPeerLifetimeTests
             clock.Setup(value => value.TryApplyAuthorityHandoffBaseline(777)).Callback(() => ClockCalls++).Returns(true);
             var controller = new ControllerIdProvider(); controller.SetControllerId("a");
             Handler = new AuthorityLeaseSnapshotHandler(Broker, Identity, movement.Object, clock.Object,
-                Network.Object, controller, CampaignHandoffTestServices.Drained());
-            Snapshot = new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint);
+                Network.Object, controller, CampaignHandoffTestServices.Drained(), missionFacts: CampaignHandoffTestServices.MissionFacts(Identity));
+            Snapshot = new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint, missionFactsVersion: CampaignHandoffTestServices.MissionFactsVersion(Paused));
         }
         internal void Publish() => Broker.Publish(InitialPeer, Snapshot);
         internal void Drain() { for (int i = 0; i < 4; i++) GameThread.Run(() => { }, blocking: true); }

@@ -101,8 +101,11 @@ public class ServerModule : CommonModule
         builder.RegisterType<MissionManager>()
             .As<IMissionManager>()
             .As<IMissionMembershipRegistry>()
+            .As<IRoomMissionFactsView>()
             .As<IMissionRelaySourceVerifier>()
             .InstancePerLifetimeScope();
+        builder.Register(context => context.Resolve<Coop.Core.Server.Services.Instances.Handlers.ServerRoomMissionFactsHandler>())
+            .As<Coop.Core.Server.Services.Instances.Handlers.IRoomMissionFactsPublisher>().InstancePerLifetimeScope();
         builder.RegisterType<BattleCompletionTracker>().As<IBattleCompletionTracker>().InstancePerDependency();
         builder.RegisterType<SettlementEncounterDistanceValidator>()
             .As<ISettlementEncounterDistanceValidator>()

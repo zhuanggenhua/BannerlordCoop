@@ -1,4 +1,4 @@
-using Common.Messaging;
+﻿using Common.Messaging;
 using ProtoBuf;
 
 namespace Common.Network.Session;
@@ -22,8 +22,10 @@ public readonly struct NetworkAuthorityLeaseSnapshot : IServerToClientCommand
 
     [ProtoMember(7)] public readonly CampaignMovementCheckpoint MovementCheckpoint;
 
+    [ProtoMember(8)] public readonly RoomMissionFactsVersion MissionFactsVersion;
+
     public NetworkAuthorityLeaseSnapshot(AuthorityLease lease, string roomHostControllerId = null,
-        CampaignMovementCheckpoint movementCheckpoint = null)
+        CampaignMovementCheckpoint movementCheckpoint = null, RoomMissionFactsVersion missionFactsVersion = default)
     {
         RoomId = lease.RoomId;
         AuthorityId = lease.AuthorityId;
@@ -32,6 +34,7 @@ public readonly struct NetworkAuthorityLeaseSnapshot : IServerToClientCommand
         RoomHostControllerId = roomHostControllerId ?? string.Empty;
         IsPaused = lease.IsPaused;
         MovementCheckpoint = movementCheckpoint;
+        MissionFactsVersion = missionFactsVersion;
     }
 
     public AuthorityLease ToLease() =>

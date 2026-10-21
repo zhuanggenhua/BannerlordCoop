@@ -175,7 +175,7 @@ public class CampaignFinalMovementAcknowledgementTests
                 controller, network.Object, Identity, new ObjectManager(Serilog.Log.ForContext<ObjectManager>()),
                 rosterCheckpointService: rosterService.Object, mapTimeTracker: clock.Object,
                 sessionCheckpointService: sessions.Object, schedulerCheckpointService: CampaignHandoffTestServices.Scheduler(),
-                asyncTasks: CampaignHandoffTestServices.Drained(), movement: movement.Object);
+                asyncTasks: CampaignHandoffTestServices.Drained(), movement: movement.Object, missionFacts: CampaignHandoffTestServices.MissionFacts(Identity));
             Broker.Publish(this, new CampaignReady());
             Broker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
             Broker.Publish(this, new CampaignInitializationCompleted());

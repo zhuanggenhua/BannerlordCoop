@@ -1,4 +1,5 @@
 ﻿using Common;
+using Coop.Core.Client.Services.Instances;
 using Common.Messaging;
 using Common.Network;
 using Common.Network.Messages;
@@ -31,6 +32,28 @@ namespace Coop.Tests.Server.Services.Session;
 [Collection(ModInformationRoleCollection.Name)]
 public class CampaignAuthorityHandoffFaultTests
 {
+    [Fact]
+    public void MembershipRevisionChangeRequiresANewBarrierAndCannotUseAnOldAppliedReceipt()
+    {
+        using var scenario = new HandoffScenario(paused: true);
+        var original = scenario.LastSent<NetworkCampaignAuthorityHandoffBarrier>();
+        Assert.True(RoomMissionFactsSnapshot.TryCreate("room", 1, Array.Empty<RoomMissionMember>(), out var changed));
+        GameThread.Run(() => Assert.True(scenario.Facts.TryInstallComplete(changed)), blocking: true);
+        HandoffScenario.Drain();
+        var current = scenario.LastSent<NetworkCampaignAuthorityHandoffBarrier>();
+        Assert.True(current.BarrierSequence > original.BarrierSequence);
+        Assert.Equal(changed.Version, current.MissionFactsVersion);
+        scenario.Publish(scenario.Guest, original.ToApplied());
+        Assert.True(scenario.Identity.CurrentLease.IsPaused);
+        scenario.Publish(scenario.Guest, new NetworkCampaignAuthorityHandoffBarrierApplied(current.RoomId,
+            current.PausedAuthorityId, current.PausedEpoch, current.CandidateControllerId, current.BarrierSequence,
+            original.MissionFactsVersion));
+        Assert.True(scenario.Identity.CurrentLease.IsPaused);
+        scenario.Publish(scenario.Guest, current.ToApplied());
+        Assert.Equal("guest", scenario.Identity.AuthorityControllerId);
+        Assert.False(scenario.Identity.CurrentLease.IsPaused);
+    }
+
     [Fact]
     public void CommittedPausedCheckpointCanBeRetriedAfterCandidateReconnect()
     {
@@ -190,6 +213,7 @@ public class CampaignAuthorityHandoffFaultTests
         private readonly MessageBroker broker = new MessageBroker();
         private readonly TestNetwork network = new TestNetwork();
         public readonly SessionIdentity Identity = new SessionIdentity();
+        public readonly RoomMissionMembershipProjection Facts = new();
         public readonly Mock<IObjectManager> Objects = new Mock<IObjectManager>();
         public readonly Mock<ICampaignRosterCheckpointService> Rosters = new Mock<ICampaignRosterCheckpointService>();
         public readonly Mock<IMapTimeTrackerInterface> Clock = new Mock<IMapTimeTrackerInterface>();
@@ -213,6 +237,8 @@ public class CampaignAuthorityHandoffFaultTests
             Assert.True(Identity.TryApply(paused
                 ? new AuthorityLease("room", "paused", string.Empty, 2, isPaused: true)
                 : new AuthorityLease("room", "guest-lease", "guest", 3), "host"));
+            Assert.True(RoomMissionFactsSnapshot.TryCreate(Identity.RoomId, 0, Array.Empty<RoomMissionMember>(), out var initialFacts));
+            Assert.True(Facts.TryInstallComplete(initialFacts));
             Guest = network.CreatePeer();
             Impostor = network.CreatePeer("127.0.0.2");
             var host = new Player("host", "host-hero", "host-party", "host-clan", "host-character");
@@ -245,7 +271,7 @@ public class CampaignAuthorityHandoffFaultTests
                 network, Identity, Objects.Object, rosterCheckpointService: Rosters.Object,
                 mapTimeTracker: Clock.Object, sessionCheckpointService: Sessions.Object,
                 schedulerCheckpointService: CampaignHandoffTestServices.Scheduler(),
-                asyncTasks: CampaignHandoffTestServices.Drained());
+                asyncTasks: CampaignHandoffTestServices.Drained(), missionFacts: Facts);
             Publish(this, new CampaignReady());
             Publish(this, new CampaignInitializationCompleted());
             ReportGuest(CampaignSimulationAvailability.MapReady, 1);

@@ -1,4 +1,7 @@
 ﻿using Common;
+using GameInterface.Services.Missions;
+using LiteNetLib;
+using System.Threading;
 using GameInterface.Services.CampaignAuthority.Movement;
 using Common.Logging;
 using Common.Messaging;
@@ -36,6 +39,10 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
     private readonly ICampaignSchedulerCheckpointService schedulerCheckpointService;
     private readonly ICampaignAsyncTaskDrain asyncTasks;
     private readonly ICampaignMovementCheckpointService movement;
+    private readonly IRoomMissionFactsView missionFacts;
+    private NetworkCampaignAuthorityHandoffBarrier? deferredBarrier;
+    private NetPeer deferredPeer;
+    private int continuationQueued, disposed;
     private long appliedEpoch;
     private long appliedSequence;
     private long installedEpoch;
@@ -54,7 +61,7 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         ICampaignSessionCheckpointService sessionCheckpointService,
         ICampaignSchedulerCheckpointService schedulerCheckpointService,
         ICampaignAsyncTaskDrain asyncTasks,
-        ICampaignMovementCheckpointService movement = null)
+        ICampaignMovementCheckpointService movement = null, IRoomMissionFactsView missionFacts = null)
     {
         this.messageBroker = messageBroker;
         this.network = network;
@@ -68,6 +75,8 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         this.schedulerCheckpointService = schedulerCheckpointService;
         this.asyncTasks = asyncTasks;
         this.movement = movement;
+        this.missionFacts = missionFacts;
+        if (missionFacts != null) missionFacts.FactsChanged += OnFactsChanged;
         messageBroker.Subscribe<ClientCampaignReady>(Handle_ClientCampaignReady);
         messageBroker.Subscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Subscribe<NetworkCampaignAuthorityHandoffBarrier>(Handle_HandoffBarrier);
@@ -75,7 +84,10 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
 
     public void Dispose()
     {
+        Interlocked.Exchange(ref disposed, 1);
         applyBinding?.Dispose();
+        deferredBarrier = null;
+        if (missionFacts != null) missionFacts.FactsChanged -= OnFactsChanged;
         messageBroker.Unsubscribe<ClientCampaignReady>(Handle_ClientCampaignReady);
         messageBroker.Unsubscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         messageBroker.Unsubscribe<NetworkCampaignAuthorityHandoffBarrier>(Handle_HandoffBarrier);
@@ -93,13 +105,15 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
 
     private void Handle_HandoffBarrier(MessagePayload<NetworkCampaignAuthorityHandoffBarrier> payload)
     {
+        var peer = payload.Who as NetPeer;
+        if (!IsCurrentRoomPeer(peer)) return;
         var barrier = payload.What;
 
         // All receive-side campaign applies that defer to GameThread.EnqueueSafe are ahead of this
         // acknowledgement. Reading session and campaign readiness here also avoids polling-thread reads.
         GameThread.EnqueueSafe(() =>
         {
-            try { ApplyBarrierOnGameThread(barrier); }
+            try { ApplyBarrierOnGameThread(barrier, peer); }
             catch (Exception ex)
             {
                 CampaignApplyCompletion.For(sessionIdentity).RecordFailure(sessionIdentity.CurrentLease,
@@ -109,8 +123,32 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         }, context: nameof(CampaignAuthorityHandoffBarrierClientHandler));
     }
 
-    private void ApplyBarrierOnGameThread(NetworkCampaignAuthorityHandoffBarrier barrier)
+    private bool IsCurrentRoomPeer(NetPeer peer) => Volatile.Read(ref disposed) == 0 && peer != null &&
+        network is IRoomHostPeerProvider provider && provider.IsCurrentRoomHostPeer(peer);
+
+    private void OnFactsChanged()
     {
+        if (Volatile.Read(ref disposed) != 0 || Interlocked.Exchange(ref continuationQueued, 1) != 0) return;
+        GameThread.EnqueueSafe(() =>
+        {
+            Interlocked.Exchange(ref continuationQueued, 0);
+            if (!deferredBarrier.HasValue || !IsCurrentRoomPeer(deferredPeer)) return;
+            var barrier = deferredBarrier.Value;
+            var peer = deferredPeer;
+            deferredBarrier = null;
+            try { ApplyBarrierOnGameThread(barrier, peer); }
+            catch (Exception exception)
+            {
+                CampaignApplyCompletion.For(sessionIdentity).RecordFailure(sessionIdentity.CurrentLease,
+                    "Deferred handoff checkpoint installation threw: " + exception);
+                throw;
+            }
+        }, context: nameof(CampaignAuthorityHandoffBarrierClientHandler));
+    }
+
+    private void ApplyBarrierOnGameThread(NetworkCampaignAuthorityHandoffBarrier barrier, NetPeer peer)
+    {
+        if (!IsCurrentRoomPeer(peer)) return;
         if (applyBinding?.IsActive == false) return;
         if (!campaignSynchronized || !mapReady ||
             !sessionIdentity.TryGetConfirmedLease(out var lease) || !lease.IsPaused ||
@@ -122,6 +160,22 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
             return;
         }
 
+        if (missionFacts == null || !barrier.MissionFactsVersion.IsValid || barrier.MissionFactsVersion.RoomId != lease.RoomId)
+        {
+            Logger.Warning("Refused handoff barrier {BarrierSequence}: room Mission membership version missing", barrier.BarrierSequence);
+            return;
+        }
+        if (!missionFacts.HasApplied(barrier.MissionFactsVersion))
+        {
+            deferredBarrier = barrier;
+            deferredPeer = peer;
+            return;
+        }
+        if (!missionFacts.CanActivateCampaign(barrier.MissionFactsVersion))
+        {
+            Logger.Warning("Refused handoff barrier {BarrierSequence}: occupied Mission protection facts are not implemented", barrier.BarrierSequence);
+            return;
+        }
         if (!CampaignApplyCompletion.For(sessionIdentity).CanAcknowledgeThrough(lease, out var applyReason))
         {
             Logger.Warning("Refused handoff barrier {BarrierSequence}: {ApplyReason}", barrier.BarrierSequence, applyReason);
@@ -159,6 +213,12 @@ public sealed class CampaignAuthorityHandoffBarrierClientHandler : IHandler
         if (!CampaignApplyCompletion.For(sessionIdentity).CanAcknowledgeThrough(lease, out applyReason))
         {
             Logger.Warning("Refused installed handoff barrier {BarrierSequence}: {ApplyReason}", barrier.BarrierSequence, applyReason);
+            return;
+        }
+        if (!IsCurrentRoomPeer(peer) || !missionFacts.CanActivateCampaign(barrier.MissionFactsVersion))
+        {
+            CampaignApplyCompletion.For(sessionIdentity).RecordFailure(lease,
+                "Room Mission facts or room host peer changed during handoff installation.");
             return;
         }
         appliedEpoch = lease.Epoch;

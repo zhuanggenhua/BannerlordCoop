@@ -38,7 +38,7 @@ public class AuthorityLeaseDistributionHandlerTests
             var controller = new ControllerIdProvider();
             controller.SetControllerId("controller-a");
             var peer = new TestNetwork().CreatePeer();
-            using var handler = new AuthorityLeaseDistributionHandler(broker, network.Object, identity, controller, terminator.Object);
+            using var handler = new AuthorityLeaseDistributionHandler(broker, network.Object, identity, controller, terminator.Object, missionFacts: CampaignHandoffTestServices.InitialFacts(network.Object, identity));
             broker.Publish(this, new PlayerConnected(peer));
             network.Verify(value => value.SendImmediate(peer, It.Is<NetworkAuthorityLeaseSnapshot>(snapshot => snapshot.ToLease() == lease)), Times.Once);
             terminator.Verify(value => value.Disconnect(It.IsAny<LiteNetLib.NetPeer>(), It.IsAny<string>()), Times.Never);
@@ -73,7 +73,7 @@ public class AuthorityLeaseDistributionHandlerTests
             var controller = new ControllerIdProvider();
             controller.SetControllerId("controller-a");
             var terminator = new Mock<IJoinPeerTerminator>();
-            using var handler = new AuthorityLeaseDistributionHandler(broker, network.Object, identity, controller, terminator.Object);
+            using var handler = new AuthorityLeaseDistributionHandler(broker, network.Object, identity, controller, terminator.Object, missionFacts: CampaignHandoffTestServices.InitialFacts(network.Object, identity));
 
             broker.Publish(this, new PlayerConnected(peer));
 
@@ -85,7 +85,11 @@ public class AuthorityLeaseDistributionHandlerTests
                 return;
             }
 
-            var snapshot = Assert.IsType<NetworkAuthorityLeaseSnapshot>(Assert.Single(delivered));
+            Assert.Equal(2, delivered.Count);
+            var facts = Assert.IsType<NetworkRoomMissionFactsSnapshot>(delivered[0]);
+            Assert.True(facts.Snapshot.IsValid);
+            var snapshot = Assert.IsType<NetworkAuthorityLeaseSnapshot>(delivered[1]);
+            Assert.Equal(facts.Snapshot.Version, snapshot.MissionFactsVersion);
             Assert.Equal(identity.CurrentLease, snapshot.ToLease());
             Assert.Equal(alreadyMigrated ? "controller-b" : "controller-a", snapshot.AuthorityControllerId);
             if (alreadyMigrated) Assert.Equal(expectedLease, identity.CurrentLease);
@@ -108,7 +112,7 @@ public class AuthorityLeaseDistributionHandlerTests
             var controller = new ControllerIdProvider();
             controller.SetControllerId("controller-a");
             using var handler = new AuthorityLeaseDistributionHandler(
-                messageBroker, network, identity, controller);
+                messageBroker, network, identity, controller, missionFacts: CampaignHandoffTestServices.InitialFacts(network, identity));
 
             messageBroker.Publish(new object(), new CampaignReady());
             messageBroker.Publish(new object(), new PlayerConnected(peer));
@@ -134,13 +138,13 @@ public class AuthorityLeaseDistributionHandlerTests
         var messageBroker = new TestMessageBroker();
         var identity = new SessionIdentity();
         var snapshotNetwork = new Mock<INetwork>();var roomPeer = CampaignHandoffTestServices.AuthenticateRoomPeer(snapshotNetwork);
-        using var handler = new AuthorityLeaseSnapshotHandler(messageBroker, identity, network: snapshotNetwork.Object);
+        using var handler = new AuthorityLeaseSnapshotHandler(messageBroker, identity, network: snapshotNetwork.Object, missionFacts: CampaignHandoffTestServices.MissionFacts("room-a"));
         var snapshot = new NetworkAuthorityLeaseSnapshot(
-            new AuthorityLease("room-a", "authority-a", "controller-a", 1));
+            new AuthorityLease("room-a", "authority-a", "controller-a", 1), missionFactsVersion: CampaignHandoffTestServices.MissionFactsVersion(new AuthorityLease("room-a", "authority-a", "controller-a", 1)));
 
         messageBroker.Publish(roomPeer, snapshot);
         messageBroker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(
-            new AuthorityLease("room-a", "authority-stale", "controller-stale", 0)));
+            new AuthorityLease("room-a", "authority-stale", "controller-stale", 0), missionFactsVersion: CampaignHandoffTestServices.MissionFactsVersion(new AuthorityLease("room-a", "authority-stale", "controller-stale", 0))));
         GameThread.Run(() => { }, blocking: true);
 
         Assert.Equal("room-a", identity.RoomId);
@@ -155,13 +159,13 @@ public class AuthorityLeaseDistributionHandlerTests
         var messageBroker = new TestMessageBroker();
         var identity = new SessionIdentity();
         var snapshotNetwork = new Mock<INetwork>();var roomPeer = CampaignHandoffTestServices.AuthenticateRoomPeer(snapshotNetwork);
-        using var handler = new AuthorityLeaseSnapshotHandler(messageBroker, identity, network: snapshotNetwork.Object);
+        using var handler = new AuthorityLeaseSnapshotHandler(messageBroker, identity, network: snapshotNetwork.Object, missionFacts: CampaignHandoffTestServices.MissionFacts("room-a"));
         var activeLease = new AuthorityLease("room-a", "authority-a", "controller-a", 1);
-        messageBroker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(activeLease, "controller-a"));
+        messageBroker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(activeLease, "controller-a", missionFactsVersion: CampaignHandoffTestServices.MissionFactsVersion(activeLease)));
 
         var pausedLease = new AuthorityLease("room-a", "authority-paused", string.Empty, 2, isPaused: true);
-        messageBroker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(pausedLease, "controller-a"));
-        messageBroker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(activeLease, "controller-a"));
+        messageBroker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(pausedLease, "controller-a", missionFactsVersion: CampaignHandoffTestServices.MissionFactsVersion(pausedLease)));
+        messageBroker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(activeLease, "controller-a", missionFactsVersion: CampaignHandoffTestServices.MissionFactsVersion(activeLease)));
 
         GameThread.Run(() => { }, blocking: true);
         Assert.Equal(pausedLease, identity.CurrentLease);

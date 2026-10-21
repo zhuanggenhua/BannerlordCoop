@@ -1,4 +1,5 @@
 ﻿using Common;
+using Coop.Core.Server.Services.Instances.Handlers;
 using Common.Logging;
 using Common.Messaging;
 using Common.Network;
@@ -22,19 +23,21 @@ public sealed class AuthorityLeaseDistributionHandler : IHandler
     private readonly ISessionIdentity sessionIdentity;
     private readonly IControllerIdProvider controllerIdProvider;
     private readonly IJoinPeerTerminator peerTerminator;
+    private readonly IRoomMissionFactsPublisher missionFacts;
 
     public AuthorityLeaseDistributionHandler(
         IMessageBroker messageBroker,
         INetwork network,
         ISessionIdentity sessionIdentity,
         IControllerIdProvider controllerIdProvider,
-        IJoinPeerTerminator peerTerminator = null)
+        IJoinPeerTerminator peerTerminator = null, IRoomMissionFactsPublisher missionFacts = null)
     {
         this.messageBroker = messageBroker;
         this.network = network;
         this.sessionIdentity = sessionIdentity;
         this.controllerIdProvider = controllerIdProvider;
         this.peerTerminator = peerTerminator;
+        this.missionFacts = missionFacts;
 
         messageBroker.Subscribe<CampaignReady>(Handle_CampaignReady);
         messageBroker.Subscribe<PlayerConnected>(Handle_PlayerConnected);
@@ -64,8 +67,14 @@ public sealed class AuthorityLeaseDistributionHandler : IHandler
         }
         // This is connection metadata required to validate the first world delta. A normal
         // send is discarded by the pre-save Dropping phase, before replay buffering begins.
+        if (missionFacts == null || !missionFacts.TrySendInitial(payload.What.PlayerPeer, out var factsVersion))
+        {
+            peerTerminator?.Disconnect(payload.What.PlayerPeer, CoopServer.CampaignCheckpointUnavailableReason);
+            Logger.Warning("Initial lease refused because complete room Mission membership is unavailable");
+            return;
+        }
         network.SendImmediate(payload.What.PlayerPeer,
-            new NetworkAuthorityLeaseSnapshot(lease, sessionIdentity.RoomHostControllerId));
+            new NetworkAuthorityLeaseSnapshot(lease, sessionIdentity.RoomHostControllerId, missionFactsVersion: factsVersion));
         Logger.Information("Sent campaign authority lease epoch {Epoch} for room {RoomId} to a joining player",
             lease.Epoch, lease.RoomId);
     }

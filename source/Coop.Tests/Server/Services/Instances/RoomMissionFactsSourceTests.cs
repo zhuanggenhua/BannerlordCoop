@@ -28,6 +28,9 @@ public class RoomMissionFactsSourceTests
         Assert.True(snapshot.IsValid);
         Assert.Empty(snapshot.Members);
         Assert.True(manager.CanActivateCampaign(snapshot.Version));
+        Assert.True(manager.TryEnterMission(Peer(7), "A", "town", out _));
+        Assert.True(manager.TryLeaveMission(Peer(8), "A", "town", out _) == false);
+        Assert.False(manager.CanActivateCampaign(snapshot.Version));
     }
 
     [Fact]
@@ -61,6 +64,9 @@ public class RoomMissionFactsSourceTests
         Assert.True(manager.TryCapture(out var left));
         Assert.True(left.Version.Revision > reconnected.Version.Revision);
         Assert.Empty(left.Members);
+        Assert.False(manager.CanActivateCampaign(entered.Version));
+        Assert.False(manager.CanActivateCampaign(reconnected.Version));
+        Assert.True(manager.CanActivateCampaign(left.Version));
         Assert.Equal(3, changes);
     }
 }

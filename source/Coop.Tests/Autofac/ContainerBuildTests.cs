@@ -60,7 +60,11 @@ namespace Coop.Tests.Autofac
                 .Where(command => command.GetType().Assembly == typeof(MissionModule).Assembly)
                 .ToArray();
 #if DEBUG
-            Assert.False(container.IsRegistered<IMissionMembershipRegistry>());
+            var roomFacts = container.Resolve<IRoomMissionFactsView>();
+            Assert.Same(container.Resolve<IMissionMembershipRegistry>(), roomFacts);
+            Assert.Same(container.Resolve<Coop.Core.Client.Services.Instances.RoomMissionMembershipProjection>(), roomFacts);
+            Assert.False(roomFacts.TryCapture(out _));
+            Assert.False(roomFacts.CanActivateCampaign(default));
             ICoopCommandRegistry catalog = container.Resolve<ICoopCommandRegistry>();
             Assert.True(catalog.Contains("coop.debug.battle.hit_sound_fixture_route"));
             Assert.True(catalog.Contains("coop.debug.battle.hit_sound_fixture_state"));

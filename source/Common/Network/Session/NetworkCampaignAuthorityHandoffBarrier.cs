@@ -1,4 +1,4 @@
-using Common.Messaging;
+﻿using Common.Messaging;
 using ProtoBuf;
 
 namespace Common.Network.Session;
@@ -22,6 +22,8 @@ public readonly struct NetworkCampaignAuthorityHandoffBarrier : IServerToClientC
     [ProtoMember(10)] public readonly CampaignSchedulerCheckpoint SchedulerCheckpoint;
     [ProtoMember(11)] public readonly CampaignMovementCheckpoint MovementCheckpoint;
 
+    [ProtoMember(12)] public readonly RoomMissionFactsVersion MissionFactsVersion;
+
     public NetworkCampaignAuthorityHandoffBarrier(
         string roomId,
         string pausedAuthorityId,
@@ -33,7 +35,7 @@ public readonly struct NetworkCampaignAuthorityHandoffBarrier : IServerToClientC
         CampaignClockCheckpoint clockCheckpoint = null,
         CampaignSessionCheckpoint sessionCheckpoint = null,
         CampaignSchedulerCheckpoint schedulerCheckpoint = null,
-        CampaignMovementCheckpoint movementCheckpoint = null)
+        CampaignMovementCheckpoint movementCheckpoint = null, RoomMissionFactsVersion missionFactsVersion = default)
     {
         RoomId = roomId ?? string.Empty;
         PausedAuthorityId = pausedAuthorityId ?? string.Empty;
@@ -46,10 +48,11 @@ public readonly struct NetworkCampaignAuthorityHandoffBarrier : IServerToClientC
         SessionCheckpoint = sessionCheckpoint;
         SchedulerCheckpoint = schedulerCheckpoint;
         MovementCheckpoint = movementCheckpoint;
+        MissionFactsVersion = missionFactsVersion;
     }
 
     public NetworkCampaignAuthorityHandoffBarrierApplied ToApplied() => new NetworkCampaignAuthorityHandoffBarrierApplied(
-        RoomId, PausedAuthorityId, PausedEpoch, CandidateControllerId, BarrierSequence);
+        RoomId, PausedAuthorityId, PausedEpoch, CandidateControllerId, BarrierSequence, MissionFactsVersion);
 }
 
 /// <summary>Candidate acknowledgement that the reliable-ordered stream has applied through a handoff barrier.</summary>
@@ -62,17 +65,20 @@ public readonly struct NetworkCampaignAuthorityHandoffBarrierApplied : IMessage
     [ProtoMember(4)] public readonly string CandidateControllerId;
     [ProtoMember(5)] public readonly long BarrierSequence;
 
+    [ProtoMember(6)] public readonly RoomMissionFactsVersion MissionFactsVersion;
+
     public NetworkCampaignAuthorityHandoffBarrierApplied(
         string roomId,
         string pausedAuthorityId,
         long pausedEpoch,
         string candidateControllerId,
-        long barrierSequence)
+        long barrierSequence, RoomMissionFactsVersion missionFactsVersion = default)
     {
         RoomId = roomId ?? string.Empty;
         PausedAuthorityId = pausedAuthorityId ?? string.Empty;
         PausedEpoch = pausedEpoch;
         CandidateControllerId = candidateControllerId ?? string.Empty;
         BarrierSequence = barrierSequence;
+        MissionFactsVersion = missionFactsVersion;
     }
 }

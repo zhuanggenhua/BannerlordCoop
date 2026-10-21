@@ -19,7 +19,7 @@ public class CampaignSimulationAvailabilityClientHandlerTests
         var messageBroker = new TestMessageBroker();
         var network = new TestNetwork();
         var peer = network.CreatePeer();
-        using var handler = new CampaignSimulationAvailabilityClientHandler(messageBroker, network);
+        using var handler = new CampaignSimulationAvailabilityClientHandler(messageBroker, network, missionFacts: CampaignHandoffTestServices.MissionFacts("room-a"));
 
         messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
         Assert.False(network.SentNetworkMessages.ContainsKey(peer.Id));

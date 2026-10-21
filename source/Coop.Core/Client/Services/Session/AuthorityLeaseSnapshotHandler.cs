@@ -1,4 +1,5 @@
 ﻿using Common;
+using GameInterface.Services.Missions;
 using Common.Session;
 using Common.Network;
 using GameInterface.Services.Entity;
@@ -28,6 +29,7 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
     private readonly INetwork network;
     private readonly IControllerIdProvider controller;
     private readonly ICampaignAsyncTaskDrain asyncTasks;
+    private readonly IRoomMissionFactsView missionFacts;
 
     private sealed class Installation
     {
@@ -46,7 +48,8 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
     private void DeferSnapshot(NetworkAuthorityLeaseSnapshot snapshot, NetPeer peer)
     {
         Volatile.Write(ref deferredSnapshot, new DeferredSnapshot { Snapshot = snapshot, Peer = peer });
-        if (CampaignApplyCompletion.For(sessionIdentity).GetStatusThrough(snapshot.ToLease(), out _) != CampaignApplyStatus.Pending)
+        if (missionFacts?.HasApplied(snapshot.MissionFactsVersion) == true &&
+            CampaignApplyCompletion.For(sessionIdentity).GetStatusThrough(snapshot.ToLease(), out _) != CampaignApplyStatus.Pending)
             OnApplyProgressed(); // Close the completion-before-subscription race.
     }
     private void OnApplyProgressed()
@@ -84,7 +87,8 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
 
     public AuthorityLeaseSnapshotHandler(IMessageBroker messageBroker, ISessionIdentity sessionIdentity,
         ICampaignMovementCheckpointService movement = null, IMapTimeTrackerInterface clock = null,
-        INetwork network = null, IControllerIdProvider controller = null, ICampaignAsyncTaskDrain asyncTasks = null)
+        INetwork network = null, IControllerIdProvider controller = null, ICampaignAsyncTaskDrain asyncTasks = null,
+        IRoomMissionFactsView missionFacts = null)
     {
         this.messageBroker = messageBroker;
         this.sessionIdentity = sessionIdentity;
@@ -94,6 +98,8 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
         this.network = network;
         this.controller = controller;
         this.asyncTasks = asyncTasks;
+        this.missionFacts = missionFacts;
+        if (missionFacts != null) missionFacts.FactsChanged += OnApplyProgressed;
         CampaignApplyCompletion.For(sessionIdentity).Progressed += OnApplyProgressed;
         messageBroker.Subscribe<NetworkAuthorityLeaseSnapshot>(Handle_AuthorityLeaseSnapshot);
     }
@@ -104,6 +110,7 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
         Interlocked.Exchange(ref disposed, 1);
         Interlocked.Exchange(ref deferredSnapshot, null);
         CampaignApplyCompletion.For(sessionIdentity).Progressed -= OnApplyProgressed;
+        if (missionFacts != null) missionFacts.FactsChanged -= OnApplyProgressed;
         messageBroker.Unsubscribe<NetworkAuthorityLeaseSnapshot>(Handle_AuthorityLeaseSnapshot);
     }
 
@@ -125,6 +132,22 @@ public sealed class AuthorityLeaseSnapshotHandler : IHandler
         if (!lease.IsValid || (sessionIdentity.TryGetConfirmedLease(out var known) &&
             (known.RoomId != lease.RoomId || lease.Epoch < known.Epoch || (known.Epoch == lease.Epoch && known != lease))) ||
             (sessionIdentity.RoomHostControllerId?.Length > 0 && sessionIdentity.RoomHostControllerId != snapshot.RoomHostControllerId)) return;
+        if (!snapshot.MissionFactsVersion.IsValid || snapshot.MissionFactsVersion.RoomId != lease.RoomId || missionFacts == null)
+        {
+            Logger.Warning("Refused authority lease epoch {Epoch}: complete room Mission membership version is missing", lease.Epoch);
+            return;
+        }
+        if (!missionFacts.HasApplied(snapshot.MissionFactsVersion))
+        {
+            DeferSnapshot(snapshot, peer);
+            return;
+        }
+        if (!lease.IsPaused && controller != null && controller.ControllerId == lease.AuthorityControllerId &&
+            !missionFacts.CanActivateCampaign(snapshot.MissionFactsVersion))
+        {
+            Logger.Warning("Refused local writer activation epoch {Epoch}: occupied Mission protection facts are not implemented", lease.Epoch);
+            return;
+        }
         var status = completion.GetStatusThrough(lease, out var applyReason);
         if (status != CampaignApplyStatus.Ready)
         {

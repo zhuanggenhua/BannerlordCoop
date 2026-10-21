@@ -123,7 +123,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             var controller = new ControllerIdProvider();controller.SetControllerId("host");
             using var handler = new CampaignSimulationAvailabilityServerHandler(broker,
                 new CampaignAuthorityAvailabilityCoordinator(identity, new CampaignAuthorityCandidateSelector()),
-                connections.Object, players.Object, controller, Mock.Of<INetwork>(), identity, asyncTasks: drain.Object);
+                connections.Object, players.Object, controller, Mock.Of<INetwork>(), identity, asyncTasks: drain.Object, missionFacts: CampaignHandoffTestServices.MissionFacts(identity));
             broker.Publish(peer, new NetworkCampaignAuthorityFreezeRequest(lease, "host", 987662).ToAcknowledged());
             GameThread.Run(() => { }, blocking: true);
             Assert.Equal(synchronized ? new[] { "synchronized", "player" } : new[] { "synchronized" }, calls);
@@ -152,7 +152,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             var controller = new ControllerIdProvider();controller.SetControllerId("host");
             using var handler = new CampaignSimulationAvailabilityServerHandler(broker,
                 new CampaignAuthorityAvailabilityCoordinator(identity, new CampaignAuthorityCandidateSelector()),
-                connections.Object, Mock.Of<IPlayerManager>(), controller, Mock.Of<INetwork>(), identity);
+                connections.Object, Mock.Of<IPlayerManager>(), controller, Mock.Of<INetwork>(), identity, missionFacts: CampaignHandoffTestServices.MissionFacts(identity));
             var method = typeof(CampaignSimulationAvailabilityServerHandler).GetMethod("ApplyFreezeAcknowledgement",
                 System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
             var thrown = Assert.Throws<System.Reflection.TargetInvocationException>(() => method.Invoke(handler,
@@ -185,7 +185,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             using var handler = new CampaignSimulationAvailabilityServerHandler(broker, coordinator,
                 Mock.Of<IConnectionCollection>(), players.Object, controller, network.Object, identity,
                 sendCoalescer: coalescer.Object, asyncTasks: CampaignHandoffTestServices.Drained(),
-                movementPreparation: preparation.Object);
+                movementPreparation: preparation.Object, missionFacts: CampaignHandoffTestServices.MissionFacts(identity));
             broker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
             broker.Publish(this, new CampaignReady());
             broker.Publish(this, new CampaignInitializationCompleted());
@@ -230,7 +230,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                 Mock.Of<INetwork>(),
                 identity,
                 objectManager,
-                asyncTasks: CampaignHandoffTestServices.Drained());
+                asyncTasks: CampaignHandoffTestServices.Drained(), missionFacts: CampaignHandoffTestServices.MissionFacts(identity));
 
             // The timer's candidate-expiry pass runs before CampaignReady; it must not pause
             // the restored writer before the InitialServerState registry pass.
@@ -290,7 +290,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
             var network = new Mock<INetwork>();
             using var handler = new CampaignSimulationAvailabilityServerHandler(
                 broker, coordinator, connections.Object, players.Object, controller,
-                network.Object, identity, mapTimeTracker: clock, asyncTasks: CampaignHandoffTestServices.Drained());
+                network.Object, identity, mapTimeTracker: clock, asyncTasks: CampaignHandoffTestServices.Drained(), missionFacts: CampaignHandoffTestServices.MissionFacts(identity));
             broker.Publish(this, new CampaignReady());
             broker.Publish(this, new CampaignInitializationCompleted());
             broker.Publish(guestPeer, new NetworkCampaignSimulationAvailabilityReport(CampaignSimulationAvailability.MapReady, 1));
@@ -370,7 +370,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                 playerManager.Object,
                 controllerId,
                 network.Object,
-                identity, asyncTasks: CampaignHandoffTestServices.Drained());
+                identity, asyncTasks: CampaignHandoffTestServices.Drained(), missionFacts: CampaignHandoffTestServices.MissionFacts(identity));
 
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
             messageBroker.Publish(this, new CampaignReady());
@@ -440,7 +440,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                 playerManager.Object,
                 controllerId,
                 Mock.Of<INetwork>(),
-                identity, asyncTasks: CampaignHandoffTestServices.Drained());
+                identity, asyncTasks: CampaignHandoffTestServices.Drained(), missionFacts: CampaignHandoffTestServices.MissionFacts(identity));
 
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
             messageBroker.Publish(this, new CampaignReady());
@@ -580,7 +580,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                 coalescer.Object,
                 rosterService.Object,
                 clock.Object,
-                sessions.Object, CampaignHandoffTestServices.Scheduler(), drain.Object, movementPreparation: preparation.Object);
+                sessions.Object, CampaignHandoffTestServices.Scheduler(), drain.Object, movementPreparation: preparation.Object, missionFacts: CampaignHandoffTestServices.MissionFacts(identity));
 
             messageBroker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
             messageBroker.Publish(this, new CampaignReady());
@@ -612,7 +612,7 @@ public class CampaignSimulationAvailabilityServerHandlerTests
 
             var applied = new NetworkCampaignAuthorityHandoffBarrierApplied(
                 appliedBarrier.RoomId, appliedBarrier.PausedAuthorityId, appliedBarrier.PausedEpoch,
-                appliedBarrier.CandidateControllerId, appliedBarrier.BarrierSequence);
+                appliedBarrier.CandidateControllerId, appliedBarrier.BarrierSequence, missionFactsVersion: CampaignHandoffTestServices.MissionFactsVersion(appliedBarrier.RoomId));
             messageBroker.Publish(guestPeer, applied);
             GameThread.Run(() => { }, blocking: true);
             Assert.False(identity.CurrentLease.IsPaused);

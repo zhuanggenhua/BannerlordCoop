@@ -8,6 +8,8 @@ using Common.PacketHandlers;
 using Common.Network.Coalescing;
 using Coop.Core.Server.Services.Settlements.Handlers;
 using Coop.Core.Client.Policies;
+using Coop.Core.Client.Services.Instances;
+using GameInterface.Services.Missions;
 using Coop.Core.Client.Services.Discord;
 using Coop.Core.Client.Services.Kingdoms;
 using Coop.Core.Client.Services.MobileParties;
@@ -69,6 +71,8 @@ public class ClientModule : CommonModule
 #endif
 
         builder.RegisterModule<DiscordPresenceModule>();
+        builder.RegisterType<RoomMissionMembershipProjection>().AsSelf().As<IRoomMissionFactsView>()
+            .As<IMissionMembershipRegistry>().SingleInstance();
         builder.RegisterType<ClientContext>().AsSelf().InstancePerLifetimeScope();
         builder.RegisterType<ClientLogic>().As<ILogic>().As<IClientLogic>().InstancePerLifetimeScope();
         builder.RegisterType<CoopClient>().As<ICoopClient>().As<INetwork>().As<IRelayNetwork>().As<INetEventListener>().InstancePerLifetimeScope();

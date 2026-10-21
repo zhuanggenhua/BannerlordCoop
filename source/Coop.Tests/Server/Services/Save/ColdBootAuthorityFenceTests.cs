@@ -1,4 +1,5 @@
-﻿using Common;
+﻿using Coop.Tests.Mocks;
+using Common;
 using Common.Messaging;
 using Common.Network;
 using Autofac;
@@ -118,10 +119,10 @@ public sealed class ColdBootAuthorityFenceTests
         using var fixture = new Fixture(savedLease: lease, savedHost: scenario == "wrong_host" ? "other" : "a",
             savedPlayers: registrations, broker: broker, finalizer: finalizer, localId: scenario == "missing_local" ? "" : "a");
         var network = new Mock<INetwork>();
-        var distribution = new AuthorityLeaseDistributionHandler(broker, network.Object, fixture.Identity, fixture.Controller);
+        var distribution = new AuthorityLeaseDistributionHandler(broker, network.Object, fixture.Identity, fixture.Controller, missionFacts: CampaignHandoffTestServices.InitialFacts(network.Object, fixture.Identity));
         var coordinator = new CampaignAuthorityAvailabilityCoordinator(fixture.Identity, new CampaignAuthorityCandidateSelector());
         var availability = new CampaignSimulationAvailabilityServerHandler(broker, coordinator,
-            Mock.Of<IConnectionCollection>(), Mock.Of<IPlayerManager>(), fixture.Controller, network.Object, fixture.Identity);
+            Mock.Of<IConnectionCollection>(), Mock.Of<IPlayerManager>(), fixture.Controller, network.Object, fixture.Identity, missionFacts: CampaignHandoffTestServices.MissionFacts(fixture.Identity));
         var builder = new ContainerBuilder();
         builder.RegisterInstance(distribution);
         builder.RegisterInstance(availability);
@@ -161,7 +162,7 @@ public sealed class ColdBootAuthorityFenceTests
         using var fixture = new Fixture(savedLease: new AuthorityLease(null!, null!, null!, 0));
         var before = fixture.Identity.CurrentLease;
         fixture.Broker.Publish(this, new GameLoaded("Legacy"));
-        using var distribution = new AuthorityLeaseDistributionHandler(fixture.Broker, Mock.Of<INetwork>(), fixture.Identity, fixture.Controller);
+        using var distribution = new AuthorityLeaseDistributionHandler(fixture.Broker, Mock.Of<INetwork>(), fixture.Identity, fixture.Controller, missionFacts: CampaignHandoffTestServices.InitialFacts(Mock.Of<INetwork>(), fixture.Identity));
         fixture.Broker.Publish(this, new CampaignReady());
         Assert.True(fixture.Gate.IsOpen);
         Assert.True(fixture.Identity.IsConfirmed);

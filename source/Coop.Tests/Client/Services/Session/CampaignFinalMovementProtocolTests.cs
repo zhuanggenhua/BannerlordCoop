@@ -48,8 +48,8 @@ public class CampaignFinalMovementProtocolTests
         clock.Setup(c => c.TryApplyAuthorityHandoffBaseline(777)).Returns(failure != "clock");
         var tasks = Mock.Of<ICampaignAsyncTaskDrain>(t => t.TryDrain() == (failure != "drain"));
         var network = new Mock<INetwork>();var roomPeer = CampaignHandoffTestServices.AuthenticateRoomPeer(network);
-        using var handler = new AuthorityLeaseSnapshotHandler(broker, identity, movement.Object, clock.Object, network: network.Object, asyncTasks: tasks);
-        broker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint));
+        using var handler = new AuthorityLeaseSnapshotHandler(broker, identity, movement.Object, clock.Object, network: network.Object, asyncTasks: tasks, missionFacts: CampaignHandoffTestServices.MissionFacts(identity));
+        broker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint, missionFactsVersion: CampaignHandoffTestServices.MissionFactsVersion(Paused)));
         GameThread.Run(() => { }, blocking: true);
         Assert.Equal(Source, identity.CurrentLease);
         if (failure == "drain") movement.Verify(m => m.TryPrepare(It.IsAny<CampaignMovementCheckpoint>(), Source, 777, out install), Times.Never);
@@ -77,8 +77,8 @@ public class CampaignFinalMovementProtocolTests
             Assert.Equal(Paused, identity.CurrentLease);
             ack = Assert.IsType<NetworkCampaignMovementBaselineApplied>(m);
         });
-        using var handler = new AuthorityLeaseSnapshotHandler(broker, identity, movement.Object, clock, network.Object, controller, CampaignHandoffTestServices.Drained());
-        broker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint));
+        using var handler = new AuthorityLeaseSnapshotHandler(broker, identity, movement.Object, clock, network.Object, controller, CampaignHandoffTestServices.Drained(), missionFacts: CampaignHandoffTestServices.MissionFacts(identity));
+        broker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint, missionFactsVersion: CampaignHandoffTestServices.MissionFactsVersion(Paused)));
         GameThread.Run(() => { }, blocking: true);
         Assert.True(installed);
         Assert.Equal(Paused, identity.CurrentLease);
@@ -96,8 +96,8 @@ public class CampaignFinalMovementProtocolTests
         Assert.True(identity.TryApply(new AuthorityLease("room", "new-writer", "a", 9), "a"));
         var movement = new Mock<ICampaignMovementCheckpointService>(MockBehavior.Strict);
         var network = new Mock<INetwork>();var roomPeer = CampaignHandoffTestServices.AuthenticateRoomPeer(network);
-        using var handler = new AuthorityLeaseSnapshotHandler(broker, identity, movement.Object, network: network.Object);
-        broker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(Paused, "a", Checkpoint()));
+        using var handler = new AuthorityLeaseSnapshotHandler(broker, identity, movement.Object, network: network.Object, missionFacts: CampaignHandoffTestServices.MissionFacts(identity));
+        broker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(Paused, "a", Checkpoint(), missionFactsVersion: CampaignHandoffTestServices.MissionFactsVersion(Paused)));
         GameThread.Run(() => { }, blocking: true);
         Assert.Equal(9, identity.Epoch);
         movement.VerifyNoOtherCalls();
@@ -114,14 +114,14 @@ public class CampaignFinalMovementProtocolTests
         var controller = new ControllerIdProvider();
         controller.SetControllerId("b");
         var registry = new Mock<IObjectManager>(MockBehavior.Strict);
-        var network = new Mock<INetwork>();
+        var network = new Mock<INetwork>();var roomPeer = CampaignHandoffTestServices.AuthenticateRoomPeer(network);
         using var handler = new CampaignAuthorityHandoffBarrierClientHandler(broker, network.Object, identity, controller,
             registry.Object, Mock.Of<ICampaignRosterCheckpointService>(), Mock.Of<IMapTimeTrackerInterface>(),
             Mock.Of<ICampaignSessionCheckpointService>(), CampaignHandoffTestServices.Scheduler(), CampaignHandoffTestServices.Drained(),
-            Mock.Of<ICampaignMovementCheckpointService>());
+            Mock.Of<ICampaignMovementCheckpointService>(), missionFacts: CampaignHandoffTestServices.MissionFacts(identity));
         broker.Publish(this, new ClientCampaignReady());
         broker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
-        broker.Publish(this, Barrier(missing ? null : Checkpoint()));
+        broker.Publish(roomPeer, Barrier(missing ? null : Checkpoint()));
         GameThread.Run(() => { }, blocking: true);
         network.Verify(n => n.SendAll(It.IsAny<IMessage>()), Times.Never);
         registry.VerifyNoOtherCalls();
@@ -136,7 +136,7 @@ public class CampaignFinalMovementProtocolTests
         var controller = new ControllerIdProvider();
         controller.SetControllerId("b");
         var checkpoint = Checkpoint();
-        var network = new Mock<INetwork>();
+        var network = new Mock<INetwork>();var roomPeer = CampaignHandoffTestServices.AuthenticateRoomPeer(network);
         var clock = Mock.Of<IMapTimeTrackerInterface>(c => c.TryApplyAuthorityHandoffBaseline(777));
         bool installed = false;
         Func<bool> apply = () => { installed = true; return true; };
@@ -147,12 +147,12 @@ public class CampaignFinalMovementProtocolTests
         using var handler = new CampaignAuthorityHandoffBarrierClientHandler(broker, network.Object, identity, controller,
             new ObjectManager(Mock.Of<ILogger>()), Mock.Of<ICampaignRosterCheckpointService>(r => r.TryApply(It.IsAny<CampaignRosterCheckpoint>())),
             clock, Mock.Of<ICampaignSessionCheckpointService>(s => s.TryApply(It.IsAny<CampaignSessionCheckpoint>())),
-            CampaignHandoffTestServices.Scheduler(), CampaignHandoffTestServices.Drained(), movement.Object);
+            CampaignHandoffTestServices.Scheduler(), CampaignHandoffTestServices.Drained(), movement.Object, missionFacts: CampaignHandoffTestServices.MissionFacts(identity));
         broker.Publish(this, new ClientCampaignReady());
         broker.Publish(this, new CampaignMapSimulationReadinessChanged(true));
-        broker.Publish(this, Barrier(checkpoint));
+        broker.Publish(roomPeer, Barrier(checkpoint));
         GameThread.Run(() => { }, blocking: true);
-        broker.Publish(this, Barrier(checkpoint));
+        broker.Publish(roomPeer, Barrier(checkpoint));
         GameThread.Run(() => { }, blocking: true);
         Assert.True(installed);
         network.Verify(n => n.SendAll(It.IsAny<NetworkCampaignAuthorityHandoffBarrierApplied>()), Times.Once);
@@ -170,7 +170,7 @@ public class CampaignFinalMovementProtocolTests
         var movement = new Mock<ICampaignMovementCheckpointService>();
         movement.Setup(m => m.TryCapture(Source, 777, out checkpoint))
             .Callback(() => Assert.True(identity.IsLocallyFrozen(Source))).Returns(true);
-        var network = new Mock<INetwork>();
+        var network = new Mock<INetwork>();var roomPeer = CampaignHandoffTestServices.AuthenticateRoomPeer(network);
         NetworkCampaignAuthorityFreezeAcknowledged? ack = null;
         network.Setup(n => n.SendAll(It.IsAny<IMessage>())).Callback<IMessage>(m => ack = Assert.IsType<NetworkCampaignAuthorityFreezeAcknowledged>(m));
         var rosters = new CampaignRosterCheckpoint(Array.Empty<CampaignRosterState>());
@@ -200,7 +200,7 @@ public class CampaignFinalMovementProtocolTests
     {
         var serializer = new ProtoBufSerializer(new SerializableTypeMapper());
         var checkpoint = Checkpoint();
-        IMessage[] messages = { Barrier(checkpoint), new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint),
+        IMessage[] messages = { Barrier(checkpoint), new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint, missionFactsVersion: CampaignHandoffTestServices.MissionFactsVersion(Paused)),
             new NetworkCampaignAuthorityFreezeRequest(Source, "a", 44).ToAcknowledged(movementCheckpoint: checkpoint) };
         foreach (var message in messages)
         {
@@ -245,8 +245,8 @@ public class CampaignFinalMovementProtocolTests
             calls.Add("flush:" + identity.Epoch);
             if (fault == "flush") throw new InvalidOperationException("test Flush failure");
         });
-        using var handler = new AuthorityLeaseSnapshotHandler(broker, identity, movement.Object, clock.Object, network.Object, controller, tasks.Object);
-        broker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint));
+        using var handler = new AuthorityLeaseSnapshotHandler(broker, identity, movement.Object, clock.Object, network.Object, controller, tasks.Object, missionFacts: CampaignHandoffTestServices.MissionFacts(identity));
+        broker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint, missionFactsVersion: CampaignHandoffTestServices.MissionFactsVersion(Paused)));
         GameThread.Run(() => { }, blocking: true);
         Assert.Equal(fault == "send" ? new[] { "install:5", "send:6" } : new[] { "install:5", "send:6", "flush:6" }, calls);
         Assert.Equal(Paused, identity.CurrentLease);Assert.NotNull(sent);
@@ -272,8 +272,8 @@ public class CampaignFinalMovementProtocolTests
         var clock = Mock.Of<IMapTimeTrackerInterface>(c => c.TryApplyAuthorityHandoffBaseline(777));
         var network = new Mock<INetwork>();var roomPeer = CampaignHandoffTestServices.AuthenticateRoomPeer(network);var controller = new ControllerIdProvider();controller.SetControllerId("b");
         using var handler = new AuthorityLeaseSnapshotHandler(broker, identity, missing == "movement" ? null : movement.Object,
-            clock, missing == "network" ? null : network.Object, missing == "controller" ? null : controller, CampaignHandoffTestServices.Drained());
-        broker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint));GameThread.Run(() => { }, blocking: true);
+            clock, missing == "network" ? null : network.Object, missing == "controller" ? null : controller, CampaignHandoffTestServices.Drained(), missionFacts: CampaignHandoffTestServices.MissionFacts(identity));
+        broker.Publish(roomPeer, new NetworkAuthorityLeaseSnapshot(Paused, "a", checkpoint, missionFactsVersion: CampaignHandoffTestServices.MissionFactsVersion(Paused)));GameThread.Run(() => { }, blocking: true);
         Assert.Equal(missing == "network" ? Source : Paused, identity.CurrentLease);Assert.Equal(missing == "movement" || missing == "network" ? 0 : 1, installs);
         network.Verify(n => n.SendAll(It.IsAny<IMessage>()), Times.Never);network.Verify(n => n.FlushPendingMessages(), Times.Never);
     }
@@ -281,5 +281,5 @@ public class CampaignFinalMovementProtocolTests
     private static NetworkCampaignAuthorityHandoffBarrier Barrier(CampaignMovementCheckpoint checkpoint) =>
         new("room", "paused", 6, "b", 44, new RegistryAllocationCheckpoint(10, new Dictionary<string, int>()),
             new CampaignRosterCheckpoint(Array.Empty<CampaignRosterState>()), new CampaignClockCheckpoint(777),
-            new CampaignSessionCheckpoint("campaign", "{}"), CampaignHandoffTestServices.Checkpoint(), checkpoint);
+            new CampaignSessionCheckpoint("campaign", "{}"), CampaignHandoffTestServices.Checkpoint(), checkpoint, CampaignHandoffTestServices.MissionFactsVersion("room"));
 }

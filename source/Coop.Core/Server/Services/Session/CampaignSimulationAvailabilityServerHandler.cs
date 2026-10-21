@@ -1,4 +1,5 @@
 ﻿using Common;
+using GameInterface.Services.Missions;
 using GameInterface.Services.CampaignAuthority.Movement;
 using Common.Logging;
 using Common.Messaging;
@@ -49,6 +50,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private readonly ICampaignAsyncTaskDrain asyncTasks;
     private readonly ICampaignMovementCheckpointService movement;
     private readonly ICampaignMovementFreezePreparation movementPreparation;
+    private readonly IRoomMissionFactsView missionFacts;
+    private RoomMissionFactsVersion pendingLeaseFactsVersion, pendingBarrierFactsVersion;
     private CampaignMovementCheckpoint finalMovementCheckpoint;
     private AuthorityLease pendingMovementLease;
     private readonly Dictionary<int, (NetPeer peer, string controller)> pendingMovementAcks = new();
@@ -137,7 +140,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         ICampaignSchedulerCheckpointService schedulerCheckpointService = null,
         ICampaignAsyncTaskDrain asyncTasks = null,
         ICampaignMovementCheckpointService movement = null,
-        ICampaignMovementFreezePreparation movementPreparation = null)
+        ICampaignMovementFreezePreparation movementPreparation = null, IRoomMissionFactsView missionFacts = null)
     {
         this.messageBroker = messageBroker;
         this.coordinator = coordinator;
@@ -156,6 +159,8 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         this.asyncTasks = asyncTasks;
         this.movement = movement;
         this.movementPreparation = movementPreparation;
+        this.missionFacts = missionFacts;
+        if (missionFacts != null) missionFacts.FactsChanged += OnRoomFactsChanged;
         messageBroker.Subscribe<CampaignReady>(Handle_CampaignReady);
         messageBroker.Subscribe<CampaignInitializationCompleted>(Handle_CampaignInitializationCompleted);
         messageBroker.Subscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
@@ -172,6 +177,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         applyBinding?.Dispose();
         Interlocked.Exchange(ref disposed, 1);
         reconciliationTimer.Dispose();
+        if (missionFacts != null) missionFacts.FactsChanged -= OnRoomFactsChanged;
         mapTimeTracker?.SetObserverClockSuspended(false);
         messageBroker.Unsubscribe<CampaignReady>(Handle_CampaignReady);
         messageBroker.Unsubscribe<CampaignInitializationCompleted>(Handle_CampaignInitializationCompleted);
@@ -186,6 +192,21 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             lock (peerGate) peerControllerIds.Clear();
         }
     }
+
+    private void OnRoomFactsChanged() => GameThread.RunSafe(() =>
+    {
+        if (Volatile.Read(ref disposed) != 0) return;
+        lock (selectionGate)
+        {
+            lock (leaseGate)
+            {
+                if (!pendingLeaseBroadcast.HasValue && sessionIdentity?.TryGetConfirmedLease(out var lease) == true)
+                    pendingLeaseBroadcast = lease;
+                BroadcastPendingLease();
+            }
+        }
+        ReconcileCurrentAvailability();
+    }, context: nameof(CampaignSimulationAvailabilityServerHandler));
 
     private void Handle_CampaignReady(MessagePayload<CampaignReady> _)
     {
@@ -544,6 +565,13 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             return false;
         }
 
+        if (missionFacts == null || !missionFacts.TryCapture(out var factsSnapshot) ||
+            factsSnapshot.Version.RoomId != currentLease.RoomId ||
+            (!isPaused && !missionFacts.CanActivateCampaign(factsSnapshot.Version)))
+        {
+            Logger.Warning("Refused authority lease activation/commit: room Mission membership is unavailable or occupied protection is not implemented");
+            return false;
+        }
         var nextLease = new AuthorityLease(
             currentLease.RoomId,
             Guid.NewGuid().ToString("N"),
@@ -564,6 +592,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
                 finalMovementCheckpoint?.Sha256, pendingMovementAcks.Count);
         mapTimeTracker?.SetObserverClockSuspended(false);
         if (nextLease.IsPaused && movement != null) BeginMovementAcknowledgements(nextLease);
+        pendingLeaseFactsVersion = factsSnapshot.Version;
         pendingLeaseBroadcast = nextLease;
         BroadcastPendingLease();
         Logger.Information("Committed {LeaseState} campaign authority lease epoch {Epoch} for controller {ControllerId}",
@@ -598,10 +627,16 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         if (!connections.HasCompletedCampaignSynchronization(candidatePeer))
             return;
 
+        if (missionFacts == null || !missionFacts.TryCapture(out var factsSnapshot) ||
+            factsSnapshot.Version.RoomId != pausedLease.RoomId || !missionFacts.CanActivateCampaign(factsSnapshot.Version))
+        {
+            Logger.Warning("Refused candidate handoff: complete room membership or required occupied Mission protection is unavailable");
+            return;
+        }
         if (hasPendingBarrier && pendingBarrierEpoch == pausedLease.Epoch &&
             string.Equals(pendingBarrierAuthorityId, pausedLease.AuthorityId, StringComparison.Ordinal) &&
             string.Equals(pendingBarrierCandidateControllerId, candidateControllerId, StringComparison.Ordinal) &&
-            ReferenceEquals(pendingBarrierCandidatePeer, candidatePeer))
+            ReferenceEquals(pendingBarrierCandidatePeer, candidatePeer) && pendingBarrierFactsVersion == factsSnapshot.Version)
             return;
 
         if (!rosterCheckpointService.TryCapture(out var rosterCheckpoint))
@@ -651,7 +686,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             new CampaignClockCheckpoint(ticks),
             sessionCheckpoint,
             schedulerCheckpoint,
-            finalMovementCheckpoint);
+            finalMovementCheckpoint, factsSnapshot.Version);
 
         try
         {
@@ -669,6 +704,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
             pendingBarrierCandidateControllerId = candidateControllerId;
             pendingBarrierCandidatePeer = candidatePeer;
             pendingBarrierAcknowledged = false;
+            pendingBarrierFactsVersion = factsSnapshot.Version;
             hasPendingBarrier = true;
             Logger.Information("Sent campaign authority handoff barrier {BarrierSequence} for paused epoch {Epoch} to controller {ControllerId}",
                 sequence, pausedLease.Epoch, candidateControllerId);
@@ -726,6 +762,12 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
                     !string.Equals(selection.ControllerId, player.ControllerId, StringComparison.Ordinal))
                     return;
 
+                if (missionFacts == null || ack.MissionFactsVersion != pendingBarrierFactsVersion ||
+                    !missionFacts.CanActivateCampaign(pendingBarrierFactsVersion))
+                {
+                    Logger.Warning("Rejected handoff ACK: room Mission membership version changed or protection unavailable");
+                    return;
+                }
                 if (!TryCommitLease(currentLease, player.ControllerId, isPaused: false)) return;
                 pendingBarrierAcknowledged = true;
                 Logger.Information("Activated controller {ControllerId} after campaign handoff barrier {BarrierSequence} at epoch {Epoch}",
@@ -956,6 +998,7 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         pendingBarrierAuthorityId = string.Empty;
         pendingBarrierCandidateControllerId = string.Empty;
         pendingBarrierCandidatePeer = null;
+        pendingBarrierFactsVersion = default;
     }
 
     private static bool TryGetNextBarrierSequence(out long sequence)
@@ -1074,8 +1117,12 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
         var lease = pendingLeaseBroadcast.Value;
         try
         {
+            if (missionFacts == null || !missionFacts.TryCapture(out var snapshot) || snapshot.Version.RoomId != lease.RoomId ||
+                (!lease.IsPaused && !missionFacts.CanActivateCampaign(snapshot.Version))) return;
+            pendingLeaseFactsVersion = snapshot.Version;
+            network.SendAll(new NetworkRoomMissionFactsSnapshot(snapshot));
             network.SendAll(new NetworkAuthorityLeaseSnapshot(lease, sessionIdentity.RoomHostControllerId,
-                lease.IsPaused ? finalMovementCheckpoint : null));
+                lease.IsPaused ? finalMovementCheckpoint : null, pendingLeaseFactsVersion));
             pendingLeaseBroadcast = null;
         }
         catch (Exception ex)

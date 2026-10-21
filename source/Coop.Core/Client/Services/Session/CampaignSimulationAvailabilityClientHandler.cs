@@ -1,4 +1,5 @@
 ﻿using Common;
+using GameInterface.Services.Missions;
 using Common.Logging;
 using Common.Messaging;
 using Common.Network;
@@ -19,6 +20,7 @@ public sealed class CampaignSimulationAvailabilityClientHandler : IHandler
 
     private readonly IMessageBroker messageBroker;
     private readonly INetwork network;
+    private readonly IRoomMissionFactsView missionFacts;
     private readonly object gate = new object();
     private readonly Timer heartbeatTimer;
     private bool campaignSynchronized;
@@ -29,10 +31,12 @@ public sealed class CampaignSimulationAvailabilityClientHandler : IHandler
     private int heartbeatQueued;
     private int disposed;
 
-    public CampaignSimulationAvailabilityClientHandler(IMessageBroker messageBroker, INetwork network)
+    public CampaignSimulationAvailabilityClientHandler(IMessageBroker messageBroker, INetwork network, IRoomMissionFactsView missionFacts = null)
     {
         this.messageBroker = messageBroker;
         this.network = network;
+        this.missionFacts = missionFacts;
+        if (missionFacts != null) missionFacts.FactsChanged += SendCurrentAvailability;
         messageBroker.Subscribe<ClientCampaignReady>(Handle_ClientCampaignReady);
         messageBroker.Subscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
         heartbeatTimer = new Timer(_ => QueueHeartbeat(), null, HeartbeatInterval, HeartbeatInterval);
@@ -42,6 +46,7 @@ public sealed class CampaignSimulationAvailabilityClientHandler : IHandler
     {
         Interlocked.Exchange(ref disposed, 1);
         heartbeatTimer.Dispose();
+        if (missionFacts != null) missionFacts.FactsChanged -= SendCurrentAvailability;
         messageBroker.Unsubscribe<ClientCampaignReady>(Handle_ClientCampaignReady);
         messageBroker.Unsubscribe<CampaignMapSimulationReadinessChanged>(Handle_MapReadinessChanged);
     }
@@ -104,7 +109,7 @@ public sealed class CampaignSimulationAvailabilityClientHandler : IHandler
         {
             if (!campaignSynchronized || Volatile.Read(ref disposed) != 0) return;
 
-            availability = mapReady
+            availability = mapReady && missionFacts != null && missionFacts.TryCapture(out _)
                 ? CampaignSimulationAvailability.MapReady
                 : CampaignSimulationAvailability.Unavailable;
             // An unchanged heartbeat may reuse the revision; the coordinator refreshes freshness

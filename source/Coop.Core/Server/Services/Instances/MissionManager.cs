@@ -819,7 +819,7 @@ public class MissionManager : IMissionManager, IRoomMissionFactsView, IMissionRe
         version.IsValid && TryCapture(out var snapshot) && snapshot.Version == version;
 
     public bool CanActivateCampaign(RoomMissionFactsVersion version) =>
-        HasApplied(version) && TryCapture(out var snapshot) && snapshot.Members.Length == 0;
+        version.IsValid && TryCapture(out var snapshot) && snapshot.Version == version && snapshot.Members.Length == 0;
 
     public bool IsControllerInMission(string controllerId)
     {
