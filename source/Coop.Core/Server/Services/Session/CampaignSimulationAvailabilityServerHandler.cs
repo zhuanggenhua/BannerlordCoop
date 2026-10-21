@@ -93,9 +93,11 @@ public sealed class CampaignSimulationAvailabilityServerHandler : IHandler
     private static string FreezeAckFingerprint(NetworkCampaignAuthorityFreezeAcknowledged ack)
     {
         // Local evidence fingerprint only; the original network format/serializer is unchanged.
-        var json = System.Text.Json.JsonSerializer.Serialize(ack, new System.Text.Json.JsonSerializerOptions { IncludeFields = true });
+        using var payload = new System.IO.MemoryStream();
+        ProtoBuf.Serializer.Serialize(payload, ack);
+        payload.Position = 0;
         using var sha = System.Security.Cryptography.SHA256.Create();
-        return BitConverter.ToString(sha.ComputeHash(System.Text.Encoding.UTF8.GetBytes(json))).Replace("-", "");
+        return BitConverter.ToString(sha.ComputeHash(payload)).Replace("-", "");
     }
     private void ResumeRetainedFreezeAck()
     {

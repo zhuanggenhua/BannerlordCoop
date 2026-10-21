@@ -30,6 +30,73 @@ namespace Coop.Tests.Server.Services.Session;
 public class CampaignSimulationAvailabilityServerHandlerTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void CompleteFreezeAckFingerprintPreservesNativeFloatBitsAndWireDuplicates(bool nativeNaN)
+    {
+        var ack = FingerprintAck(nativeNaN);
+        using var stream = new System.IO.MemoryStream();
+        ProtoBuf.Serializer.Serialize(stream, ack);
+        stream.Position = 0;
+        var duplicate = ProtoBuf.Serializer.Deserialize<NetworkCampaignAuthorityFreezeAcknowledged>(stream);
+        int expectedBits = System.BitConverter.SingleToInt32Bits(ack.SessionCheckpoint.NativeBehaviors.Caravans.Cache.LandPrices[0].Average);
+        Assert.Equal(expectedBits, System.BitConverter.SingleToInt32Bits(duplicate.SessionCheckpoint.NativeBehaviors.Caravans.Cache.LandPrices[0].Average));
+        Assert.Equal(Fingerprint(ack), Fingerprint(ack));
+        Assert.Equal(Fingerprint(ack), Fingerprint(duplicate));
+    }
+
+    [Theory]
+    [InlineData("room")]
+    [InlineData("authority")]
+    [InlineData("writer")]
+    [InlineData("epoch")]
+    [InlineData("candidate")]
+    [InlineData("sequence")]
+    [InlineData("allocation")]
+    [InlineData("roster")]
+    [InlineData("clock")]
+    [InlineData("session")]
+    [InlineData("native-bits")]
+    [InlineData("scheduler")]
+    [InlineData("movement")]
+    public void CompleteFreezeAckFingerprintIncludesLeaseAndEveryCheckpointDomain(string mutation)
+    {
+        Assert.NotEqual(Fingerprint(FingerprintAck(true)), Fingerprint(FingerprintAck(true, mutation)));
+    }
+
+    private static string Fingerprint(NetworkCampaignAuthorityFreezeAcknowledged ack) =>
+        (string)typeof(CampaignSimulationAvailabilityServerHandler).GetMethod("FreezeAckFingerprint",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!.Invoke(null, new object[] { ack })!;
+
+    private static CampaignNativeBehaviorCheckpoint NativeCheckpoint(float average) => new(
+        new CampaignAgingBehaviorState(1, new[] { new CampaignHeroIntState(7, 2) }, System.Array.Empty<CampaignHeroIntState>()),
+        new CampaignCaravanBehaviorState(System.Array.Empty<CampaignPartyTimeState>(), System.Array.Empty<CampaignPartyTimeState>(),
+            new CampaignCaravanCacheState(-1, -1, 0, System.Array.Empty<CampaignCategoryValueState>(),
+                new[] { new CampaignCategoryPriceState(20, average, 1000) }, System.Array.Empty<CampaignCategoryPriceState>())));
+
+    private static NetworkCampaignAuthorityFreezeAcknowledged FingerprintAck(bool nativeNaN, string mutation = "")
+    {
+        var lease = new AuthorityLease("room", "authority", "guest", 3);
+        var native = NativeCheckpoint(nativeNaN ? float.NaN : 1.5f);
+        if (mutation == "native-bits")
+            native.Caravans.Cache.LandPrices[0] = new CampaignCategoryPriceState(20,
+                System.BitConverter.Int32BitsToSingle(unchecked((int)0xffc00001)), 1000);
+        return new NetworkCampaignAuthorityFreezeAcknowledged(
+            mutation == "room" ? "other" : lease.RoomId,
+            mutation == "authority" ? "other" : lease.AuthorityId,
+            mutation == "writer" ? "other" : lease.AuthorityControllerId,
+            mutation == "epoch" ? 4 : lease.Epoch,
+            mutation == "candidate" ? "other" : "host", mutation == "sequence" ? 12 : 11,
+            new RegistryAllocationCheckpoint(mutation == "allocation" ? 501u : 500u, new System.Collections.Generic.Dictionary<string, int> { ["type"] = 3 }),
+            new CampaignRosterCheckpoint(new[] { new CampaignRosterState(10, new[] { new CampaignRosterElementState(11, mutation == "roster" ? 4 : 3, 1, 50) }) }),
+            new CampaignClockCheckpoint(mutation == "clock" ? 1000 : 999),
+            new CampaignSessionCheckpoint("campaign", mutation == "session" ? "changed" : "{}", native),
+            new CampaignSchedulerCheckpoint(999, 5, mutation == "scheduler" ? 4 : 3,
+                System.Array.Empty<CampaignPeriodicTickerState>(), System.Array.Empty<CampaignPeriodicEventState>()),
+            new CampaignMovementCheckpoint(lease, 999, 1, new byte[] { mutation == "movement" ? (byte)2 : (byte)1 }, "hash"));
+    }
+
+    [Theory]
     [InlineData(false, false, "peer-not-synchronized")]
     [InlineData(true, false, "peer-player-unmapped")]
     [InlineData(true, true, "no-pending-freeze")]
@@ -401,6 +468,16 @@ public class CampaignSimulationAvailabilityServerHandlerTests
     [InlineData(true, true, true, false)]
     [InlineData(true, true, false, true)]
     public void TransfersToPreparedGuestAndRequiresFrozenCheckpointBeforeReturnOrAllAwayPause(bool hostReturnsImmediately, bool nestedAck, bool corruptRetainedAck, bool disposeQueuedAck)
+        => RunPreparedGuestTransfer(hostReturnsImmediately, nestedAck, corruptRetainedAck, disposeQueuedAck);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RetainedNativeNaNCheckpointResumesOrRefusesMutationOnTheActualAckPath(bool corruptNativeCheckpoint)
+        => RunPreparedGuestTransfer(true, true, false, false, true, corruptNativeCheckpoint);
+
+    private void RunPreparedGuestTransfer(bool hostReturnsImmediately, bool nestedAck, bool corruptRetainedAck,
+        bool disposeQueuedAck, bool useNativeCheckpoint = false, bool corruptNativeCheckpoint = false)
     {
         var previousMode = ModInformation.SessionMode;
         ModInformation.SessionMode = SessionMode.ListenAuthority;
@@ -444,7 +521,8 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                 Assert.True(GameThread.Instance.IsGameThread);
                 Assert.True(identity.CurrentLease.IsPaused);
             }).Returns(true);
-            var sessionCheckpoint = new CampaignSessionCheckpoint("campaign", "{}");
+            var sessionCheckpoint = new CampaignSessionCheckpoint("campaign", "{}",
+                useNativeCheckpoint ? NativeCheckpoint(float.NaN) : null);
             var sessions = new Mock<ICampaignSessionCheckpointService>();
             sessions.Setup(value => value.TryCapture(out sessionCheckpoint))
                 .Callback(() => Assert.True(identity.CurrentLease.IsPaused)).Returns(true);
@@ -632,12 +710,26 @@ public class CampaignSimulationAvailabilityServerHandlerTests
                     return;
                 }
                 // No second Freeze ACK is sent. Existing reconciliation resumes the retained one.
+                if (useNativeCheckpoint)
+                {
+                    Assert.Equal(CampaignApplyStatus.Ready,
+                        CampaignApplyCompletion.For(identity).GetStatusThrough(identity.CurrentLease, out _));
+                    Assert.NotNull(typeof(CampaignSimulationAvailabilityServerHandler).GetField("retainedFreezeAck",
+                        System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.GetValue(handler));
+                }
                 if (corruptRetainedAck) finalAck.AllocationCheckpoint.TypeCounters["mutated-after-receive"] = 1;
+                if (corruptNativeCheckpoint)
+                    finalAck.SessionCheckpoint.NativeBehaviors.Caravans.Cache.LandPrices[0] = new CampaignCategoryPriceState(20, 37, 1000);
                 handler.OnAvailabilityTimer(); GameThread.Run(() => { }, blocking: true);
-                if (corruptRetainedAck)
+                if (corruptRetainedAck || corruptNativeCheckpoint)
                 {
                     Assert.Equal(3, identity.Epoch); Assert.Equal("guest", identity.AuthorityControllerId);
                     Assert.Equal(CampaignApplyStatus.Faulted, CampaignApplyCompletion.For(identity).GetStatusThrough(identity.CurrentLease, out _));
+                    if (corruptNativeCheckpoint)
+                    {
+                        CampaignApplyCompletion.For(identity).GetStatusThrough(identity.CurrentLease, out var reason);
+                        Assert.Contains("Conflicting authenticated final freeze checkpoint", reason);
+                    }
                     sessions.Verify(value => value.TryApply(sessionCheckpoint), Times.Never());
                     network.Verify(value => value.SendAll(It.Is<NetworkAuthorityLeaseSnapshot>(value =>
                         !value.IsPaused && value.AuthorityControllerId == "host" && value.Epoch == 5)), Times.Never());
