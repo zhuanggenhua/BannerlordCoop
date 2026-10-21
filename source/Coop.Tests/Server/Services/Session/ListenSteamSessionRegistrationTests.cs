@@ -10,6 +10,7 @@ using Coop.Core.Server.Services.Session;
 using Coop.Core.Common.Session;
 using Coop.Steam;
 using Coop.Tests.Steam;
+using GameInterface.Services.Entity;
 using Moq;
 using Xunit;
 
@@ -30,12 +31,16 @@ public class ListenSteamSessionRegistrationTests
             var builder = new ContainerBuilder();
             builder.RegisterModule<ServerModule>();
             builder.RegisterModule<global::GameInterface.GameInterfaceModule>();
+            var controller = new Mock<IControllerIdProvider>();
+            controller.SetupGet(value => value.ControllerId).Returns("fixture-listen-player");
+            builder.RegisterInstance(controller.Object).As<IControllerIdProvider>();
             using var container = builder.Build();
             Assert.IsType<NoopSessionAdvertiser>(container.Resolve<ISessionAdvertiser>());
             Assert.IsType<NoopSessionTunnelHost>(container.Resolve<ISessionTunnelHost>());
             Assert.Same(container.Resolve<ISessionTunnelHost>(), container.Resolve<ISessionTunnelIdentityResolver>());
             Assert.False(container.IsRegistered<IListenSessionAdvertisementHandler>());
             Assert.IsType<CoopServer>(container.Resolve<INetwork>());
+            controller.Verify(value => value.SetControllerAsPlatformId(), Times.Once);
         }
         finally
         {
