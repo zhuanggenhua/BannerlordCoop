@@ -109,7 +109,7 @@ public class ComposedApplyObservationTests : IDisposable
         Assert.Equal(1, child.Completed);
         Assert.NotEmpty(child.Failures);
         Assert.False(Completion.CanAcknowledgeThrough(lease, out var reason));
-        Assert.DoesNotContain("pending", reason);
+        Assert.Equal(CampaignApplyStatus.Faulted, Completion.GetStatusThrough(lease, out _));
         if (failure == "throw") Assert.Contains("native descendant failure", reason);
     }
 

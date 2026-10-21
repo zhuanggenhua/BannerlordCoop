@@ -61,7 +61,7 @@ public class CampaignApplyReentryTests
         Assert.IsType<OperationCanceledException>(exception);
         Assert.Equal(CampaignApplyStatus.Faulted, CampaignApplyCompletion.For(original).GetStatusThrough(Lease, out var reason));
         Assert.Contains("session binding", reason);
-        Assert.DoesNotContain("pending", reason);
+        Assert.StartsWith("apply fault at epoch ", reason);
         GC.KeepAlive((Action<MessagePayload<Result>>)First);
         GC.KeepAlive((Action<MessagePayload<Result>>)Later);
     }

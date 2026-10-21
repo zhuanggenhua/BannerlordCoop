@@ -23,16 +23,19 @@ public sealed class MessageApplyReceipt
     private readonly Action completed;
     private readonly Func<bool> isCurrent;
     private readonly MessageApplyReceipt parent;
+    private readonly MessageApplyReceipt source;
     internal object ObservationDomain { get; }
     private int outstanding = 1;
     internal MessageApplyReceipt(Action<string> failed, Action completed, Func<bool> isCurrent,
-        object observationDomain = null, MessageApplyReceipt parent = null)
+        object observationDomain = null, MessageApplyReceipt parent = null, MessageApplyReceipt source = null)
     {
         this.failed = failed; this.completed = completed; this.isCurrent = isCurrent;
         ObservationDomain = observationDomain; this.parent = parent;
+        this.source = source;
     }
     internal bool Observes(object domain) => domain != null &&
-        (ReferenceEquals(ObservationDomain, domain) || parent != null && parent.Observes(domain));
+        (ReferenceEquals(ObservationDomain, domain) || parent != null && parent.Observes(domain) ||
+            source != null && source.Observes(domain));
     internal bool IsCurrent => isCurrent();
     internal void Retain() => Interlocked.Increment(ref outstanding);
     internal void Release() { if (Interlocked.Decrement(ref outstanding) == 0) completed(); }
@@ -63,7 +66,7 @@ public sealed class MessageApplyScope : IDisposable
         return BeginReceipt(new MessageApplyReceipt(failed, completed, isCurrent), null);
     }
 
-    private static MessageApplyScope BeginReceipt(MessageApplyReceipt value, object domain)
+    private static MessageApplyScope BeginReceipt(MessageApplyReceipt value, object domain, Func<bool> sourceCurrent = null)
     {
         if (value == null) throw new ArgumentException("An observation receipt is required", nameof(value));
         var parent = current;
@@ -75,10 +78,146 @@ public sealed class MessageApplyScope : IDisposable
         }, () =>
         {
             try { value.Release(); }
+            catch (Exception error)
+            {
+                ReportObservationFailure(reason => parent?.Fail(reason), error);
+                throw;
+            }
             finally { parent?.Release(); }
-        }, () => value.IsCurrent && (parent == null || parent.IsCurrent),
-            value.ObservationDomain ?? domain, parent);
+        }, () => value.IsCurrent && (sourceCurrent == null || sourceCurrent()) && (parent == null || parent.IsCurrent),
+            value.ObservationDomain ?? domain, parent, value);
         return new MessageApplyScope(composed, true);
+    }
+
+    /// <summary>Retains an observed pending record; null means there was no observation to retain.</summary>
+    public static RetainedObservation RetainCurrent() => current == null ? null : new RetainedObservation(current);
+
+    public sealed class RetainedObservation : IDisposable
+    {
+        private readonly object gate = new object();
+        private MessageApplyReceipt receipt;
+        private string failure;
+
+        internal RetainedObservation(MessageApplyReceipt receipt)
+        {
+            this.receipt = receipt;
+            receipt.Retain();
+        }
+
+        private MessageApplyReceipt Acquire()
+        {
+            lock (gate)
+            {
+                var value = receipt;
+                value?.Retain();
+                return value;
+            }
+        }
+
+        public bool IsCurrent
+        {
+            get
+            {
+                var value = Acquire();
+                if (value == null) return false;
+                bool valid;
+                try
+                {
+                    valid = value.IsCurrent;
+                    lock (gate) valid = valid && ReferenceEquals(receipt, value);
+                }
+                catch (Exception error)
+                {
+                    ReportObservationFailure(Complete, error);
+                    ReleaseAfterValidationFailure(value, error);
+                    throw;
+                }
+                value.Release();
+                return valid;
+            }
+        }
+
+        /// <summary>Activates on the calling thread; dispose on that same thread after applying the record.</summary>
+        public IDisposable Activate()
+        {
+            var value = Acquire();
+            if (value == null) throw new ObjectDisposedException(nameof(RetainedObservation));
+            try
+            {
+                if (!value.IsCurrent) throw new OperationCanceledException("Retained apply source is no longer current.");
+                lock (gate)
+                {
+                    if (!ReferenceEquals(receipt, value)) throw new ObjectDisposedException(nameof(RetainedObservation));
+                }
+                var parent = current;
+                return new ActivationScope(BeginReceipt(value, null, () => Volatile.Read(ref failure) == null), this, parent);
+            }
+            catch (Exception error)
+            {
+                ReportObservationFailure(Complete, error);
+                ReleaseAfterValidationFailure(value, error);
+                throw;
+            }
+        }
+
+        public void Complete(string failure = null)
+        {
+            MessageApplyReceipt value;
+            lock (gate)
+            {
+                value = receipt;
+                if (value == null) return;
+                this.failure = failure;
+                receipt = null;
+            }
+            try { if (failure != null) value.Fail(failure); }
+            finally { value.Release(); }
+        }
+
+        public void Dispose() => Complete("Retained apply observation was disposed before completion.");
+
+        private sealed class ActivationScope : IDisposable
+        {
+            private MessageApplyScope scope;
+            private readonly RetainedObservation owner;
+            private readonly MessageApplyReceipt parent;
+
+            internal ActivationScope(MessageApplyScope scope, RetainedObservation owner, MessageApplyReceipt parent)
+            { this.scope = scope; this.owner = owner; this.parent = parent; }
+
+            public void Dispose()
+            {
+                var value = scope;
+                if (value == null) return;
+                scope = null;
+                try
+                {
+                    var reason = Volatile.Read(ref owner.failure);
+                    if (reason != null) parent?.Fail(reason);
+                }
+                finally { value.Dispose(); }
+            }
+        }
+    }
+
+    private static void ReportObservationFailure(Action<string> complete, Exception error)
+    {
+        try { complete(error.ToString()); }
+        catch (Exception completionError)
+        {
+            Serilog.Log.Error(completionError,
+                "Apply observation failure reporting failed after {ApplyError}", error);
+        }
+    }
+
+    private static void ReleaseAfterValidationFailure(MessageApplyReceipt value, Exception error)
+    {
+        try { value.Release(); }
+        catch (Exception completionError)
+        {
+            Serilog.Log.Error(completionError,
+                "Apply observation release failed after source validation threw {ValidationError}", error);
+        }
     }
     internal static IDisposable Suspend() => new MessageApplyScope(null, false);
     internal static Continuation Capture() => current == null ? null : new Continuation(current);
@@ -102,12 +241,7 @@ public sealed class MessageApplyScope : IDisposable
                 try { return receipt == null || receipt.IsCurrent; }
                 catch (Exception error)
                 {
-                    try { Complete(error.ToString()); }
-                    catch (Exception completionError)
-                    {
-                        Serilog.Log.Error(completionError,
-                            "Apply observation completion failed after source validation threw {ValidationError}", error);
-                    }
+                    ReportObservationFailure(Complete, error);
                     throw;
                 }
             }
