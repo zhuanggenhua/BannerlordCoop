@@ -13,7 +13,7 @@ namespace GameInterface.Services.GuantletMapEventVisuals;
 
 internal class GauntletMapEventVisualRegistry : AutoRegistryBase<GauntletMapEventVisual>
 {
-    public override bool Debug => true;
+    public override bool Debug => false;
     public GauntletMapEventVisualRegistry(
         ILogger logger,
         IAutoRegistryFactory autoRegistryFactory,

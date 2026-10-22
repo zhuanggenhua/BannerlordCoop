@@ -15,7 +15,7 @@ using TaleWorlds.Library;
 namespace GameInterface.Services.TroopRosters;
 internal class TroopRosterRegistry : AutoRegistryBase<TroopRoster>
 {
-    public override bool Debug => true;
+    public override bool Debug => false;
     public TroopRosterRegistry(ILogger logger, IAutoRegistryFactory autoRegistryFactory, IObjectManager objectManager)
         : base(logger, autoRegistryFactory, objectManager)
     {

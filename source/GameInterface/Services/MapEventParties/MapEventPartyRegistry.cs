@@ -13,7 +13,7 @@ using TaleWorlds.CampaignSystem.Roster;
 namespace GameInterface.Services.MapEventParties;
 internal class MapEventPartyRegistry : AutoRegistryBase<MapEventParty>
 {
-    public override bool Debug => true;
+    public override bool Debug => false;
     public MapEventPartyRegistry(ILogger logger, IAutoRegistryFactory autoRegistryFactory, IObjectManager objectManager)
         : base(logger, autoRegistryFactory, objectManager)
     {

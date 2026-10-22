@@ -520,56 +520,36 @@ namespace Coop
 #endif
             #region ButtonAssignment
 
-#if DEBUG
             CoopCampaign = new InitialStateOption(
                     "CoOp Campaign",
-                    new TextObject(isServer ? "Host Co-op Sandbox" : "Join Co-op Sandbox"),
+                    new TextObject("创建联机房间"),
                     9990,
                     () =>
                     {
-                        string[] array = Utilities.GetFullCommandLineString().Split(' ');
+                        if (isServer && !isListenHost)
+                        {
+                            ScreenManager.PushScreen(
+                                ViewCreatorManager.CreateScreenView<CoopLoadScreen>(
+                                    new object[] { }));
+                            return;
+                        }
 
-                        if (isServer)
-                        {
-                            if (isListenHost) Coop.StartAsListenHost();
-                            else Coop.StartAsServer(null, ManagedServerConfig.Password, ManagedServerConfig.Visibility);
-                        }
-                        else if (!Coop.StartAsClient())
-                        {
-                            InformationManager.DisplayMessage(new InformationMessage(
-                                CoopartiveMultiplayerExperience.StartRefusedNotice));
-                        }
+                        Coop.StartAsListenHost();
                     },
                     () => { return (false, new TextObject("")); }
                 );
-#else
-            CoopCampaign = new InitialStateOption(
-                    "CoOp Campaign",
-                    new TextObject("Host Co-op Sandbox"),
-                    9990,
-                    () =>
-                    {
-                        ScreenManager.PushScreen(
-                            ViewCreatorManager.CreateScreenView<CoopLoadScreen>(
-                                new object[] { }));
-                    },
-                    () => { return (false, new TextObject("")); }
-                );
-#endif
 
             Module.CurrentModule.AddInitialStateOption(CoopCampaign);
 
-#if !DEBUG
             JoinCoopGame =
                 new InitialStateOption(
                   "Join Coop Game",
-                  new TextObject("Join Co-op Sandbox"),
+                  new TextObject("加入联机房间"),
                   9991,
                   JoinWindow,
               () => { return (false, new TextObject("")); }
             );
             Module.CurrentModule.AddInitialStateOption(JoinCoopGame);
-#endif
             #endregion
         }
 

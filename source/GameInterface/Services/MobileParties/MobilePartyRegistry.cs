@@ -27,7 +27,7 @@ namespace GameInterface.Services.MobileParties;
 /// </summary>
 internal class MobilePartyRegistry : AutoRegistryBase<MobileParty>
 {
-    public override bool Debug => true;
+    public override bool Debug => false;
 
     private readonly IControllerIdProvider controllerIdProvider;
     private readonly IMessageBroker messageBroker;

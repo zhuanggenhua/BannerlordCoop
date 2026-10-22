@@ -29,7 +29,7 @@ internal class MapEventRegistry : AutoRegistryBase<MapEvent>
 {
     private readonly IMapEventInitializationBarrier initializationBarrier;
 
-    public override bool Debug => true;
+    public override bool Debug => false;
     public MapEventRegistry(
         ILogger logger,
         IAutoRegistryFactory autoRegistryFactory,

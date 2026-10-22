@@ -13,7 +13,7 @@ namespace GameInterface.Services.ItemRosters
 {
     internal class ItemRosterRegistry : AutoRegistryBase<ItemRoster>
     {
-        public override bool Debug => true;
+        public override bool Debug => false;
 
         public ItemRosterRegistry(ILogger logger, IAutoRegistryFactory autoRegistryFactory, IObjectManager objectManager) : base(logger, autoRegistryFactory, objectManager)
         {
