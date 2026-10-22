@@ -31,7 +31,7 @@ try {
     $tokens = @('/singleplayer','_MODULES_*Native*SandBoxCore*SandBox*StoryMode*Coop*_MODULES_')
     if ($Action -eq 'Guest') {
         $tokens += '/client'
-        Write-Host '加入方：在游戏主菜单等待房主的 Steam 邀请，先不要创建或加入其他 Coop 会话。'
+        Write-Host '加入方：主菜单点击“加入联机房间”，选择 Direct，输入房主局域网 IPv4；默认 UDP 端口为 4200。'
     } else {
         $tokens += '/listenhost'
         if ($Action -eq 'HostSave') {
@@ -43,7 +43,7 @@ try {
             }
             $tokens += @('/coopsave',('"'+$SaveName+'"'))
             Write-Host '房主：加载指定存档；请确认它属于当前 Steam 身份。测试包不会改写旧存档身份。'
-        } else { Write-Host '房主：主菜单点击 Host Co-op Sandbox 创建新战役。进入大地图后按 Esc → 邀请 Steam 好友。' }
+        } else { Write-Host '房主：主菜单点击“创建联机房间”，按原生流程创建新战役。局域网测试时把本机 IPv4 和 UDP 端口 4200 告诉好友。' }
     }
     $recordDir = Join-Path $PSScriptRoot ('UserLogs/'+[DateTime]::UtcNow.ToString('yyyyMMdd-HHmmss')+'-'+[Guid]::NewGuid().ToString('N').Substring(0,8))
     New-Item -ItemType Directory -Path (Join-Path $recordDir 'before-launch') | Out-Null
